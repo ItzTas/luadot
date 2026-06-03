@@ -21,15 +21,16 @@ jobs:
     steps:
       - name: Diagnose GitLab access
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
           echo "::add-mask::$GITLAB_TOKEN"
-          echo "token length: ${#GITLAB_TOKEN}"
-          url="https://oauth2:$GITLAB_TOKEN@gitlab.digitalventura.com.br/luadot/luadot.git/info/refs?service=git-receive-pack"
-          code=$(curl -s -o /tmp/refs.txt -w "%{http_code}" "$url")
-          echo "receive-pack -> $code"
-          echo "--- body (first 400 bytes) ---"
-          head -c 400 /tmp/refs.txt; echo
+          remote="https://oauth2:$GITLAB_TOKEN@gitlab.digitalventura.com.br/luadot/luadot.git"
+          git clone --mirror "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" probe.git
+          echo "=== A) push to a fresh branch ci-probe ==="
+          git -C probe.git push "$remote" "refs/heads/main:refs/heads/ci-probe" 2>&1 || echo ">>> A FAILED"
+          echo "=== B) cleanup ci-probe ==="
+          git -C probe.git push "$remote" ":refs/heads/ci-probe" 2>&1 || true
 
       - name: Mirror to GitLab
         env:
