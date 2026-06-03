@@ -19,19 +19,6 @@ jobs:
     env:
       GITLAB_REPO: gitlab.digitalventura.com.br/luadot/luadot.git
     steps:
-      - name: Diagnose GitLab access
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-        run: |
-          echo "::add-mask::$GITLAB_TOKEN"
-          remote="https://oauth2:$GITLAB_TOKEN@gitlab.digitalventura.com.br/luadot/luadot.git"
-          git clone --mirror "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" probe.git
-          echo "=== A) push to a fresh branch ci-probe ==="
-          git -C probe.git push "$remote" "refs/heads/main:refs/heads/ci-probe" 2>&1 || echo ">>> A FAILED"
-          echo "=== B) cleanup ci-probe ==="
-          git -C probe.git push "$remote" ":refs/heads/ci-probe" 2>&1 || true
-
       - name: Mirror to GitLab
         env:
           GITHUB_TOKEN: ${{ github.token }}
