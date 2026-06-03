@@ -19,6 +19,16 @@ jobs:
     env:
       GITLAB_REPO: gitlab.digitalventura.com.br/luadot/luadot.git
     steps:
+      - name: Diagnose GitLab access
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          echo "token length: ${#GITLAB_TOKEN}"
+          base="https://gitlab.digitalventura.com.br/api/v4"
+          curl -s -o /dev/null -w "user    -> %{http_code}\n" --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$base/user"
+          curl -s -o /dev/null -w "project -> %{http_code}\n" --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$base/projects/luadot%2Fluadot"
+          curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$base/projects/luadot%2Fluadot" | tr ',' '\n' | grep -iE 'path_with_namespace|access_level' || true
+
       - name: Mirror to GitLab
         env:
           GITHUB_TOKEN: ${{ github.token }}
