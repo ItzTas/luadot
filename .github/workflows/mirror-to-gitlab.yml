@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'ItzTas/luadot'
     env:
-      GITLAB_REPO: gitlab.digitalventura.com.br/luadot/luadot
+      GITLAB_REPO: gitlab.digitalventura.com.br/luadot/luadot.git
     steps:
       - name: Mirror to GitLab
         env:
