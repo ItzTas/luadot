@@ -1,0 +1,30 @@
+name: Mirror to GitLab
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-to-gitlab
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    name: Push to GitLab
+    runs-on: ubuntu-latest
+    if: github.repository == 'ItzTas/luadot'
+    env:
+      GITLAB_REPO: gitlab.digitalventura.com.br/luadot/luadot
+    steps:
+      - name: Mirror to GitLab
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$GITLAB_TOKEN"
+          git clone --mirror "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" repo.git
+          git -C repo.git push --mirror "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}"
