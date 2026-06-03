@@ -1,0 +1,33 @@
+#!/bin/sh
+
+commit_msg_file="$1"
+subject=$(grep -v '^#' "$commit_msg_file" | grep -v '^[[:space:]]*$' | head -n1)
+
+case "$subject" in
+	"Merge "* | "Revert "* | "fixup! "* | "squash! "*)
+		exit 0
+		;;
+esac
+
+types='build|chore|ci|docs|feat|fix|init|perf|refactor|revert|style|test'
+pattern="^(${types})(\([a-z0-9._/-]+\))?!?: .+"
+
+if printf '%s' "$subject" | grep -Eq "$pattern"; then
+	exit 0
+fi
+
+cat >&2 <<EOF
+✖ Commit message does not follow the Conventional Commits spec.
+
+  Got: $subject
+
+  Use:   <type>(optional scope)!: description
+  Types: build, chore, ci, docs, feat, fix, init, perf, refactor, revert, style, test
+
+  Valid examples:
+    feat: add theme support
+    fix(parser): handle empty input
+    chore!: remove legacy API
+
+EOF
+exit 1
