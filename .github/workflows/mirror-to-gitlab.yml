@@ -23,11 +23,13 @@ jobs:
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
+          echo "::add-mask::$GITLAB_TOKEN"
           echo "token length: ${#GITLAB_TOKEN}"
-          base="https://gitlab.digitalventura.com.br/api/v4"
-          curl -s -o /dev/null -w "user    -> %{http_code}\n" --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$base/user"
-          curl -s -o /dev/null -w "project -> %{http_code}\n" --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$base/projects/luadot%2Fluadot"
-          curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$base/projects/luadot%2Fluadot" | tr ',' '\n' | grep -iE 'path_with_namespace|access_level' || true
+          url="https://oauth2:$GITLAB_TOKEN@gitlab.digitalventura.com.br/luadot/luadot.git/info/refs?service=git-receive-pack"
+          code=$(curl -s -o /tmp/refs.txt -w "%{http_code}" "$url")
+          echo "receive-pack -> $code"
+          echo "--- body (first 400 bytes) ---"
+          head -c 400 /tmp/refs.txt; echo
 
       - name: Mirror to GitLab
         env:
