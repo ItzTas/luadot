@@ -26,4 +26,5 @@ jobs:
         run: |
           set -euo pipefail
           git clone --mirror "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" repo.git
-          git -C repo.git push --mirror "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}"
+          git -C repo.git push --force --all "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}"
+          git -C repo.git push --force --tags "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}"
