@@ -1,0 +1,25 @@
+push-to-github:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  image: alpine/git:latest
+  resource_group: mirror
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - git clone --mirror "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git" repo.git
+    - cd repo.git
+    - git push --force --all "https://x-access-token:${GITHUB_TOKEN}@github.com/ItzTas/luadot.git"
+    - git push --force --tags "https://x-access-token:${GITHUB_TOKEN}@github.com/ItzTas/luadot.git"
+
+sync-from-github:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  image: alpine/git:latest
+  resource_group: mirror
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - git clone --mirror https://github.com/ItzTas/luadot.git repo.git
+    - cd repo.git
+    - git push --force --all "https://oauth2:${GITLAB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
+    - git push --force --tags "https://oauth2:${GITLAB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
