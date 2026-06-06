@@ -1,0 +1,17 @@
+#!/bin/sh
+
+echo "Running cargo test before commit..."
+
+if cargo test; then
+	exit 0
+fi
+
+cat >&2 <<EOF
+
+✖ Commit aborted: cargo test failed.
+
+  Fix the failing tests before committing, or bypass with:
+    git commit --no-verify
+
+EOF
+exit 1
