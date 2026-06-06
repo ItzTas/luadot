@@ -1,8 +1,4 @@
-mod api;
-mod handle;
-
-pub use api::{Host, install_template_api, set_host};
-pub use handle::FileHandle;
+#![allow(dead_code)]
 
 use mlua::Lua;
 
