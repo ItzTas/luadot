@@ -1,3 +1,3 @@
-mod clone;
+mod clone_repo;
 
-pub use clone::clone_repo;
+pub use clone_repo::clone_repo;
