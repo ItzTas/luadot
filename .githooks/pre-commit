@@ -1,12 +1,21 @@
 #!/bin/sh
 
-echo "Running cargo test before commit..."
+echo "Running cargo clippy before commit..."
+if ! cargo clippy --all-targets -- -D warnings; then
+	cat >&2 <<EOF
 
-if cargo test; then
-	exit 0
+✖ Commit aborted: cargo clippy found problems in the code.
+
+  Fix the reported issues before committing, or bypass with:
+    git commit --no-verify
+
+EOF
+	exit 1
 fi
 
-cat >&2 <<EOF
+echo "Running cargo test before commit..."
+if ! cargo test; then
+	cat >&2 <<EOF
 
 ✖ Commit aborted: cargo test failed.
 
@@ -14,4 +23,7 @@ cat >&2 <<EOF
     git commit --no-verify
 
 EOF
-exit 1
+	exit 1
+fi
+
+exit 0
