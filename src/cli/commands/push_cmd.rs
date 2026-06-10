@@ -2,7 +2,6 @@ use anyhow::Result;
 
 use super::git_cmd;
 
-/// Pushes the repository, forwarding any extra arguments to `git push`.
 pub fn push_cmd(args: &[String]) -> Result<()> {
     git_cmd(&push_args(args))
 }
