@@ -12,5 +12,6 @@ pub fn get_commands() -> HashMap<&'static str, Command> {
     map.insert("add", Command::Run(commands::add_cmd));
     map.insert("clone", Command::Run(commands::clone_cmd));
     map.insert("git", Command::Run(commands::git_cmd));
+    map.insert("push", Command::Run(commands::push_cmd));
     return map;
 }
