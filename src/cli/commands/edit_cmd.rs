@@ -31,8 +31,6 @@ pub fn edit_cmd(args: &[String]) -> Result<()> {
         );
     }
 
-    // The default editor comes from `$VISUAL`/`$EDITOR`; a future Lua
-    // configuration will allow overriding it.
     let editor = resolve_editor(env::var_os("VISUAL"), env::var_os("EDITOR"));
     let status = build_command(&editor, &in_repo)
         .status()
@@ -65,9 +63,10 @@ fn build_command(editor: &str, path: &Path) -> Command {
 
 fn repo_dir() -> Result<PathBuf> {
     let state = state::load()?;
-    state
-        .repo
-        .context("edit: no repository set; run `luadot clone <url>` first")
+    Ok(state
+        .repo()
+        .context("edit: no repository set; run `luadot clone <url>` first")?
+        .to_path_buf())
 }
 
 #[cfg(test)]
@@ -79,13 +78,19 @@ mod tests {
 
     #[test]
     fn resolve_editor_prefers_visual() {
-        assert_eq!(resolve_editor(Some("nvim".into()), Some("vi".into())), "nvim");
+        assert_eq!(
+            resolve_editor(Some("nvim".into()), Some("vi".into())),
+            "nvim"
+        );
     }
 
     #[test]
     fn resolve_editor_falls_back_to_editor_when_visual_is_unset_or_empty() {
         assert_eq!(resolve_editor(None, Some("vi".into())), "vi");
-        assert_eq!(resolve_editor(Some(OsString::new()), Some("vi".into())), "vi");
+        assert_eq!(
+            resolve_editor(Some(OsString::new()), Some("vi".into())),
+            "vi"
+        );
     }
 
     #[test]

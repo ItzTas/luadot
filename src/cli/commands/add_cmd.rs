@@ -121,9 +121,10 @@ fn link_into_repo(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
 
 fn repo_dir() -> Result<PathBuf> {
     let state = state::load()?;
-    state
-        .repo
-        .context("add: no repository set; run `luadot clone <url>` first")
+    Ok(state
+        .repo()
+        .context("add: no repository set; run `luadot clone <url>` first")?
+        .to_path_buf())
 }
 
 #[cfg(test)]

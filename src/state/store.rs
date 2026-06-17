@@ -9,6 +9,11 @@ pub fn load() -> Result<State> {
     load_from(&state_path()?)
 }
 
+#[allow(dead_code)]
+pub fn lcget(key: &str) -> Result<Option<serde_json::Value>> {
+    load()?.get(key)
+}
+
 pub fn save(state: &State) -> Result<()> {
     save_to(&state_path()?, state)
 }
@@ -44,7 +49,7 @@ mod tests {
     fn missing_file_loads_default() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.json");
-        assert!(load_from(&path).unwrap().repo.is_none());
+        assert!(load_from(&path).unwrap().repo().is_none());
     }
 
     #[test]
@@ -52,13 +57,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("nested/state.json");
 
-        let state = State {
-            repo: Some(PathBuf::from("/x/y/repo")),
-        };
+        let mut state = State::default();
+        state.set_repo(PathBuf::from("/x/y/repo"));
         save_to(&path, &state).unwrap();
 
         let loaded = load_from(&path).unwrap();
-        assert_eq!(loaded.repo, Some(PathBuf::from("/x/y/repo")));
+        assert_eq!(loaded.repo(), Some(Path::new("/x/y/repo")));
     }
 
     #[test]

@@ -34,9 +34,10 @@ fn build_command(repo: &Path, args: &[String]) -> Command {
 
 fn repo_dir() -> Result<PathBuf> {
     let state = state::load()?;
-    state
-        .repo
-        .context("git: no repository set; run `luadot clone <url>` first")
+    Ok(state
+        .repo()
+        .context("git: no repository set; run `luadot clone <url>` first")?
+        .to_path_buf())
 }
 
 #[cfg(test)]

@@ -11,7 +11,7 @@ pub fn clone_cmd(args: &[String]) -> Result<()> {
     git::clone(&dir, url)?;
 
     let mut current = state::load()?;
-    current.repo = Some(dir);
+    current.set_repo(dir);
     state::save(&current)?;
 
     Ok(())

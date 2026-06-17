@@ -97,9 +97,10 @@ fn collect_into(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
 
 fn repo_dir() -> Result<PathBuf> {
     let state = state::load()?;
-    state
-        .repo
-        .context("sync: no repository set; run `luadot clone <url>` first")
+    Ok(state
+        .repo()
+        .context("sync: no repository set; run `luadot clone <url>` first")?
+        .to_path_buf())
 }
 
 #[cfg(test)]
