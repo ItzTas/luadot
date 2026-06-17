@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use crate::files::{self, ConflictPolicy, LinkMode, SyncOutcome};
 use crate::{state, utils};
 
-pub fn sync_cmd(args: &[String]) -> Result<()> {
+pub fn apply_cmd(args: &[String]) -> Result<()> {
     let repo = repo_dir()?;
     if !repo.is_dir() {
         bail!(
@@ -40,9 +40,6 @@ pub fn sync_cmd(args: &[String]) -> Result<()> {
     let mut unchanged = 0u32;
     for file in &files {
         let dest = utils::system_path(&home, &repo, file)?;
-        // Hard links (with a copy fallback) are the only strategy for now; a
-        // future Lua configuration will choose between hard, symbolic links and
-        // copies per file.
         let outcome = files::sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, file, &dest)
             .with_context(|| format!("sync: failed to sync {}", dest.display()))?;
         match outcome {
