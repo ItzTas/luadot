@@ -21,6 +21,7 @@ Keep this file short. One line per rule.
 | `src/state/` | persisted state: `State` and its store |
 | `src/utils/` | shared helpers used across modules |
 | `benches/` | one criterion bench per area, fixtures in `benches/support/` |
+| `tests/` | integration tests driving the built binary through `assert_cmd` |
 
 ## Rules
 
@@ -30,7 +31,7 @@ Keep this file short. One line per rule.
 - A command exposes one `pub fn <name>_cmd(args: <Name>Args) -> Result<()>`, its clap `Args` struct in the same file (no struct when it takes nothing); add the variant to `Cmd` in `types.rs` and its arm to the match in `run.rs`. Help texts live in `#[command(about = ...)]`/`#[arg(help = ...)]` attributes, never in doc comments.
 - Errors use `anyhow` and every message is prefixed with the command name: `bail!("add: ...")`. Helpers shared between commands take the prefix as a parameter.
 - Split IO from logic so the logic is testable: the IO wrapper (`load`, `require_repo`) calls a pure function (`load_from`, `resolve`).
-- Tests live in a `#[cfg(test)] mod tests` at the bottom of the file they test.
+- Tests live in a `#[cfg(test)] mod tests` at the bottom of the file they test; tests that exercise the whole binary go in `tests/`, isolated through a temporary `HOME`.
 - Benchmarks reach the code through the library, one `benches/<area>.rs` per area with a `[[bench]]` entry carrying `harness = false`; shared fixtures go in `benches/support/`.
 - New capability for the configuration is added to the `ld` API, never by unlocking the runtime: `Lua::new()` stays safe (no `ffi`, no C modules) and the language stays PUC Lua 5.4.
 - One `ld` function per file, one directory per group: `ld/root/` is `ld.<function>`, and a named group (`ld/git/`) owns its `NAMESPACE` and becomes `ld.<namespace>.<function>`. Each group has a `table.rs` listing its functions.
