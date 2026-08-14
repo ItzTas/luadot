@@ -1,91 +1,71 @@
-use std::collections::HashMap;
+use std::io::IsTerminal;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
+use clap::Parser;
+use tracing_subscriber::EnvFilter;
 
-use super::{Command, get_commands};
+use super::commands;
+use super::types::{Cli, Cmd};
+
+const DEFAULT_FILTER: &str = "warn";
+
+const VERBOSE_FILTER: &str = "luadot=debug";
+
+const TRACE_FILTER: &str = "luadot=trace";
 
 pub fn run() -> Result<()> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    dispatch(&get_commands(), &args)
+    let cli = Cli::parse();
+    init_tracing(cli.verbose);
+    dispatch(cli)
 }
 
-fn dispatch(commands: &HashMap<&'static str, Command>, args: &[String]) -> Result<()> {
-    let (name, rest) = args
-        .split_first()
-        .with_context(|| format!("no command given (available: {})", available(commands)))?;
+fn init_tracing(verbose: u8) {
+    tracing_subscriber::fmt()
+        .with_env_filter(filter(verbose))
+        .with_writer(std::io::stderr)
+        .with_ansi(std::io::stderr().is_terminal())
+        .without_time()
+        .init();
+}
 
-    match commands.get(name.as_str()) {
-        Some(Command::Run(handler)) => handler(rest),
-        Some(Command::Group(sub)) => dispatch(sub, rest),
-        None => bail!("unknown command: {name} (available: {})", available(commands)),
+fn filter(verbose: u8) -> EnvFilter {
+    match verbose {
+        0 => EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER)),
+        1 => EnvFilter::new(VERBOSE_FILTER),
+        _ => EnvFilter::new(TRACE_FILTER),
     }
 }
 
-fn available(commands: &HashMap<&'static str, Command>) -> String {
-    let mut names: Vec<&str> = commands.keys().copied().collect();
-    names.sort_unstable();
-    names.join(", ")
+fn dispatch(cli: Cli) -> Result<()> {
+    match cli.command {
+        Cmd::Add(args) => commands::add_cmd(args),
+        Cmd::Alt(args) => commands::alt_cmd(args),
+        Cmd::Restore(args) => commands::restore_cmd(args),
+        Cmd::Apply(args) => commands::apply_cmd(args),
+        Cmd::Bootstrap => commands::bootstrap_cmd(),
+        Cmd::Cd => commands::cd_cmd(),
+        Cmd::Class(args) => commands::class_cmd(args),
+        Cmd::Clone(args) => commands::clone_cmd(args),
+        Cmd::Completions(args) => commands::completions_cmd(args),
+        Cmd::Config(args) => commands::config_cmd(args),
+        Cmd::Edit(args) => commands::edit_cmd(args),
+        Cmd::Exec(args) => commands::exec_cmd(args),
+        Cmd::Git(args) => commands::git_cmd(args),
+        Cmd::Push(args) => commands::push_cmd(args),
+        Cmd::Rm(args) => commands::rm_cmd(args),
+        Cmd::Setup(args) => commands::setup_cmd(args),
+        Cmd::Status(args) => commands::status_cmd(args),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn ok_handler(_args: &[String]) -> Result<()> {
-        Ok(())
-    }
-
-    fn echo_handler(args: &[String]) -> Result<()> {
-        anyhow::bail!("args=[{}]", args.join(","))
-    }
-
-    fn commands_from(entries: Vec<(&'static str, Command)>) -> HashMap<&'static str, Command> {
-        entries.into_iter().collect()
-    }
-
     #[test]
-    fn runs_matching_command_with_rest_args() {
-        let commands = commands_from(vec![("echo", Command::Run(echo_handler))]);
-        let args = vec!["echo".to_string(), "a".to_string(), "b".to_string()];
-
-        let err = dispatch(&commands, &args).unwrap_err();
-        assert_eq!(err.to_string(), "args=[a,b]");
-    }
-
-    #[test]
-    fn descends_into_groups() {
-        let inner = commands_from(vec![("sub", Command::Run(echo_handler))]);
-        let commands = commands_from(vec![("group", Command::Group(inner))]);
-        let args = vec!["group".to_string(), "sub".to_string(), "x".to_string()];
-
-        let err = dispatch(&commands, &args).unwrap_err();
-        assert_eq!(err.to_string(), "args=[x]");
-    }
-
-    #[test]
-    fn unknown_command_errors_and_lists_available() {
-        let commands = commands_from(vec![("clone", Command::Run(ok_handler))]);
-        let args = vec!["nope".to_string()];
-
-        let err = dispatch(&commands, &args).unwrap_err().to_string();
-        assert!(err.contains("unknown command: nope"));
-        assert!(err.contains("available: clone"));
-    }
-
-    #[test]
-    fn no_command_errors() {
-        let commands = commands_from(vec![]);
-        let err = dispatch(&commands, &[]).unwrap_err().to_string();
-        assert!(err.contains("no command given"));
-    }
-
-    #[test]
-    fn available_is_sorted_and_joined() {
-        let commands = commands_from(vec![
-            ("zeta", Command::Run(ok_handler)),
-            ("alpha", Command::Run(ok_handler)),
-            ("mike", Command::Run(ok_handler)),
-        ]);
-        assert_eq!(available(&commands), "alpha, mike, zeta");
+    fn verbosity_picks_the_filter() {
+        assert_eq!(filter(1).to_string(), VERBOSE_FILTER);
+        assert_eq!(filter(2).to_string(), TRACE_FILTER);
+        assert_eq!(filter(9).to_string(), TRACE_FILTER);
     }
 }
