@@ -1,60 +1,57 @@
-use std::env;
-use std::ffi::OsString;
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use etcetera::base_strategy::{BaseStrategy, Xdg};
+
+use super::constants::APP_DIR;
 
 pub fn data_dir() -> Result<PathBuf> {
-    resolve_data_dir(env::var_os("XDG_DATA_HOME"), env::var_os("HOME"))
+    Ok(app_dir(&base()?.data_dir()))
 }
 
-fn resolve_data_dir(xdg_data_home: Option<OsString>, home: Option<OsString>) -> Result<PathBuf> {
-    const APP_DIR: &str = "luadot";
-    const DEFAULT_DATA_DIR: &str = ".local/share";
-
-    let base = match xdg_data_home {
-        Some(path) if !path.is_empty() => PathBuf::from(path),
-        _ => {
-            let home = home.context("HOME is not set")?;
-            PathBuf::from(home).join(DEFAULT_DATA_DIR)
-        }
-    };
-
-    Ok(base.join(APP_DIR))
+pub fn config_dir() -> Result<PathBuf> {
+    Ok(app_dir(&base()?.config_dir()))
 }
 
 pub fn home_dir() -> Result<PathBuf> {
-    resolve_home(env::var_os("HOME"))
+    Ok(base()?.home_dir().to_path_buf())
 }
 
-fn resolve_home(home: Option<OsString>) -> Result<PathBuf> {
-    match home {
-        Some(path) if !path.is_empty() => Ok(PathBuf::from(path)),
-        _ => bail!("HOME is not set"),
-    }
+fn base() -> Result<Xdg> {
+    Xdg::new().context("failed to locate your home directory")
+}
+
+fn app_dir(root: &Path) -> PathBuf {
+    root.join(APP_DIR)
 }
 
 pub fn repo_path(home: &Path, repo: &Path, outside: &Path) -> Result<PathBuf> {
     let normalized = normalize(outside);
-    match normalized.strip_prefix(home) {
-        Ok(rel) => Ok(repo.join(rel)),
-        Err(_) => bail!(
+    let Ok(relative) = normalized.strip_prefix(home) else {
+        bail!(
             "{} is not inside your home directory {}",
             normalized.display(),
             home.display()
-        ),
-    }
+        );
+    };
+
+    Ok(repo.join(relative))
 }
 
 pub fn system_path(home: &Path, repo: &Path, inside: &Path) -> Result<PathBuf> {
-    match inside.strip_prefix(repo) {
-        Ok(rel) => Ok(home.join(rel)),
-        Err(_) => bail!(
+    let Ok(relative) = inside.strip_prefix(repo) else {
+        bail!(
             "{} is not inside the repository {}",
             inside.display(),
             repo.display()
-        ),
-    }
+        );
+    };
+
+    Ok(home.join(relative))
+}
+
+pub fn relative<'a>(repo: &Path, file: &'a Path) -> &'a Path {
+    file.strip_prefix(repo).unwrap_or(file)
 }
 
 fn normalize(path: &Path) -> PathBuf {
@@ -64,17 +61,22 @@ fn normalize(path: &Path) -> PathBuf {
             Component::Prefix(prefix) => out.push(prefix.as_os_str()),
             Component::RootDir => out.push(component.as_os_str()),
             Component::CurDir => {}
-            Component::ParentDir => {
-                if matches!(out.components().next_back(), Some(Component::Normal(_))) {
-                    out.pop();
-                } else if !out.has_root() {
-                    out.push("..");
-                }
-            }
+            Component::ParentDir => ascend(&mut out),
             Component::Normal(segment) => out.push(segment),
         }
     }
     out
+}
+
+fn ascend(out: &mut PathBuf) {
+    if matches!(out.components().next_back(), Some(Component::Normal(_))) {
+        out.pop();
+        return;
+    }
+    if out.has_root() {
+        return;
+    }
+    out.push("..");
 }
 
 #[cfg(test)]
@@ -82,38 +84,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn uses_xdg_data_home_when_set() {
-        let dir = resolve_data_dir(Some("/data".into()), Some("/home/u".into())).unwrap();
-        assert_eq!(dir, PathBuf::from("/data/luadot"));
-    }
-
-    #[test]
-    fn falls_back_to_home_when_xdg_unset() {
-        let dir = resolve_data_dir(None, Some("/home/u".into())).unwrap();
-        assert_eq!(dir, PathBuf::from("/home/u/.local/share/luadot"));
-    }
-
-    #[test]
-    fn empty_xdg_falls_back_to_home() {
-        let dir = resolve_data_dir(Some(OsString::new()), Some("/home/u".into())).unwrap();
-        assert_eq!(dir, PathBuf::from("/home/u/.local/share/luadot"));
-    }
-
-    #[test]
-    fn errors_without_xdg_and_home() {
-        assert!(resolve_data_dir(None, None).is_err());
-    }
-
-    #[test]
-    fn resolve_home_uses_home_when_set() {
-        let home = resolve_home(Some("/home/u".into())).unwrap();
-        assert_eq!(home, PathBuf::from("/home/u"));
-    }
-
-    #[test]
-    fn resolve_home_errors_when_unset_or_empty() {
-        assert!(resolve_home(None).is_err());
-        assert!(resolve_home(Some(OsString::new())).is_err());
+    fn app_dir_is_nested_under_the_given_root() {
+        assert_eq!(
+            app_dir(Path::new("/home/u/.local/share")),
+            PathBuf::from("/home/u/.local/share/luadot")
+        );
+        assert_eq!(
+            app_dir(Path::new("/home/u/.config")),
+            PathBuf::from("/home/u/.config/luadot")
+        );
     }
 
     #[test]
@@ -169,6 +148,22 @@ mod tests {
         )
         .unwrap();
         assert_eq!(dest, PathBuf::from("/home/u/.config/nvim/init.lua"));
+    }
+
+    #[test]
+    fn relative_strips_the_repository_prefix() {
+        assert_eq!(
+            relative(Path::new("/repo"), Path::new("/repo/.config/nvim/init.lua")),
+            Path::new(".config/nvim/init.lua")
+        );
+    }
+
+    #[test]
+    fn relative_keeps_paths_outside_the_repository() {
+        assert_eq!(
+            relative(Path::new("/repo"), Path::new("/tmp/x")),
+            Path::new("/tmp/x")
+        );
     }
 
     #[test]
