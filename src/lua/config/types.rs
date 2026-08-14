@@ -14,6 +14,7 @@ pub struct Config {
     rules: Vec<Rule>,
     classes: Vec<Class>,
     pkg_warn: bool,
+    backup: bool,
 }
 
 impl Default for Config {
@@ -25,6 +26,7 @@ impl Default for Config {
             rules: Vec::new(),
             classes: Vec::new(),
             pkg_warn: true,
+            backup: true,
         }
     }
 }
@@ -77,6 +79,14 @@ impl Config {
 
     pub fn pkg_warn(&self) -> bool {
         self.pkg_warn
+    }
+
+    pub fn set_backup(&mut self, backup: bool) {
+        self.backup = backup;
+    }
+
+    pub fn backup(&self) -> bool {
+        self.backup
     }
 
     pub fn link(&self) -> LinkMode {

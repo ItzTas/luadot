@@ -1,3 +1,4 @@
+mod backup;
 mod constants;
 mod link;
 mod pkg_warn;

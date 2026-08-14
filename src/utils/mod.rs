@@ -1,4 +1,3 @@
-mod args;
 mod backup;
 mod classes;
 mod constants;
@@ -8,7 +7,6 @@ mod preview;
 mod prompt;
 mod repo;
 
-pub use args::{Flag, parse_args};
 pub use backup::{Backup, backups_dir, copy_entry, now};
 pub use classes::{ask, ask_missing};
 pub use editor::open;

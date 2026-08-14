@@ -3,15 +3,23 @@ use mlua::{Lua, Table, Value};
 use super::super::constants::API;
 use super::super::parse::{external, lookup};
 use super::super::table::{Builder, build};
-use super::constants::{LINK, NAMESPACE, PKG_WARN};
-use super::{link, pkg_warn};
+use super::constants::{BACKUP, LINK, NAMESPACE, PKG_WARN};
+use super::{backup, link, pkg_warn};
 
 type Setter = fn(&Lua, Value) -> mlua::Result<()>;
 
-const SETTERS: [(&str, Setter); 2] = [(LINK, link::set), (PKG_WARN, pkg_warn::set)];
+const SETTERS: [(&str, Setter); 3] = [
+    (BACKUP, backup::set),
+    (LINK, link::set),
+    (PKG_WARN, pkg_warn::set),
+];
 
 pub fn table(lua: &Lua) -> mlua::Result<Table> {
-    let functions: [(&str, Builder); 2] = [(LINK, link::function), (PKG_WARN, pkg_warn::function)];
+    let functions: [(&str, Builder); 3] = [
+        (BACKUP, backup::function),
+        (LINK, link::function),
+        (PKG_WARN, pkg_warn::function),
+    ];
 
     let opt = build(lua, &functions)?;
     let meta = lua.create_table()?;
@@ -42,10 +50,13 @@ mod tests {
 
     #[test]
     fn a_table_call_sets_every_option_it_carries() {
-        let config = from_source(r#"ld.opt({ link = "symbolic", pkg_warn = false })"#).unwrap();
+        let config =
+            from_source(r#"ld.opt({ link = "symbolic", pkg_warn = false, backup = false })"#)
+                .unwrap();
 
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
         assert!(!config.pkg_warn());
+        assert!(!config.backup());
     }
 
     #[test]
@@ -60,6 +71,7 @@ mod tests {
 
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
         assert!(config.pkg_warn());
+        assert!(config.backup());
     }
 
     #[test]
@@ -70,7 +82,7 @@ mod tests {
         );
 
         assert!(err.contains("unknown option `lnik`"));
-        assert!(err.contains("available: link, pkg_warn"));
+        assert!(err.contains("available: backup, link, pkg_warn"));
     }
 
     #[test]
