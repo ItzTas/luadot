@@ -1,8 +1,8 @@
-mod config;
 mod store;
+mod types;
 
-pub use config::State;
 pub use store::{load, save};
+pub use types::{Classes, State};
 
 #[allow(unused_imports)]
 pub use store::lcget;
