@@ -15,6 +15,11 @@ luadot is a small Rust CLI; the toolchain is pinned with proto (`.prototools`).
 - Messages follow Conventional Commits, enforced by `.githooks/commit-msg`
   (installed automatically by `build.rs`).
 
+## Comments
+
+- Do not write comments. No line comments and no doc comments. The code
+  must explain itself through names and structure.
+
 ## Changes
 
 - After making any change, check for errors. If there are any, change the
