@@ -2,81 +2,96 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use clap::Args;
 
 use crate::files::{self, LinkMode};
-use crate::{state, utils};
+use crate::lua::{self, Config};
+use crate::utils;
 
-pub fn add_cmd(args: &[String]) -> Result<()> {
-    if args.is_empty() {
-        bail!("add: missing path");
-    }
+#[derive(Debug, Args)]
+pub struct AddArgs {
+    #[arg(value_name = "PATH", required = true)]
+    pub paths: Vec<String>,
+}
 
-    let repo = repo_dir()?;
-    if !repo.is_dir() {
-        bail!(
-            "add: repository {} does not exist; run `luadot clone <url>` first",
-            repo.display()
-        );
-    }
+pub fn add_cmd(args: AddArgs) -> Result<()> {
+    let repo = utils::require_repo("add")?;
 
     let home = utils::home_dir()?;
+    let config = lua::load_config()?;
 
-    // Hard links are the only strategy for now; a future Lua configuration will
-    // choose between hard and symbolic links per file.
-    for (source, dest) in plan(&home, &repo, args)? {
-        link_into_repo(LinkMode::Hard, &source, &dest)?;
+    for (source, dest) in plan(&home, &repo, &args.paths, &config)? {
+        let relative = utils::relative(&repo, &dest);
+        link_into_repo(config.link_mode(relative), &source, &dest)?;
     }
     Ok(())
 }
 
-/// Builds the `(source file, repository destination)` pairs to link.
-///
-/// Each destination mirrors the file's location under `home`. A directory is
-/// walked recursively and every file it contains is mapped the same way. Fails
-/// when a source is neither a file nor a directory, when a destination already
-/// exists in the repository, or when two sources would map to the same
-/// destination.
-fn plan(home: &Path, repo: &Path, sources: &[String]) -> Result<Vec<(PathBuf, PathBuf)>> {
+fn plan(
+    home: &Path,
+    repo: &Path,
+    sources: &[String],
+    config: &Config,
+) -> Result<Vec<(PathBuf, PathBuf)>> {
     let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
     for source in sources {
         let source =
             std::path::absolute(source).with_context(|| format!("add: invalid path {source}"))?;
-        if source.is_dir() {
-            collect_dir(home, repo, &source, &mut pairs)?;
-        } else if source.is_file() {
-            let dest = utils::repo_path(home, repo, &source)?;
-            pairs.push((source, dest));
-        } else {
-            bail!("add: {} is not a file or directory", source.display());
-        }
+        collect(home, repo, source, config, &mut pairs)?;
     }
     check_conflicts(&pairs)?;
     Ok(pairs)
 }
 
-/// Appends every file under `dir` to `pairs`, mirroring its home layout.
+fn collect(
+    home: &Path,
+    repo: &Path,
+    source: PathBuf,
+    config: &Config,
+    pairs: &mut Vec<(PathBuf, PathBuf)>,
+) -> Result<()> {
+    if source.is_dir() {
+        return collect_dir(home, repo, &source, config, pairs);
+    }
+    if source.is_file() {
+        return push_pair(home, repo, source, config, pairs);
+    }
+    bail!("add: {} is not a file or directory", source.display())
+}
+
 fn collect_dir(
     home: &Path,
     repo: &Path,
     dir: &Path,
+    config: &Config,
     pairs: &mut Vec<(PathBuf, PathBuf)>,
 ) -> Result<()> {
-    // Reject a directory outside home before walking it; this also reports an
-    // out-of-home empty directory that would otherwise be silently ignored.
     utils::repo_path(home, repo, dir)?;
 
     let mut files = Vec::new();
     walk(dir, &mut files)?;
     files.sort();
     for file in files {
-        let dest = utils::repo_path(home, repo, &file)?;
-        pairs.push((file, dest));
+        push_pair(home, repo, file, config, pairs)?;
     }
     Ok(())
 }
 
-/// Collects the regular files under `dir` recursively. Symbolic links and other
-/// non-regular entries are skipped, which also keeps the walk free of cycles.
+fn push_pair(
+    home: &Path,
+    repo: &Path,
+    source: PathBuf,
+    config: &Config,
+    pairs: &mut Vec<(PathBuf, PathBuf)>,
+) -> Result<()> {
+    let dest = utils::repo_path(home, repo, &source)?;
+    if config.is_ignored(utils::relative(repo, &dest)) {
+        return Ok(());
+    }
+    pairs.push((source, dest));
+    Ok(())
+}
+
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("add: failed to read {}", dir.display()))?;
@@ -88,15 +103,15 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
         let path = entry.path();
         if file_type.is_dir() {
             walk(&path, out)?;
-        } else if file_type.is_file() {
+            continue;
+        }
+        if file_type.is_file() {
             out.push(path);
         }
     }
     Ok(())
 }
 
-/// Ensures no destination already exists in the repository and that no two
-/// sources map to the same destination.
 fn check_conflicts(pairs: &[(PathBuf, PathBuf)]) -> Result<()> {
     let mut seen: HashSet<&Path> = HashSet::new();
     for (_, dest) in pairs {
@@ -110,21 +125,12 @@ fn check_conflicts(pairs: &[(PathBuf, PathBuf)]) -> Result<()> {
     Ok(())
 }
 
-/// Hard links `source` into `dest`, creating the parent directories first.
 fn link_into_repo(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("add: failed to create {}", parent.display()))?;
     }
     files::link(mode, source, dest)
-}
-
-fn repo_dir() -> Result<PathBuf> {
-    let state = state::load()?;
-    Ok(state
-        .repo()
-        .context("add: no repository set; run `luadot clone <url>` first")?
-        .to_path_buf())
 }
 
 #[cfg(test)]
@@ -136,6 +142,23 @@ mod tests {
     }
 
     #[test]
+    fn plan_drops_the_files_the_configuration_ignores() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&home).unwrap();
+        let kept = home.join(".vimrc");
+        let ignored = home.join(".vimrc.swp");
+        std::fs::write(&kept, "a").unwrap();
+        std::fs::write(&ignored, "b").unwrap();
+
+        let config = lua::from_source(r#"ld.git.ignore({ "*.swp" })"#).unwrap();
+        let pairs = plan(&home, &repo, &[arg(&kept), arg(&ignored)], &config).unwrap();
+
+        assert_eq!(pairs, vec![(kept, repo.join(".vimrc"))]);
+    }
+
+    #[test]
     fn plan_maps_a_file_mirroring_home() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -144,7 +167,7 @@ mod tests {
         std::fs::create_dir_all(&home).unwrap();
         std::fs::write(&source, "x").unwrap();
 
-        let pairs = plan(&home, &repo, &[arg(&source)]).unwrap();
+        let pairs = plan(&home, &repo, &[arg(&source)], &Config::default()).unwrap();
 
         assert_eq!(pairs, vec![(source, repo.join(".bashrc"))]);
     }
@@ -160,7 +183,7 @@ mod tests {
         std::fs::write(&a, "a").unwrap();
         std::fs::write(&b, "b").unwrap();
 
-        let pairs = plan(&home, &repo, &[arg(&a), arg(&b)]).unwrap();
+        let pairs = plan(&home, &repo, &[arg(&a), arg(&b)], &Config::default()).unwrap();
 
         assert_eq!(pairs, vec![(a, repo.join(".a")), (b, repo.join(".b"))]);
     }
@@ -177,7 +200,7 @@ mod tests {
         std::fs::write(&init, "init").unwrap();
         std::fs::write(&plugins, "plugins").unwrap();
 
-        let pairs = plan(&home, &repo, &[arg(&nvim)]).unwrap();
+        let pairs = plan(&home, &repo, &[arg(&nvim)], &Config::default()).unwrap();
 
         assert_eq!(
             pairs,
@@ -205,7 +228,7 @@ mod tests {
         std::fs::write(&real, "r").unwrap();
         std::os::unix::fs::symlink(&real, cfg.join("link")).unwrap();
 
-        let pairs = plan(&home, &repo, &[arg(&cfg)]).unwrap();
+        let pairs = plan(&home, &repo, &[arg(&cfg)], &Config::default()).unwrap();
 
         assert_eq!(pairs, vec![(real, repo.join(".config").join("real"))]);
     }
@@ -217,7 +240,7 @@ mod tests {
         let repo = dir.path().join("repo");
         let missing = home.join("missing");
 
-        let err = plan(&home, &repo, &[arg(&missing)])
+        let err = plan(&home, &repo, &[arg(&missing)], &Config::default())
             .unwrap_err()
             .to_string();
         assert!(err.contains("is not a file or directory"));
@@ -234,7 +257,7 @@ mod tests {
         let source = home.join(".bashrc");
         std::fs::write(&source, "new").unwrap();
 
-        let err = plan(&home, &repo, &[arg(&source)])
+        let err = plan(&home, &repo, &[arg(&source)], &Config::default())
             .unwrap_err()
             .to_string();
         assert!(err.contains("already exists"));
@@ -249,9 +272,14 @@ mod tests {
         let source = home.join(".bashrc");
         std::fs::write(&source, "x").unwrap();
 
-        let err = plan(&home, &repo, &[arg(&source), arg(&source)])
-            .unwrap_err()
-            .to_string();
+        let err = plan(
+            &home,
+            &repo,
+            &[arg(&source), arg(&source)],
+            &Config::default(),
+        )
+        .unwrap_err()
+        .to_string();
         assert!(err.contains("more than once"));
     }
 

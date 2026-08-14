@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use tracing::debug;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LinkMode {
@@ -19,6 +20,12 @@ impl LinkMode {
 }
 
 pub fn link(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
+    debug!(
+        mode = mode.name(),
+        source = %source.display(),
+        dest = %dest.display(),
+        "linking"
+    );
     match mode {
         LinkMode::Hard => hard(source, dest),
         LinkMode::Symbolic => symbolic(source, dest),

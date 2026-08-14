@@ -3,15 +3,11 @@ use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context, Result, bail};
 use gix::progress::Discard;
+use tracing::debug;
 
 pub fn clone(dir: &Path, url: &str) -> Result<()> {
-    if dir.exists() {
-        let mut entries = std::fs::read_dir(dir)
-            .with_context(|| format!("clone: failed to read {}", dir.display()))?;
-        if entries.next().is_some() {
-            bail!("clone: destination {} is not empty", dir.display());
-        }
-    }
+    debug!(url, dir = %dir.display(), "cloning");
+    require_empty(dir)?;
 
     if let Some(parent) = dir.parent() {
         std::fs::create_dir_all(parent)
@@ -30,6 +26,21 @@ pub fn clone(dir: &Path, url: &str) -> Result<()> {
     let (_repo, _outcome) = checkout
         .main_worktree(Discard, &should_interrupt)
         .context("clone: failed to checkout worktree")?;
+
+    debug!(dir = %dir.display(), "cloned");
+    Ok(())
+}
+
+fn require_empty(dir: &Path) -> Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    let mut entries = std::fs::read_dir(dir)
+        .with_context(|| format!("clone: failed to read {}", dir.display()))?;
+    if entries.next().is_some() {
+        bail!("clone: destination {} is not empty", dir.display());
+    }
 
     Ok(())
 }

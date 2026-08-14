@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use tracing::debug;
 
 use super::constants::CONFIG_FILE;
 use super::types::Config;
@@ -31,11 +32,15 @@ pub fn config_path() -> Result<PathBuf> {
 fn load_from(path: &Path) -> Result<Config> {
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Config::default()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            debug!(path = %path.display(), "no configuration file, using the defaults");
+            return Ok(Config::default());
+        }
         Err(err) => {
             return Err(err).with_context(|| format!("config: failed to read {}", path.display()));
         }
     };
+    debug!(path = %path.display(), "running the configuration");
     let state = state::load()?;
     run(
         &source,

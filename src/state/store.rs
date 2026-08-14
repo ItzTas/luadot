@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use tracing::debug;
 
 use super::State;
 use crate::utils;
@@ -34,7 +35,9 @@ fn save_to(path: &Path, state: &State) -> Result<()> {
     }
     let contents = serde_json::to_string_pretty(state).context("state: failed to serialize")?;
     std::fs::write(path, contents)
-        .with_context(|| format!("state: failed to write {}", path.display()))
+        .with_context(|| format!("state: failed to write {}", path.display()))?;
+    debug!(path = %path.display(), "saved the state");
+    Ok(())
 }
 
 fn state_path() -> Result<PathBuf> {

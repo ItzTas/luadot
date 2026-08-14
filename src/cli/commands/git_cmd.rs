@@ -1,20 +1,26 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
+use clap::Args;
 
-use crate::state;
+use crate::utils;
 
-pub fn git_cmd(args: &[String]) -> Result<()> {
-    let repo = repo_dir()?;
-    if !repo.is_dir() {
-        bail!(
-            "git: repository {} does not exist; run `luadot clone <url>` first",
-            repo.display()
-        );
-    }
+#[derive(Debug, Args)]
+#[command(disable_help_flag = true)]
+pub struct GitArgs {
+    #[arg(
+        value_name = "ARGS",
+        trailing_var_arg = true,
+        allow_hyphen_values = true
+    )]
+    pub args: Vec<String>,
+}
 
-    let status = build_command(&repo, args)
+pub fn git_cmd(args: GitArgs) -> Result<()> {
+    let repo = utils::require_repo("git")?;
+
+    let status = build_command(&repo, &args.args)
         .status()
         .context("git: failed to run git; is it installed and on PATH?")?;
 
@@ -32,14 +38,6 @@ fn build_command(repo: &Path, args: &[String]) -> Command {
     command
 }
 
-fn repo_dir() -> Result<PathBuf> {
-    let state = state::load()?;
-    Ok(state
-        .repo()
-        .context("git: no repository set; run `luadot clone <url>` first")?
-        .to_path_buf())
-}
-
 #[cfg(test)]
 mod tests {
     use std::ffi::OsStr;
@@ -55,7 +53,10 @@ mod tests {
         );
 
         assert_eq!(command.get_program(), OsStr::new("git"));
-        assert_eq!(command.get_current_dir(), Some(Path::new("/tmp/luadot-repo")));
+        assert_eq!(
+            command.get_current_dir(),
+            Some(Path::new("/tmp/luadot-repo"))
+        );
 
         let args: Vec<&str> = command.get_args().map(|a| a.to_str().unwrap()).collect();
         assert_eq!(args, ["commit", "-m", "msg"]);

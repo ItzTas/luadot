@@ -1,14 +1,28 @@
 use anyhow::Result;
+use clap::Args;
 
-use super::git_cmd;
+use super::{GitArgs, git_cmd};
 
-pub fn push_cmd(args: &[String]) -> Result<()> {
-    git_cmd(&push_args(args))
+#[derive(Debug, Args)]
+#[command(disable_help_flag = true)]
+pub struct PushArgs {
+    #[arg(
+        value_name = "ARGS",
+        trailing_var_arg = true,
+        allow_hyphen_values = true
+    )]
+    pub args: Vec<String>,
 }
 
-fn push_args(args: &[String]) -> Vec<String> {
+pub fn push_cmd(args: PushArgs) -> Result<()> {
+    git_cmd(GitArgs {
+        args: push_args(args.args),
+    })
+}
+
+fn push_args(args: Vec<String>) -> Vec<String> {
     let mut forwarded = vec!["push".to_string()];
-    forwarded.extend_from_slice(args);
+    forwarded.extend(args);
     forwarded
 }
 
@@ -18,12 +32,12 @@ mod tests {
 
     #[test]
     fn bare_push_forwards_only_push() {
-        assert_eq!(push_args(&[]), ["push"]);
+        assert_eq!(push_args(Vec::new()), ["push"]);
     }
 
     #[test]
     fn forwards_extra_args_after_push() {
-        let args = ["origin".to_string(), "main".to_string()];
-        assert_eq!(push_args(&args), ["push", "origin", "main"]);
+        let args = vec!["origin".to_string(), "main".to_string()];
+        assert_eq!(push_args(args), ["push", "origin", "main"]);
     }
 }

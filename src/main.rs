@@ -1,17 +1,12 @@
-mod cli;
-mod files;
-mod git;
-mod lua;
-mod state;
-mod utils;
-
 use std::process::ExitCode;
+
+use luadot::{cli, output};
 
 fn main() -> ExitCode {
     match cli::run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("luadot: {err:#}");
+            output::error(format!("{err:#}"));
             ExitCode::FAILURE
         }
     }

@@ -1,143 +1,104 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
+use clap::Args;
 
-use crate::files::{self, ConflictPolicy, LinkMode, SyncOutcome};
-use crate::{state, utils};
+use crate::files::{self, Entry, SyncOutcome};
+use crate::lua;
+use crate::output;
+use crate::utils::{self, Backup};
 
-pub fn apply_cmd(args: &[String]) -> Result<()> {
-    let repo = repo_dir()?;
-    if !repo.is_dir() {
-        bail!(
-            "sync: repository {} does not exist; run `luadot clone <url>` first",
-            repo.display()
-        );
-    }
+#[derive(Debug, Args)]
+pub struct ApplyArgs {
+    #[arg(value_name = "PATH")]
+    pub path: Option<String>,
+    #[arg(
+        short = 'n',
+        long,
+        help = "Report what would change, touching nothing and taking no backup"
+    )]
+    pub dry_run: bool,
+}
+
+pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
+    let repo = utils::require_repo("apply")?;
 
     let home = utils::home_dir()?;
+    let config = lua::load_config()?;
 
-    let root = match args.first() {
-        Some(arg) => {
-            let target =
-                std::path::absolute(arg).with_context(|| format!("sync: invalid path {arg}"))?;
-            utils::repo_path(&home, &repo, &target)?
-        }
+    let root = match args.path.as_deref() {
+        Some(path) => utils::managed_path("apply", &home, &repo, path)?,
         None => repo.clone(),
     };
 
-    if !root.exists() {
-        bail!("sync: {} is not managed by the repository", root.display());
-    }
-
-    let files = collect_files(&root)?;
+    let files: Vec<PathBuf> = files::collect_entries("apply", &root)?
+        .into_iter()
+        .filter(|entry| !config.is_ignored(utils::relative(&repo, &entry.target())))
+        .filter_map(|entry| match entry {
+            Entry::File(file) => Some(file),
+            Entry::Template(_) => None,
+        })
+        .collect();
     if files.is_empty() {
-        println!("luadot: nothing to sync");
+        output::note("nothing to apply");
         return Ok(());
     }
+
+    let mut backup = match args.dry_run || !config.backup() {
+        true => None,
+        false => Some(Backup::open("apply", &home)?),
+    };
 
     let mut created = 0u32;
     let mut replaced = 0u32;
     let mut unchanged = 0u32;
+    let mut skipped = 0u32;
     for file in &files {
+        let relative = utils::relative(&repo, file);
         let dest = utils::system_path(&home, &repo, file)?;
-        let outcome = files::sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, file, &dest)
-            .with_context(|| format!("sync: failed to sync {}", dest.display()))?;
+        let mode = config.link_mode(relative);
+        let policy = config.conflict_policy(relative);
+
+        let status = files::file_status(mode, file, &dest)
+            .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
+        let predicted = files::predict(policy, status, &dest)
+            .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+        let outcome = match args.dry_run {
+            true => {
+                utils::preview(predicted, relative.display());
+                predicted
+            }
+            false => {
+                if predicted == SyncOutcome::Replaced
+                    && let Some(backup) = backup.as_mut()
+                {
+                    backup.save(&dest)?;
+                }
+                files::sync_file(policy, mode, file, &dest)
+                    .with_context(|| format!("apply: failed to apply {}", dest.display()))?
+            }
+        };
+
         match outcome {
             SyncOutcome::Created => created += 1,
             SyncOutcome::Replaced => replaced += 1,
             SyncOutcome::AlreadySynced => unchanged += 1,
-            SyncOutcome::Skipped => {}
+            SyncOutcome::Skipped => skipped += 1,
         }
     }
 
-    println!(
-        "luadot: synced {} file(s) ({created} created, {replaced} replaced, {unchanged} unchanged)",
+    output::note(format!(
+        "{} {} file(s) ({created} created, {replaced} replaced, {unchanged} unchanged, {skipped} skipped)",
+        match args.dry_run {
+            true => "would apply",
+            false => "applied",
+        },
         files.len()
-    );
+    ));
+    if let Some(backup) = backup.as_ref() {
+        backup.report();
+    }
 
     Ok(())
-}
-
-/// Collects every file under `root`, recursing into directories but skipping
-/// any `.git` directory so the repository's own metadata is never synced.
-fn collect_files(root: &Path) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    if root.is_dir() {
-        collect_into(root, &mut files)?;
-    } else {
-        files.push(root.to_path_buf());
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn collect_into(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
-    let entries =
-        std::fs::read_dir(dir).with_context(|| format!("sync: failed to read {}", dir.display()))?;
-    for entry in entries {
-        let entry =
-            entry.with_context(|| format!("sync: failed to read an entry in {}", dir.display()))?;
-        let file_type = entry
-            .file_type()
-            .with_context(|| format!("sync: failed to inspect {}", entry.path().display()))?;
-        if file_type.is_dir() {
-            if entry.file_name() == ".git" {
-                continue;
-            }
-            collect_into(&entry.path(), files)?;
-        } else {
-            files.push(entry.path());
-        }
-    }
-    Ok(())
-}
-
-fn repo_dir() -> Result<PathBuf> {
-    let state = state::load()?;
-    Ok(state
-        .repo()
-        .context("sync: no repository set; run `luadot clone <url>` first")?
-        .to_path_buf())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::collect_files;
-
-    #[test]
-    fn collect_files_returns_a_single_file_root() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("init.lua");
-        std::fs::write(&file, "data").unwrap();
-
-        assert_eq!(collect_files(&file).unwrap(), vec![file]);
-    }
-
-    #[test]
-    fn collect_files_walks_directories_recursively() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        std::fs::create_dir_all(root.join(".config/nvim")).unwrap();
-        std::fs::write(root.join(".bashrc"), "a").unwrap();
-        std::fs::write(root.join(".config/nvim/init.lua"), "b").unwrap();
-
-        let files = collect_files(root).unwrap();
-
-        assert_eq!(
-            files,
-            vec![root.join(".bashrc"), root.join(".config/nvim/init.lua")]
-        );
-    }
-
-    #[test]
-    fn collect_files_skips_the_git_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        std::fs::create_dir_all(root.join(".git/objects")).unwrap();
-        std::fs::write(root.join(".git/config"), "x").unwrap();
-        std::fs::write(root.join(".git/objects/blob"), "y").unwrap();
-        std::fs::write(root.join(".vimrc"), "z").unwrap();
-
-        assert_eq!(collect_files(root).unwrap(), vec![root.join(".vimrc")]);
-    }
 }

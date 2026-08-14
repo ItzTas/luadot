@@ -7,7 +7,11 @@ pub fn table(lua: &Lua) -> mlua::Result<Table> {
 }
 
 fn invocation() -> Vec<String> {
-    env::args().skip(1).collect()
+    strip_flags(env::args().skip(1))
+}
+
+fn strip_flags(args: impl Iterator<Item = String>) -> Vec<String> {
+    args.skip_while(|arg| arg.starts_with('-')).collect()
 }
 
 fn from(lua: &Lua, args: &[String]) -> mlua::Result<Table> {
@@ -55,6 +59,15 @@ mod tests {
 
         assert_eq!(argv.get::<String>("name").unwrap(), "status");
         assert_eq!(argv.get::<Table>("args").unwrap().len().unwrap(), 0);
+    }
+
+    #[test]
+    fn leading_flags_are_not_the_command() {
+        assert_eq!(
+            strip_flags(args(&["-v", "apply", "--dry-run"]).into_iter()),
+            args(&["apply", "--dry-run"])
+        );
+        assert_eq!(strip_flags(args(&["apply"]).into_iter()), args(&["apply"]));
     }
 
     #[test]

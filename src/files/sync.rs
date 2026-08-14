@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use tracing::debug;
 
 use super::{LinkMode, link};
 
@@ -31,6 +32,22 @@ pub enum SyncOutcome {
 }
 
 pub fn sync_file(
+    policy: ConflictPolicy,
+    mode: LinkMode,
+    source: &Path,
+    dest: &Path,
+) -> Result<SyncOutcome> {
+    let outcome = sync(policy, mode, source, dest)?;
+    debug!(
+        source = %source.display(),
+        dest = %dest.display(),
+        outcome = ?outcome,
+        "synced"
+    );
+    Ok(outcome)
+}
+
+fn sync(
     policy: ConflictPolicy,
     mode: LinkMode,
     source: &Path,
