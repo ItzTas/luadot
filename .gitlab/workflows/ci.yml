@@ -1,3 +1,24 @@
+test:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  image: rust:latest
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/
+      - target/
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends cmake
+    - rustup component add clippy
+  script:
+    - cargo build --verbose
+    - cargo clippy --all-targets -- -D warnings
+    - cargo test --verbose
+
 push-to-github:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'

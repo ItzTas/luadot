@@ -19,12 +19,22 @@ jobs:
     env:
       GITLAB_REPO: gitlab.digitalventura.com.br/luadot/luadot.git
     steps:
-      - name: Mirror to GitLab
+      - name: Clone GitHub repository
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
           set -euo pipefail
           git clone --mirror "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" repo.git
-          git -C repo.git push --force --all "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}"
-          git -C repo.git push --force --tags "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}"
+
+      - name: Push to GitLab
+        uses: nick-fields/retry@v3
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        with:
+          timeout_minutes: 10
+          max_attempts: 5
+          retry_wait_seconds: 60
+          command: |
+            set -euo pipefail
+            git -C repo.git push --force --all "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}"
+            git -C repo.git push --force --tags "https://oauth2:${GITLAB_TOKEN}@${GITLAB_REPO}"

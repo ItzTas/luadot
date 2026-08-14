@@ -1,0 +1,29 @@
+#!/bin/sh
+
+echo "Running cargo clippy before push..."
+if ! cargo clippy --all-targets -- -D warnings; then
+	cat >&2 <<EOF
+
+✖ Push aborted: cargo clippy found problems in the code.
+
+  Fix the reported issues before pushing, or bypass with:
+    git push --no-verify
+
+EOF
+	exit 1
+fi
+
+echo "Running cargo test before push..."
+if ! cargo test; then
+	cat >&2 <<EOF
+
+✖ Push aborted: cargo test failed.
+
+  Fix the failing tests before pushing, or bypass with:
+    git push --no-verify
+
+EOF
+	exit 1
+fi
+
+exit 0

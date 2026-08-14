@@ -3,9 +3,46 @@ name = "luadot"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+bench = false
+
+[[bin]]
+name = "luadot"
+path = "src/main.rs"
+bench = false
+
 [dependencies]
+anstream = "1.0.0"
+anstyle = "1.0.14"
 anyhow = "1.0.102"
+clap = { version = "4.6.6", features = ["derive"] }
+clap_complete = "4.6.9"
+etcetera = "0.11.0"
+gix = { version = "0.84.0", features = ["blocking-network-client", "blocking-http-transport-reqwest-rust-tls"] }
+glob = "0.3.4"
 mlua = { version = "0.11.6", features = ["lua54", "vendored", "send"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
+assert_cmd = "2.2.2"
+criterion = "0.8.2"
+predicates = "3.1.4"
 tempfile = "3.27.0"
+
+[[bench]]
+name = "files"
+harness = false
+
+[[bench]]
+name = "config"
+harness = false
+
+[[bench]]
+name = "lua"
+harness = false
+
+[lints.clippy]
+needless_return = "allow"
