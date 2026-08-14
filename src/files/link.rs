@@ -2,19 +2,22 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-/// Strategy used to place a file into the repository.
-///
-/// Only [`LinkMode::Hard`] is used for now; the choice is kept open so a future
-/// Lua configuration can select the strategy per file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LinkMode {
     #[default]
     Hard,
-    #[allow(dead_code)]
     Symbolic,
 }
 
-/// Links `source` into `dest` using the given [`LinkMode`].
+impl LinkMode {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Hard => "hard",
+            Self::Symbolic => "symbolic",
+        }
+    }
+}
+
 pub fn link(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
     match mode {
         LinkMode::Hard => hard(source, dest),
@@ -61,7 +64,6 @@ mod tests {
         link(LinkMode::Hard, &source, &dest).unwrap();
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
-        // Writing through one path is visible through the other.
         std::fs::write(&source, "changed").unwrap();
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "changed");
     }

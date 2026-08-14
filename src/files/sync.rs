@@ -4,40 +4,32 @@ use anyhow::{Context, Result, bail};
 
 use super::{LinkMode, link};
 
-/// What to do when a destination already exists and differs from the repo file.
-///
-/// Only [`ConflictPolicy::Overwrite`] is used for now; the other policies are
-/// kept ready so a future Lua configuration can choose per sync.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ConflictPolicy {
-    /// Replace the existing file with the repository's version.
     #[default]
     Overwrite,
-    /// Leave the existing file untouched.
-    #[allow(dead_code)]
     Skip,
-    /// Abort with an error.
-    #[allow(dead_code)]
     Error,
 }
 
-/// Outcome of syncing a single file out to the system.
+impl ConflictPolicy {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Overwrite => "overwrite",
+            Self::Skip => "skip",
+            Self::Error => "error",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncOutcome {
-    /// The destination did not exist and was created.
     Created,
-    /// An existing, differing destination was replaced.
     Replaced,
-    /// The destination already matched the repository file.
     AlreadySynced,
-    /// The destination existed and was left untouched.
     Skipped,
 }
 
-/// Places `source` (a repository file) at `dest` on the system.
-///
-/// Hard links cannot cross filesystems, so [`LinkMode::Hard`] falls back to a
-/// plain copy when `source` and `dest` live on different devices.
 pub fn sync_file(
     policy: ConflictPolicy,
     mode: LinkMode,
@@ -48,45 +40,51 @@ pub fn sync_file(
         bail!("files: {} is not a file", source.display());
     }
 
-    let replacing = match std::fs::symlink_metadata(dest) {
-        Ok(_) => {
-            if already_synced(mode, source, dest)? {
-                return Ok(SyncOutcome::AlreadySynced);
-            }
-            match policy {
-                ConflictPolicy::Overwrite => {
-                    remove_existing(dest)?;
-                    true
-                }
-                ConflictPolicy::Skip => return Ok(SyncOutcome::Skipped),
-                ConflictPolicy::Error => bail!("files: {} already exists", dest.display()),
-            }
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
-        Err(err) => {
-            return Err(err).with_context(|| format!("files: failed to inspect {}", dest.display()));
-        }
-    };
-
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("files: failed to create {}", parent.display()))?;
+    if !exists(dest)? {
+        place(mode, source, dest)?;
+        return Ok(SyncOutcome::Created);
     }
 
+    if already_synced(mode, source, dest)? {
+        return Ok(SyncOutcome::AlreadySynced);
+    }
+
+    match policy {
+        ConflictPolicy::Skip => return Ok(SyncOutcome::Skipped),
+        ConflictPolicy::Error => bail!("files: {} already exists", dest.display()),
+        ConflictPolicy::Overwrite => {}
+    }
+
+    remove_existing(dest)?;
     place(mode, source, dest)?;
 
-    Ok(if replacing {
-        SyncOutcome::Replaced
-    } else {
-        SyncOutcome::Created
-    })
+    Ok(SyncOutcome::Replaced)
+}
+
+pub(super) fn exists(path: &Path) -> Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => {
+            Err(err).with_context(|| format!("files: failed to inspect {}", path.display()))
+        }
+    }
 }
 
 fn place(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
+    create_parent(dest)?;
     match mode {
         LinkMode::Hard => hard_or_copy(source, dest),
         LinkMode::Symbolic => link(mode, source, dest),
     }
+}
+
+pub(super) fn create_parent(path: &Path) -> Result<()> {
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+    std::fs::create_dir_all(parent)
+        .with_context(|| format!("files: failed to create {}", parent.display()))
 }
 
 fn hard_or_copy(source: &Path, dest: &Path) -> Result<()> {
@@ -113,17 +111,23 @@ fn copy(source: &Path, dest: &Path) -> Result<()> {
     })
 }
 
-fn already_synced(mode: LinkMode, source: &Path, dest: &Path) -> Result<bool> {
+pub(super) fn already_synced(mode: LinkMode, source: &Path, dest: &Path) -> Result<bool> {
     match mode {
         LinkMode::Hard => Ok(same_file(source, dest)),
-        LinkMode::Symbolic => match std::fs::symlink_metadata(dest) {
-            Ok(meta) if meta.file_type().is_symlink() => Ok(std::fs::read_link(dest)? == source),
-            _ => Ok(false),
-        },
+        LinkMode::Symbolic => points_to(dest, source),
     }
 }
 
-/// Reports whether `source` and `dest` are the same inode (i.e. hard linked).
+fn points_to(dest: &Path, source: &Path) -> Result<bool> {
+    let Ok(meta) = std::fs::symlink_metadata(dest) else {
+        return Ok(false);
+    };
+    if !meta.file_type().is_symlink() {
+        return Ok(false);
+    }
+    Ok(std::fs::read_link(dest)? == source)
+}
+
 fn same_file(source: &Path, dest: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
 
@@ -133,7 +137,7 @@ fn same_file(source: &Path, dest: &Path) -> bool {
     a.dev() == b.dev() && a.ino() == b.ino()
 }
 
-fn remove_existing(path: &Path) -> Result<()> {
+pub(super) fn remove_existing(path: &Path) -> Result<()> {
     let meta = std::fs::symlink_metadata(path)
         .with_context(|| format!("files: failed to inspect {}", path.display()))?;
     if meta.file_type().is_dir() {
@@ -142,7 +146,8 @@ fn remove_existing(path: &Path) -> Result<()> {
             path.display()
         );
     }
-    std::fs::remove_file(path).with_context(|| format!("files: failed to remove {}", path.display()))
+    std::fs::remove_file(path)
+        .with_context(|| format!("files: failed to remove {}", path.display()))
 }
 
 #[cfg(test)]
@@ -253,8 +258,7 @@ mod tests {
         write(&source, "repo");
         std::fs::create_dir(&dest).unwrap();
 
-        let err =
-            sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap_err();
+        let err = sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap_err();
         assert!(err.to_string().contains("refusing to replace directory"));
     }
 
@@ -265,8 +269,13 @@ mod tests {
         let dest = dir.path().join("dest");
         write(&source, "data");
 
-        let outcome =
-            sync_file(ConflictPolicy::Overwrite, LinkMode::Symbolic, &source, &dest).unwrap();
+        let outcome = sync_file(
+            ConflictPolicy::Overwrite,
+            LinkMode::Symbolic,
+            &source,
+            &dest,
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::Created);
         assert!(
@@ -277,8 +286,13 @@ mod tests {
         );
         assert_eq!(std::fs::read_link(&dest).unwrap(), source);
 
-        let outcome =
-            sync_file(ConflictPolicy::Overwrite, LinkMode::Symbolic, &source, &dest).unwrap();
+        let outcome = sync_file(
+            ConflictPolicy::Overwrite,
+            LinkMode::Symbolic,
+            &source,
+            &dest,
+        )
+        .unwrap();
         assert_eq!(outcome, SyncOutcome::AlreadySynced);
     }
 
@@ -288,8 +302,7 @@ mod tests {
         let source = dir.path().join("missing");
         let dest = dir.path().join("dest");
 
-        let err =
-            sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap_err();
+        let err = sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap_err();
         assert!(err.to_string().contains("is not a file"));
     }
 
