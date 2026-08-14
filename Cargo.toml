@@ -27,7 +27,9 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
+assert_cmd = "2.2.2"
 criterion = "0.8.2"
+predicates = "3.1.4"
 tempfile = "3.27.0"
 
 [[bench]]
