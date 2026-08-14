@@ -2,7 +2,20 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 
+use super::status::FileStatus;
 use super::sync::{ConflictPolicy, SyncOutcome, create_parent, exists, remove_existing};
+
+pub fn text_status(dest: &Path, contents: &str) -> Result<FileStatus> {
+    if !exists(dest)? {
+        return Ok(FileStatus::Missing);
+    }
+
+    if holds(dest, contents)? {
+        return Ok(FileStatus::Synced);
+    }
+
+    Ok(FileStatus::Differs)
+}
 
 pub fn write_file(policy: ConflictPolicy, dest: &Path, contents: &str) -> Result<SyncOutcome> {
     if !exists(dest)? {
@@ -128,5 +141,25 @@ mod tests {
         let err = write_file(ConflictPolicy::Overwrite, &dest, "generated").unwrap_err();
 
         assert!(err.to_string().contains("refusing to replace directory"));
+    }
+
+    #[test]
+    fn text_status_reads_what_the_destination_holds() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join(".zshrc");
+
+        assert_eq!(
+            text_status(&dest, "generated").unwrap(),
+            FileStatus::Missing
+        );
+
+        std::fs::write(&dest, "generated").unwrap();
+        assert_eq!(text_status(&dest, "generated").unwrap(), FileStatus::Synced);
+
+        std::fs::write(&dest, "handwritten").unwrap();
+        assert_eq!(
+            text_status(&dest, "generated").unwrap(),
+            FileStatus::Differs
+        );
     }
 }
