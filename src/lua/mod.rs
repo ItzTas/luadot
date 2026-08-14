@@ -1,19 +1,19 @@
-#![allow(dead_code)]
+mod bootstrap;
+mod config;
+mod constants;
+mod exec;
+mod ld;
+mod runtime;
+mod script;
+mod setup;
+mod template;
 
-use mlua::Lua;
-
-pub fn runtime() -> mlua::Result<Lua> {
-    Ok(Lua::new())
-}
-
+pub use bootstrap::{bootstrap_path, run_bootstrap};
+pub use config::{Class, Config, Rule, config_path, load_config};
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn runtime_evaluates_expression() {
-        let lua = runtime().unwrap();
-        let value: i64 = lua.load("return 1 + 2").eval().unwrap();
-        assert_eq!(value, 3);
-    }
-}
+pub use config::{from_classes, from_source};
+pub use exec::run_exec;
+pub use setup::{list_setups, run_setups};
+#[cfg(test)]
+pub use template::from_source as from_template;
+pub use template::{Content, Handle, Output, Template, load_template};

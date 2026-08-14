@@ -1,0 +1,92 @@
+use mlua::{Lua, Table, Value};
+
+use super::super::constants::API;
+use super::super::parse::{external, lookup};
+use super::super::table::{Builder, build};
+use super::constants::{LINK, NAMESPACE, PKG_WARN};
+use super::{link, pkg_warn};
+
+type Setter = fn(&Lua, Value) -> mlua::Result<()>;
+
+const SETTERS: [(&str, Setter); 2] = [(LINK, link::set), (PKG_WARN, pkg_warn::set)];
+
+pub fn table(lua: &Lua) -> mlua::Result<Table> {
+    let functions: [(&str, Builder); 2] = [(LINK, link::function), (PKG_WARN, pkg_warn::function)];
+
+    let opt = build(lua, &functions)?;
+    let meta = lua.create_table()?;
+    meta.set(
+        "__call",
+        lua.create_function(|lua, (_, options): (Table, Table)| apply(lua, &options))?,
+    )?;
+    opt.set_metatable(Some(meta))?;
+
+    Ok(opt)
+}
+
+fn apply(lua: &Lua, options: &Table) -> mlua::Result<()> {
+    for pair in options.clone().pairs::<String, Value>() {
+        let (name, value) =
+            pair.map_err(|_| external(format!("`{API}.{NAMESPACE}` takes a table of options")))?;
+        lookup(&SETTERS, &name, "option")?(lua, value)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use crate::files::LinkMode;
+    use crate::lua::from_source;
+
+    #[test]
+    fn a_table_call_sets_every_option_it_carries() {
+        let config = from_source(r#"ld.opt({ link = "symbolic", pkg_warn = false })"#).unwrap();
+
+        assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
+        assert!(!config.pkg_warn());
+    }
+
+    #[test]
+    fn a_table_call_only_touches_the_options_it_carries() {
+        let config = from_source(
+            r#"
+            ld.opt.link("symbolic")
+            ld.opt({})
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
+        assert!(config.pkg_warn());
+    }
+
+    #[test]
+    fn rejects_an_unknown_option() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.opt({ lnik = "hard" })"#).unwrap_err()
+        );
+
+        assert!(err.contains("unknown option `lnik`"));
+        assert!(err.contains("available: link, pkg_warn"));
+    }
+
+    #[test]
+    fn rejects_a_value_the_option_does_not_accept() {
+        let err = format!("{:#}", from_source("ld.opt({ link = {} })").unwrap_err());
+
+        assert!(err.contains("`ld.opt.link` takes a string"));
+    }
+
+    #[test]
+    fn reports_a_value_the_option_does_not_accept() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.opt({ link = "magic" })"#).unwrap_err()
+        );
+
+        assert!(err.contains("unknown link mode `magic`"));
+    }
+}
