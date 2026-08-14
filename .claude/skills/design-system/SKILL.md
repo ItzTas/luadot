@@ -11,24 +11,27 @@ Keep this file short. One line per rule.
 
 | Path | Holds |
 |---|---|
-| `src/main.rs` | only `main` |
-| `src/cli/` | argument dispatch: `run.rs`, `types.rs`, the command map in `mod.rs` |
+| `src/main.rs` | only `main`, calling into the library |
+| `src/lib.rs` | only the module declarations, one `pub mod` per line |
+| `src/cli/` | argument parsing and dispatch: the clap `Cli`/`Cmd` in `types.rs`, the match in `run.rs` |
 | `src/cli/commands/` | one `<name>_cmd.rs` per command, nothing else |
 | `src/files/` | link and sync primitives |
 | `src/git/` | git operations |
 | `src/lua/` | configuration loading and the Lua runtime |
 | `src/state/` | persisted state: `State` and its store |
 | `src/utils/` | shared helpers used across modules |
+| `benches/` | one criterion bench per area, fixtures in `benches/support/` |
 
 ## Rules
 
 - `src/cli/commands/` is for commands only. Logic shared by two or more commands moves to `src/utils/` (or the module that owns the domain), never to a sibling of the commands.
 - Every module is a directory with a `mod.rs` that only declares submodules and re-exports its public surface.
 - Constants live in the module's own `constants.rs` (`lua/constants.rs`), never inline in the file that uses them.
-- A command exposes one `pub fn <name>_cmd(args: &[String]) -> Result<()>`; register it in `cli::get_commands`.
+- A command exposes one `pub fn <name>_cmd(args: <Name>Args) -> Result<()>`, its clap `Args` struct in the same file (no struct when it takes nothing); add the variant to `Cmd` in `types.rs` and its arm to the match in `run.rs`. Help texts live in `#[command(about = ...)]`/`#[arg(help = ...)]` attributes, never in doc comments.
 - Errors use `anyhow` and every message is prefixed with the command name: `bail!("add: ...")`. Helpers shared between commands take the prefix as a parameter.
 - Split IO from logic so the logic is testable: the IO wrapper (`load`, `require_repo`) calls a pure function (`load_from`, `resolve`).
 - Tests live in a `#[cfg(test)] mod tests` at the bottom of the file they test.
+- Benchmarks reach the code through the library, one `benches/<area>.rs` per area with a `[[bench]]` entry carrying `harness = false`; shared fixtures go in `benches/support/`.
 - New capability for the configuration is added to the `ld` API, never by unlocking the runtime: `Lua::new()` stays safe (no `ffi`, no C modules) and the language stays PUC Lua 5.4.
 - One `ld` function per file, one directory per group: `ld/root/` is `ld.<function>`, and a named group (`ld/git/`) owns its `NAMESPACE` and becomes `ld.<namespace>.<function>`. Each group has a `table.rs` listing its functions.
 - No comments anywhere.
