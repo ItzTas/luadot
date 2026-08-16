@@ -6,7 +6,7 @@ use crate::output;
 use crate::state;
 use crate::utils;
 
-const UNSET: &str = "(none)";
+use super::super::constants::UNSET;
 
 #[derive(Debug, Args)]
 pub struct ConfigArgs {

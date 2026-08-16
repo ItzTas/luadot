@@ -8,12 +8,7 @@ use crate::lua;
 use crate::output::{self, Tone};
 use crate::utils;
 
-const LABELS: [(FileStatus, &str, Tone); 4] = [
-    (FileStatus::Synced, "synced", Tone::Good),
-    (FileStatus::Missing, "missing", Tone::Warning),
-    (FileStatus::Unlinked, "unlinked", Tone::Warning),
-    (FileStatus::Differs, "differs", Tone::Bad),
-];
+use super::super::constants::STATUS_LABELS;
 
 #[derive(Debug, Args)]
 pub struct StatusArgs {
@@ -76,7 +71,7 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
 }
 
 fn display(status: FileStatus) -> (Tone, &'static str) {
-    LABELS
+    STATUS_LABELS
         .iter()
         .find(|(kind, _, _)| *kind == status)
         .map(|(_, label, tone)| (*tone, *label))
@@ -102,7 +97,7 @@ mod tests {
 
     #[test]
     fn labels_fit_the_printed_column() {
-        for (_, text, _) in LABELS {
+        for (_, text, _) in STATUS_LABELS {
             assert!(text.len() < 9);
         }
     }
