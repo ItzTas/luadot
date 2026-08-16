@@ -46,7 +46,12 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
 
     let mut backup = match args.dry_run || !config.backup() {
         true => None,
-        false => Some(Backup::open("apply", &home)?),
+        false => Some(Backup::open(
+            "apply",
+            &home,
+            config.backup_dir(),
+            config.backup_keep(),
+        )?),
     };
 
     let mut created = 0u32;
@@ -97,7 +102,7 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         files.len()
     ));
     if let Some(backup) = backup.as_ref() {
-        backup.report();
+        backup.finish()?;
     }
 
     Ok(())

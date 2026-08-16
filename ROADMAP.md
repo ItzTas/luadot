@@ -46,24 +46,24 @@ the change back in with `add`. A `luadot diff [path...]` closes that loop.
 
 ## Backups and restore
 
-`apply` and `alt` already save every file they replace, into
-`~/.local/share/luadot/backups/<unix-timestamp>/`, mirroring the path below the
-home directory; `ld.opt.backup(false)` turns it off. What is still missing:
+`apply`, `alt` and `rm` save every file they destroy, into
+`~/.local/share/luadot/backups/<unix-millisecond>/`, mirroring the path below
+the home directory; `ld.opt.backup(false)` turns it off,
+`ld.opt.backup_dir(path)` moves the directory elsewhere,
+`ld.opt.backup_keep(n)` keeps only the `n` most recent, and `restore` puts a
+backup back. `add` takes none because it writes over nothing: it refuses a
+destination that already exists and leaves the home copy where it is. What is
+still missing:
 
-- **Wiring `restore` into the CLI.** The command exists as a module and is not
-  reachable yet.
-- **The other commands that overwrite.** `add` and `rm` move files around
-  without taking a backup, so the safety net only covers half of the writes.
-- **Retention.** Nothing ever prunes the backup directory, so it grows on every
-  run. A keep-the-last-N option, an age limit, or a `restore --prune` are the
-  obvious answers; which one is not settled.
-- **Where the backups live.** They are recreatable state rather than data, so
-  `$XDG_STATE_HOME` (`~/.local/state/luadot/backups/`) is arguably the right
-  place. Moving them later orphans the backups already taken, so this is worth
-  deciding before the directory has real content in it.
-- **Timestamp collisions.** The directory name is the unix second, so two runs
-  within the same second share a backup directory and the second one overwrites
-  what the first saved.
+- **Retention beyond a count.** The limit is a number of backups and nothing
+  else: no age limit, and no way to prune by hand short of removing the
+  directories. A `restore --prune` and an `ld.opt.backup_age` are the obvious
+  answers; neither is settled, and a count may well be enough.
+- **Files outside the home directory.** A template writing to `/etc`, or a
+  repository living outside `~`, has no mirrored path to be saved under, so the
+  files are counted and reported instead of backed up. A `root/` prefix inside
+  the backup would cover them, at the price of a `restore` that writes outside
+  the home directory.
 
 ## Encrypted files
 

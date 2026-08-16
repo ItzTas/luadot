@@ -90,38 +90,60 @@ Only the files that would change are listed, one line each, the same way
 
 ### Backups
 
-Every file `apply` or `alt` replaces is copied first, so an `overwrite` never
-loses what was on the system:
+Every file luadot destroys is copied first, so nothing it overwrites is lost:
+`apply` and `alt` save what they replace, and `rm` saves both the repository
+entry it deletes and the system symlink it writes over.
 
 ```
 luadot: applied 12 file(s) (0 created, 1 replaced, 11 unchanged, 0 skipped)
-luadot: backed up 1 replaced file(s) in ~/.local/share/luadot/backups/1786677956
+luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
 ```
 
-One directory per run, named after the moment it ran, holding the replaced
+One directory per run, named after the millisecond it ran, holding the saved
 files under the paths they had in your home directory. A symlink is kept as a
-symlink; nothing is written for a file that was created rather than replaced.
+symlink; nothing is written for a file that was created rather than replaced,
+and `add` takes no backup because it never writes over anything. Files outside
+your home directory have no mirrored path to be saved under, so they are
+reported and left alone.
 
 `luadot restore` puts the most recent one back, asking first and listing what
 is about to land:
 
 ```
 $ luadot restore --list
-1786677956  2 minutes ago  1 file(s)
-1786590012  1 day ago      4 file(s)
+1786677956412  2 minutes ago  1 file(s)
+1786590012773  1 day ago      4 file(s)
 
 $ luadot restore
   .zshrc
-Put 1 file(s) of backup 1786677956 back? [y/N]
+Put 1 file(s) of backup 1786677956412 back? [y/N]
 ```
 
-A backup of your own is reached by its name (`luadot restore 1786590012`), `-y`
-answers the question upfront and `-n` reports what would be put back. Restoring
-writes plain copies, so the files it touches stop being linked to the
+A backup of your own is reached by its name (`luadot restore 1786590012773`),
+`-y` answers the question upfront and `-n` reports what would be put back.
+Restoring writes plain copies, so the files it touches stop being linked to the
 repository until the next `apply`.
 
-`ld.opt.backup(false)` turns the whole thing off, and nothing is ever removed
-from the backup directory on its own — pruning it is yours to do.
+Backups live next to the repository, in `~/.local/share/luadot/backups` (or
+`$XDG_DATA_HOME/luadot/backups`), and `ld.opt.backup_dir` moves them anywhere
+you like. `ld.opt.backup(false)` turns the whole thing off.
+
+Nothing is pruned until you set a limit. `ld.opt.backup_keep(n)` keeps the `n`
+most recent backups and drops the older ones at the end of every run that takes
+one:
+
+```lua
+ld.opt.backup_keep(10)
+```
+
+```
+luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
+luadot: dropped 1 backup(s), keeping the 10 most recent
+```
+
+The limit counts whole backups, not the files inside them — a run either keeps
+everything it saved or is dropped as a whole, so a backup is never left half
+there. Without it the directory grows on every run and pruning is yours to do.
 
 `exec` runs Lua with the same `ld` interface the configuration gets, which is
 how you ask a machine what luadot sees on it:
@@ -158,7 +180,9 @@ ld.rules({
 | Call | Arguments | Effect |
 | --- | --- | --- |
 | `ld.opt.link(mode)` | `"hard"`, `"symbolic"` | Default strategy used to link a managed file. |
-| `ld.opt.backup(enabled)` | `true`, `false` | Whether `apply` and `alt` copy a file aside before replacing it. Defaults to `true`. |
+| `ld.opt.backup(enabled)` | `true`, `false` | Whether a file is copied aside before luadot writes over it. Defaults to `true`. |
+| `ld.opt.backup_dir(path)` | a directory | Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`. |
+| `ld.opt.backup_keep(count)` | a number of one or more | How many backups to keep; the oldest ones are dropped once there are more. Defaults to keeping every one of them. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
@@ -195,7 +219,7 @@ instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.repo_dir`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `ld.lua`, which builds the configuration | does nothing, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.repo_dir`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `ld.lua`, which builds the configuration | does nothing, warns |
 | `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand` | `luadot.lua`, which produces a template's files | does nothing and yields `nil`, warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |

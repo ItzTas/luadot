@@ -18,6 +18,16 @@ pub fn flag(value: &Value, option: &str) -> mlua::Result<bool> {
     }
 }
 
+pub fn count(value: &Value, option: &str) -> mlua::Result<u32> {
+    let whole = match value {
+        Value::Integer(count) => *count,
+        Value::Number(count) if count.fract() == 0.0 => *count as i64,
+        _ => return Err(expected(option, "a whole number")),
+    };
+
+    u32::try_from(whole).map_err(|_| expected(option, "a whole number of zero or more"))
+}
+
 fn expected(option: &str, kind: &str) -> mlua::Error {
     external(format!("`{API}.{NAMESPACE}.{option}` takes {kind}"))
 }
@@ -55,5 +65,30 @@ mod tests {
             .to_string();
 
         assert!(err.contains("`ld.opt.pkg_warn` takes true or false"));
+    }
+
+    #[test]
+    fn count_reads_a_whole_number() {
+        assert_eq!(count(&Value::Integer(5), "backup_keep").unwrap(), 5);
+        assert_eq!(count(&Value::Number(5.0), "backup_keep").unwrap(), 5);
+        assert_eq!(count(&Value::Integer(0), "backup_keep").unwrap(), 0);
+    }
+
+    #[test]
+    fn count_rejects_a_fraction_and_anything_that_is_not_a_number() {
+        for value in [Value::Number(1.5), Value::Boolean(true), Value::Nil] {
+            let err = count(&value, "backup_keep").unwrap_err().to_string();
+
+            assert!(err.contains("`ld.opt.backup_keep` takes a whole number"));
+        }
+    }
+
+    #[test]
+    fn count_rejects_a_negative_number() {
+        let err = count(&Value::Integer(-1), "backup_keep")
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("takes a whole number of zero or more"));
     }
 }

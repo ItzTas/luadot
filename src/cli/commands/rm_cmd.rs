@@ -7,7 +7,7 @@ use clap::Args;
 use crate::files;
 use crate::lua;
 use crate::output;
-use crate::utils;
+use crate::utils::{self, Backup};
 
 const PREVIEW_LIMIT: usize = 10;
 
@@ -56,13 +56,26 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         return Ok(());
     }
 
+    let mut backup = match config.backup() {
+        true => Some(Backup::open(
+            "rm",
+            &home,
+            config.backup_dir(),
+            config.backup_keep(),
+        )?),
+        false => None,
+    };
+
     let mut restored = 0u32;
     let mut untouched = 0u32;
     for file in &files {
         let dest = utils::system_path(&home, &repo, file)?;
-        match detach(file, &dest)? {
+        match detach(file, &dest, &mut backup)? {
             Detached::Restored => restored += 1,
             Detached::Untouched => untouched += 1,
+        }
+        if let Some(backup) = backup.as_mut() {
+            backup.save(file)?;
         }
         std::fs::remove_file(file)
             .with_context(|| format!("rm: failed to remove {}", file.display()))?;
@@ -73,6 +86,9 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         "stopped managing {} file(s) ({restored} restored, {untouched} left untouched)",
         files.len()
     ));
+    if let Some(backup) = backup.as_ref() {
+        backup.finish()?;
+    }
 
     Ok(())
 }
@@ -136,10 +152,13 @@ fn plan(home: &Path, repo: &Path, args: &[String]) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-fn detach(source: &Path, dest: &Path) -> Result<Detached> {
+fn detach(source: &Path, dest: &Path, backup: &mut Option<Backup>) -> Result<Detached> {
     let plan = decide(source, dest)?;
 
     if plan == Plan::Relink {
+        if let Some(backup) = backup.as_mut() {
+            backup.save(dest)?;
+        }
         std::fs::remove_file(dest)
             .with_context(|| format!("rm: failed to remove {}", dest.display()))?;
     }
@@ -291,7 +310,10 @@ mod tests {
         let dest = dir.path().join("nested").join("dest");
         write(&source, "data");
 
-        assert_eq!(detach(&source, &dest).unwrap(), Detached::Restored);
+        assert_eq!(
+            detach(&source, &dest, &mut None).unwrap(),
+            Detached::Restored
+        );
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
     }
 
@@ -303,11 +325,35 @@ mod tests {
         write(&source, "data");
         std::os::unix::fs::symlink(&source, &dest).unwrap();
 
-        assert_eq!(detach(&source, &dest).unwrap(), Detached::Restored);
+        assert_eq!(
+            detach(&source, &dest, &mut None).unwrap(),
+            Detached::Restored
+        );
 
         let kind = std::fs::symlink_metadata(&dest).unwrap().file_type();
         assert!(!kind.is_symlink());
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
+    }
+
+    #[test]
+    fn detach_saves_the_symlink_it_replaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let source = dir.path().join("source");
+        let dest = home.join(".zshrc");
+        let saved = dir.path().join("backup");
+        std::fs::create_dir_all(&home).unwrap();
+        write(&source, "data");
+        std::os::unix::fs::symlink(&source, &dest).unwrap();
+
+        let mut backup = Some(Backup::at("rm", &home, saved.clone()));
+        assert_eq!(
+            detach(&source, &dest, &mut backup).unwrap(),
+            Detached::Restored
+        );
+
+        assert_eq!(std::fs::read_link(saved.join(".zshrc")).unwrap(), source);
+        assert_eq!(backup.unwrap().saved(), 1);
     }
 
     #[test]
@@ -318,7 +364,10 @@ mod tests {
         write(&source, "data");
         std::fs::hard_link(&source, &dest).unwrap();
 
-        assert_eq!(detach(&source, &dest).unwrap(), Detached::Untouched);
+        assert_eq!(
+            detach(&source, &dest, &mut None).unwrap(),
+            Detached::Untouched
+        );
 
         std::fs::remove_file(&source).unwrap();
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
@@ -332,7 +381,10 @@ mod tests {
         write(&source, "repo");
         write(&dest, "system");
 
-        assert_eq!(detach(&source, &dest).unwrap(), Detached::Untouched);
+        assert_eq!(
+            detach(&source, &dest, &mut None).unwrap(),
+            Detached::Untouched
+        );
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "system");
     }
 
@@ -346,7 +398,10 @@ mod tests {
         write(&other, "other");
         std::os::unix::fs::symlink(&other, &dest).unwrap();
 
-        assert_eq!(detach(&source, &dest).unwrap(), Detached::Untouched);
+        assert_eq!(
+            detach(&source, &dest, &mut None).unwrap(),
+            Detached::Untouched
+        );
         assert!(
             std::fs::symlink_metadata(&dest)
                 .unwrap()
@@ -363,7 +418,10 @@ mod tests {
         write(&dest, "system");
         std::os::unix::fs::symlink(&dest, &source).unwrap();
 
-        assert_eq!(detach(&source, &dest).unwrap(), Detached::Untouched);
+        assert_eq!(
+            detach(&source, &dest, &mut None).unwrap(),
+            Detached::Untouched
+        );
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "system");
     }
 

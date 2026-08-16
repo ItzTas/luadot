@@ -56,7 +56,12 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         dry_run: args.dry_run,
         backup: match args.dry_run || !config.backup() {
             true => None,
-            false => Some(Backup::open("alt", &home)?),
+            false => Some(Backup::open(
+                "alt",
+                &home,
+                config.backup_dir(),
+                config.backup_keep(),
+            )?),
         },
     };
 
@@ -79,7 +84,7 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         count(&outcomes, SyncOutcome::Skipped),
     ));
     if let Some(backup) = run.backup.as_ref() {
-        backup.report();
+        backup.finish()?;
     }
 
     Ok(())

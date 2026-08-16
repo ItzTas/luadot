@@ -1,4 +1,6 @@
 mod backup;
+mod backup_dir;
+mod backup_keep;
 mod constants;
 mod link;
 mod pkg_warn;

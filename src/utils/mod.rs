@@ -7,7 +7,7 @@ mod preview;
 mod prompt;
 mod repo;
 
-pub use backup::{Backup, backups_dir, copy_entry, now};
+pub use backup::{Backup, backups_root, copy_entry, now, taken};
 pub use classes::{ask, ask_missing};
 pub use editor::open;
 pub use paths::{config_dir, data_dir, expand, home_dir, relative, repo_path, system_path};

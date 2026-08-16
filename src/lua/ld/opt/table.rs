@@ -3,21 +3,25 @@ use mlua::{Lua, Table, Value};
 use super::super::constants::API;
 use super::super::parse::{external, lookup};
 use super::super::table::{Builder, build};
-use super::constants::{BACKUP, LINK, NAMESPACE, PKG_WARN, REPO_DIR};
-use super::{backup, link, pkg_warn, repo_dir};
+use super::constants::{BACKUP, BACKUP_DIR, BACKUP_KEEP, LINK, NAMESPACE, PKG_WARN, REPO_DIR};
+use super::{backup, backup_dir, backup_keep, link, pkg_warn, repo_dir};
 
 type Setter = fn(&Lua, Value) -> mlua::Result<()>;
 
-const SETTERS: [(&str, Setter); 4] = [
+const SETTERS: [(&str, Setter); 6] = [
     (BACKUP, backup::set),
+    (BACKUP_DIR, backup_dir::set),
+    (BACKUP_KEEP, backup_keep::set),
     (LINK, link::set),
     (PKG_WARN, pkg_warn::set),
     (REPO_DIR, repo_dir::set),
 ];
 
 pub fn table(lua: &Lua) -> mlua::Result<Table> {
-    let functions: [(&str, Builder); 4] = [
+    let functions: [(&str, Builder); 6] = [
         (BACKUP, backup::function),
+        (BACKUP_DIR, backup_dir::function),
+        (BACKUP_KEEP, backup_keep::function),
         (LINK, link::function),
         (PKG_WARN, pkg_warn::function),
         (REPO_DIR, repo_dir::function),
@@ -52,13 +56,16 @@ mod tests {
 
     #[test]
     fn a_table_call_sets_every_option_it_carries() {
-        let config =
-            from_source(r#"ld.opt({ link = "symbolic", pkg_warn = false, backup = false })"#)
-                .unwrap();
+        let config = from_source(
+            r#"ld.opt({ link = "symbolic", pkg_warn = false, backup = false, backup_dir = "~/saved", backup_keep = 3 })"#,
+        )
+        .unwrap();
 
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
         assert!(!config.pkg_warn());
         assert!(!config.backup());
+        assert_eq!(config.backup_dir(), Some(Path::new("~/saved")));
+        assert_eq!(config.backup_keep(), Some(3));
     }
 
     #[test]
@@ -74,6 +81,8 @@ mod tests {
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
         assert!(config.pkg_warn());
         assert!(config.backup());
+        assert_eq!(config.backup_dir(), None);
+        assert_eq!(config.backup_keep(), None);
     }
 
     #[test]
@@ -84,7 +93,9 @@ mod tests {
         );
 
         assert!(err.contains("unknown option `lnik`"));
-        assert!(err.contains("available: backup, link, pkg_warn, repo_dir"));
+        assert!(
+            err.contains("available: backup, backup_dir, backup_keep, link, pkg_warn, repo_dir")
+        );
     }
 
     #[test]

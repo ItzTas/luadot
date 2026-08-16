@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -11,6 +11,17 @@ fn luadot(home: &Path) -> Command {
 
 fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap()
+}
+
+fn only_dir(root: &Path) -> PathBuf {
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+
+    assert_eq!(dirs.len(), 1);
+
+    dirs.pop().unwrap()
 }
 
 fn write(path: &Path, contents: &str) {
@@ -169,6 +180,59 @@ fn add_then_apply_manage_a_file_end_to_end() {
 }
 
 #[test]
+fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_it() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&home.join(".bashrc"), "handwritten\n");
+    write(
+        &home.join(".config/luadot/ld.lua"),
+        r#"ld.opt.backup_dir("~/saved")"#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+
+    let saved = only_dir(&home.join("saved"));
+    assert_eq!(read(&saved.join(".bashrc")), "handwritten\n");
+    assert_eq!(read(&home.join(".bashrc")), "managed\n");
+    assert!(!home.join(".local/share/luadot/backups").exists());
+
+    luadot(&home)
+        .args(["restore", "--list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 file(s)"));
+
+    luadot(&home).args(["restore", "--yes"]).assert().success();
+    assert_eq!(read(&home.join(".bashrc")), "handwritten\n");
+}
+
+#[test]
+fn two_runs_in_a_row_keep_their_own_backup() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&home.join(".bashrc"), "first\n");
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+    std::fs::remove_file(home.join(".bashrc")).unwrap();
+    write(&home.join(".bashrc"), "second\n");
+    luadot(&home).arg("apply").assert().success();
+
+    let mut saved: Vec<String> = std::fs::read_dir(home.join(".local/share/luadot/backups"))
+        .unwrap()
+        .map(|entry| read(&entry.unwrap().path().join(".bashrc")))
+        .collect();
+    saved.sort();
+
+    assert_eq!(saved, ["first\n", "second\n"]);
+}
+
+#[test]
 fn the_configuration_points_luadot_at_its_own_repository() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -194,6 +258,53 @@ fn clone_takes_the_directory_to_clone_into() {
         .assert()
         .success()
         .stdout(predicate::str::contains("[DIR]"));
+}
+
+#[test]
+fn a_limit_drops_the_oldest_backups() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&home.join(".config/luadot/ld.lua"), "ld.opt.backup_keep(2)");
+    write_state(&home, &repo);
+
+    for contents in ["first\n", "second\n", "third\n"] {
+        let _ = std::fs::remove_file(home.join(".bashrc"));
+        write(&home.join(".bashrc"), contents);
+        luadot(&home).arg("apply").assert().success();
+    }
+
+    let mut saved: Vec<String> = std::fs::read_dir(home.join(".local/share/luadot/backups"))
+        .unwrap()
+        .map(|entry| read(&entry.unwrap().path().join(".bashrc")))
+        .collect();
+    saved.sort();
+
+    assert_eq!(saved, ["second\n", "third\n"]);
+}
+
+#[test]
+fn rm_backs_up_what_it_takes_out_of_the_repository() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = home.join(".local/share/luadot/repo");
+    write(&repo.join(".vimrc"), "set number\n");
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args(["rm", "--yes", home.join(".vimrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    assert!(!repo.join(".vimrc").exists());
+    assert_eq!(read(&home.join(".vimrc")), "set number\n");
+
+    let saved = only_dir(&home.join(".local/share/luadot/backups"));
+    assert_eq!(
+        read(&saved.join(".local/share/luadot/repo/.vimrc")),
+        "set number\n"
+    );
 }
 
 #[test]
