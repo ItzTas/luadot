@@ -47,12 +47,7 @@ pub fn sync_file(
     Ok(outcome)
 }
 
-fn sync(
-    policy: ConflictPolicy,
-    mode: LinkMode,
-    source: &Path,
-    dest: &Path,
-) -> Result<SyncOutcome> {
+fn sync(policy: ConflictPolicy, mode: LinkMode, source: &Path, dest: &Path) -> Result<SyncOutcome> {
     if !source.is_file() {
         bail!("files: {} is not a file", source.display());
     }

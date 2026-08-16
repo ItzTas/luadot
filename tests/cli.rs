@@ -266,7 +266,10 @@ fn a_limit_drops_the_oldest_backups() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     write(&repo.join(".bashrc"), "managed\n");
-    write(&home.join(".config/luadot/config.lua"), "ld.opt.backup_keep(2)");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        "ld.opt.backup_keep(2)",
+    );
     write_state(&home, &repo);
 
     for contents in ["first\n", "second\n", "third\n"] {
