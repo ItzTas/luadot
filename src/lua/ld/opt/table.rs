@@ -3,19 +3,12 @@ use mlua::{Lua, Table, Value};
 use super::super::constants::API;
 use super::super::parse::{external, lookup};
 use super::super::table::{Builder, build};
-use super::constants::{BACKUP, BACKUP_DIR, BACKUP_KEEP, LINK, NAMESPACE, PKG_WARN, REPO_DIR};
+use super::constants::{
+    BACKUP, BACKUP_DIR, BACKUP_KEEP, LINK, NAMESPACE, PKG_WARN, REPO_DIR, SETTERS,
+};
 use super::{backup, backup_dir, backup_keep, link, pkg_warn, repo_dir};
 
-type Setter = fn(&Lua, Value) -> mlua::Result<()>;
-
-const SETTERS: [(&str, Setter); 6] = [
-    (BACKUP, backup::set),
-    (BACKUP_DIR, backup_dir::set),
-    (BACKUP_KEEP, backup_keep::set),
-    (LINK, link::set),
-    (PKG_WARN, pkg_warn::set),
-    (REPO_DIR, repo_dir::set),
-];
+pub type Setter = fn(&Lua, Value) -> mlua::Result<()>;
 
 pub fn table(lua: &Lua) -> mlua::Result<Table> {
     let functions: [(&str, Builder); 6] = [
