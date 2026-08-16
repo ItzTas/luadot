@@ -115,8 +115,10 @@ Two constraints the grammar imposes on the EJS set:
 
 - `<%_` opens a statement tag only — there is no `<%_=`. That is also the only
   place it is wanted: `<%_ end -%>`.
-- A comment closes on `%>` alone; `<%# ... -%>` does not parse. Nothing is
-  lost, a comment emits nothing either way.
+- A comment closes on `%>` alone; `<%# ... -%>` does not parse. The comment
+  itself emits nothing, but the newline after it survives, so one sitting on a
+  line of its own leaves a blank line behind. `<% --[[ ... ]] -%>` is the form
+  that takes its line with it.
 
 ## Naming
 

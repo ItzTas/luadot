@@ -744,8 +744,8 @@ path+=(<%= dir %>)
 | `<%= expr %>` | emits `tostring(expr)`, raw |
 | `<%- expr %>` | an alias of `<%=` |
 | `<%# ... %>` | a comment, reaches no output |
-| `... -%>` | trims the newline after the tag |
-| `... _%>` | removes all whitespace after the tag, newlines included |
+| `... -%>` | trims the newline after the tag, except on `<%#` |
+| `... _%>` | removes all whitespace after the tag, newlines included, except on `<%#` |
 | `<%%` | a literal `<%` |
 | `%%>` | a literal `%>`, inside a tag |
 
@@ -753,9 +753,12 @@ The tags are EJS's, with EJS's meanings. There is one output tag and it is
 always raw — a dotfile is not HTML, so nothing is escaped. Beware the
 slurping pair: `<%_` and `_%>` eat newlines too, welding the previous or the
 next line onto the tag's own, so an unindented `<%` closed by `-%>` is the
-everyday recipe. Errors report the template's own line, an output tag holding
-`nil` is an error rather than the word `nil` in the file, and a `%>` inside a
-Lua string, comment or long bracket does not close the tag.
+everyday recipe. A comment closes on `%>` alone, so the newline after it
+survives and a `<%# ... %>` on a line of its own leaves a blank line behind;
+`<% --[[ ... ]] -%>` is the comment that takes its line with it. Errors report
+the template's own line, an output tag holding `nil` is an error rather than
+the word `nil` in the file, and a `%>` inside a Lua string, comment or long
+bracket does not close the tag.
 
 A template reaches the whole interface, `ld.alt.expand` included, so a partial
 is an ordinary call — each one keeps its own variables and emits into its own
