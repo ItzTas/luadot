@@ -220,9 +220,9 @@ instead of hiding the call:
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
 | `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.repo_dir`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
-| `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand` | `luadot.lua`, which produces a template's files | does nothing and yields `nil`, warns |
+| `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
-| `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
+| `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
 
 A call away from where it has an effect is not an error; it runs, does nothing
 and says so:
@@ -560,6 +560,10 @@ ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 | `ld.alt.file(name)` | a path | A real file, linked to the destination like a managed one. |
 | `ld.alt.render(name, vars)` | a path and a table | Runs that Lua file with `vars` in scope and returns the string it returns. |
 | `ld.alt.expand(name, vars)` | a path and a table | Renders that embedded template with `vars` in scope and returns the string it emits. |
+| `ld.alt.read(name)` | a path | What that file holds, as a string, never run. |
+| `ld.alt.exists(name)` | a path | Whether that file is there. |
+| `ld.alt.glob(pattern)` | a pattern | The names of the files it matches, sorted, named the way `ld.alt.read` takes them. |
+| `ld.alt.json(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. |
 | `ld.sys` | — | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.cmd(line)` | a command line | Runs it and returns what it printed; also `ld.cmd.<program>(args...)`. |
@@ -603,6 +607,46 @@ ld.alt.out({ content = ld.alt.file(ld.path.repo .. "/shared/aliases.zsh") })
 The template's own `lua/` directory is requirable, exactly like the
 configuration's.
 
+### Building a file out of fragments
+
+`ld.alt.glob` lists what the template holds and `ld.alt.read` hands back the
+bytes, so one file can be assembled from fragments that are each versioned on
+their own:
+
+```lua
+-- .zshrc.luadot/luadot.lua
+local parts = {}
+for _, name in ipairs(ld.alt.glob("conf.d/*.zsh")) do
+  parts[#parts + 1] = ld.alt.read(name)
+end
+
+return table.concat(parts, "\n")
+```
+
+`*` stays inside one path segment and `**` crosses them, directories are never
+listed, and the names come back sorted — `10-env.zsh` before `20-path.zsh` — so
+the result never depends on the order the filesystem hands the directory over.
+`ld.alt.exists` answers for a single name, which is what a fallback needs:
+
+```lua
+local name = ld.alt.exists("laptop.zsh") and "laptop.zsh" or "default.zsh"
+return ld.alt.file(name)
+```
+
+A generated file that is JSON is built by `ld.alt.json` instead of by
+`string.format` and hope:
+
+```lua
+return ld.alt.json({
+  editor = ld.class.get("editor") or "nvim",
+  gpu = ld.sys.gpu.vendor,
+})
+```
+
+It takes a table of names or a list, never both in the same table, and its keys
+come out sorted, so the file changes only when the data does. It is the one
+`ld.alt` call that needs no template, so a standalone `.luadot` file has it too.
+
 ### Embedded templates
 
 `ld.alt.expand` renders an ERB-style embedded template: text emitted as it
@@ -645,7 +689,7 @@ directory:
 | several outputs | there is no `ld.alt.out` to call |
 | `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `config.lua` still applies |
 | `require` of a `lua/` directory | there is no directory |
-| `ld.alt.*` | inert, warned |
+| `ld.alt.*` | inert, warned; `ld.alt.json` is the exception, it needs no directory |
 
 `ld.path.dir` is `nil` — there is no template directory; `ld.path.repo` still
 reaches a file shared elsewhere in the repository.

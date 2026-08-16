@@ -47,7 +47,7 @@ mod tests {
 
     const EVERY_CALL: &str = r#"
         assert(type(ld.rules) == "function", "rules is missing")
-        for _, name in ipairs({ "out", "file", "render" }) do
+        for _, name in ipairs({ "out", "file", "render", "expand", "read", "exists", "glob", "json" }) do
           assert(type(ld.alt[name]) == "function", "alt." .. name .. " is missing")
         end
         for _, name in ipairs({ "ignore", "conflict" }) do
@@ -171,6 +171,11 @@ mod tests {
             ld.opt.pkg_warn(false)
             assert(ld.alt.file("laptop.zsh") == nil, "alt.file produced a handle")
             assert(ld.alt.render("init.tmpl.lua") == nil, "alt.render produced a string")
+            assert(ld.alt.expand("init.tmpl.lua") == nil, "alt.expand produced a string")
+            assert(ld.alt.read("laptop.zsh") == nil, "alt.read produced a string")
+            assert(ld.alt.exists("laptop.zsh") == false, "alt.exists answered for a template")
+            assert(ld.alt.glob("*.zsh") == nil, "alt.glob produced a list")
+            assert(ld.alt.json({ n = 1 }) == '{\n  "n": 1\n}', "alt.json needs no template")
             ld.alt.out({ content = "generated\n" })
             "#,
         );
