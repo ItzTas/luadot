@@ -735,6 +735,15 @@ everyday recipe. Errors report the template's own line, an output tag holding
 `nil` is an error rather than the word `nil` in the file, and a `%>` inside a
 Lua string, comment or long bracket does not close the tag.
 
+A template reaches the whole interface, `ld.alt.expand` included, so a partial
+is an ordinary call — each one keeps its own variables and emits into its own
+buffer:
+
+```zsh
+<%= ld.alt.expand("header.tmpl.zsh", { title = "zsh" }) -%>
+export EDITOR=<%= editor %>
+```
+
 ### The standalone form
 
 A `.luadot` **file** is an embedded template that needs no directory: `alt`

@@ -279,7 +279,7 @@ What the standalone form does not get, and why the tradeoff holds:
 | Missing | Reason |
 | --- | --- |
 | several outputs | there is no `ld.alt.out` to call |
-| `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `ld.lua` still applies |
+| `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `config.lua` still applies |
 | `require` of a `lua/` directory | there is no directory |
 | `ld.alt.*` | inert, warned |
 
@@ -420,7 +420,7 @@ registration; writing the file by hand is also viable and adds no dependency.
 Worth it only for what nothing else can do:
 
 - hover showing this machine's value: `ld.sys.host.name` over `thinkpad`;
-- completion of the classes the repository's `ld.lua` declares;
+- completion of the classes the repository's `config.lua` declares;
 - diagnostics for an unterminated tag and for Lua errors inside one — the
   position mapping is already built by the compiler above;
 - go-to-definition on `ld.alt.file("laptop.zsh")`;
@@ -459,10 +459,13 @@ and the tests, benchmarks and docs are not features.
 
 ## Open questions
 
-- Whether `ld.alt.expand` should be callable from inside an embedded template,
-  making partials possible. It would need the template directory in scope,
-  which the standalone form does not have, so it would work in one form and not
-  the other. Left out until someone asks for it.
+- ~~Whether `ld.alt.expand` should be callable from inside an embedded
+  template, making partials possible.~~ Settled: it is, in the directory form.
+  Nothing had to be added — the chunk runs with `ld` reachable through
+  `__index`, the template stays in the app data, and every `run` builds its own
+  environment, so `__ld_emit`/`__ld_write` are per call rather than global and
+  a nested expansion cannot write into its caller's buffer. The standalone form
+  keeps it inert, since a partial needs a directory to resolve against.
 - Whether a line-bounded trim is worth having beside the greedy pair. EJS's
   `<%_`/`_%>` cross newlines, which is what a `.zshrc` cannot afford, and the
   everyday recipe avoids them entirely — but the day someone wants an indented
