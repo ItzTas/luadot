@@ -718,19 +718,22 @@ path+=(<%= dir %>)
 | Tag | Effect |
 | --- | --- |
 | `<% ... %>` | Lua statements, emits nothing |
-| `<%_ ... %>` | the same, and trims the indentation before the tag |
+| `<%_ ... %>` | the same, and strips all whitespace before the tag, newlines included |
 | `<%= expr %>` | emits `tostring(expr)`, raw |
 | `<%- expr %>` | an alias of `<%=` |
 | `<%# ... %>` | a comment, reaches no output |
 | `... -%>` | trims the newline after the tag |
-| `... _%>` | trims the spaces and the newline after the tag |
+| `... _%>` | removes all whitespace after the tag, newlines included |
 | `<%%` | a literal `<%` |
 | `%%>` | a literal `%>`, inside a tag |
 
-There is one output tag and it is always raw — a dotfile is not HTML, so
-nothing is escaped. Every trim is bounded by its own line and can never join
-two lines. Errors report the template's own line, and a `%>` inside a Lua
-string, comment or long bracket does not close the tag.
+The tags are EJS's, with EJS's meanings. There is one output tag and it is
+always raw — a dotfile is not HTML, so nothing is escaped. Beware the
+slurping pair: `<%_` and `_%>` eat newlines too, welding the previous or the
+next line onto the tag's own, so an unindented `<%` closed by `-%>` is the
+everyday recipe. Errors report the template's own line, an output tag holding
+`nil` is an error rather than the word `nil` in the file, and a `%>` inside a
+Lua string, comment or long bracket does not close the tag.
 
 ### The standalone form
 

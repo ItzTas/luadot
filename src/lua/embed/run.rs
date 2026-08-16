@@ -33,11 +33,20 @@ fn emit(lua: &Lua, literals: Vec<String>, buffer: Arc<Mutex<String>>) -> mlua::R
 }
 
 fn write(lua: &Lua, buffer: Arc<Mutex<String>>) -> mlua::Result<Function> {
-    lua.create_function(move |_, value: Value| {
+    lua.create_function(move |lua, value: Value| {
+        if value.is_nil() {
+            return Err(refused_nil(lua));
+        }
         let text = value.to_string()?;
         lock(&buffer)?.push_str(&text);
         Ok(())
     })
+}
+
+fn refused_nil(lua: &Lua) -> mlua::Error {
+    let line = lua.inspect_stack(1, |debug| debug.current_line()).flatten();
+    let place = line.map_or_else(String::new, |line| format!(" on line {line}"));
+    mlua::Error::external(format!("the expression{place} was nil"))
 }
 
 fn lock(buffer: &Mutex<String>) -> mlua::Result<MutexGuard<'_, String>> {
@@ -98,5 +107,27 @@ mod tests {
 
         assert!(err.contains("boom"));
         assert!(err.contains(":3:"));
+    }
+
+    #[test]
+    fn a_nil_expression_is_refused() {
+        let err = render("line\n<%= nil %>").unwrap_err().to_string();
+
+        assert!(err.contains("was nil"));
+        assert!(err.contains("line 2"));
+    }
+
+    #[test]
+    fn an_undefined_name_is_refused() {
+        let err = render("export EDITOR=<%= edtior %>")
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("was nil"));
+    }
+
+    #[test]
+    fn a_false_expression_is_written() {
+        assert_eq!(render("<%= false %>").unwrap(), "false");
     }
 }
