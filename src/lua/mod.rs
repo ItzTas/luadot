@@ -10,7 +10,7 @@ mod setup;
 mod template;
 
 pub use bootstrap::{bootstrap_path, run_bootstrap};
-pub use config::{Class, Config, Rule, config_path, load_config};
+pub use config::{Class, Config, Matcher, Rule, config_path, load_config};
 #[cfg(test)]
 pub use config::{from_classes, from_source};
 pub use exec::run_exec;

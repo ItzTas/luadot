@@ -168,30 +168,56 @@ interface; without the file, the defaults apply.
 ```lua
 ld.opt.link("hard")
 
-ld.git.conflict("overwrite")
-ld.git.ignore({ "*.swp", ".cache/**" })
+ld.opt.conflict("overwrite")
 
 ld.rules({
   { match = ".ssh/**", link = "symbolic", conflict = "skip" },
   { match = ".config/nvim/**", conflict = "error" },
   { match = ".config/mako/**", on_change = "makoctl reload" },
+  { match = "*.swp", ignore = true },
+  { match = ".cache/**", ignore = true },
 })
 ```
 
 A single rule needs no list around it — `ld.rules({ match = ".ssh/**", link =
 "symbolic" })` is the same call carrying one entry.
 
-A rule carries three keys, all optional next to `match`:
+A rule names the files it covers through `match`, a glob, or through `regex`, a
+regular expression; a rule carries one of the two, never both.
+
+```lua
+ld.rules({
+  { regex = "^\\.config/(nvim|zsh)/", link = "symbolic" },
+  { regex = "\\.sw[po]$", ignore = true },
+})
+```
+
+The expression is [Rust's regex syntax][regex], matched against the path as
+written, with `/` as the separator and no anchoring of its own: `nvim` covers
+every path carrying that word, `^\.ssh/` only what sits under `.ssh/`. Lua
+escapes a backslash as `\\`, so a literal dot is `"\\."` inside the script.
+Neither backreferences nor lookaround exist there, which is what keeps every
+match linear in the length of the path.
+
+[regex]: https://docs.rs/regex/latest/regex/#syntax
+
+A rule carries four more keys, all optional next to `match` or `regex`:
 
 | Key | Values | Effect |
 | --- | --- | --- |
 | `link` | `"hard"`, `"symbolic"` | How the matching files are placed. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the system copy differs. |
 | `on_change` | a command line | Runs after `apply` or `alt` created or replaced one of those files. |
+| `ignore` | `true`, `false` | Whether the matching files are left unmanaged. |
+
+Either syntax also matches a directory on behalf of everything under it, so
+`{ match = ".ssh" }` and `{ regex = "^\\.ssh$" }` both cover `.ssh/keys/id_ed25519`.
 
 The last matching rule wins, key by key, so a general rule is narrowed by a
-later one and never merged with it. `on_change` runs once per command line and
-per run, at the end: twenty files under `.config/mako/` changing reload mako
+later one and never merged with it — `{ match = ".cache/**", ignore = true }`
+followed by `{ match = ".cache/keep/**", ignore = false }` ignores everything
+under `.cache/` but that one directory. `on_change` runs once per command line
+and per run, at the end: twenty files under `.config/mako/` changing reload mako
 once, not twenty times. A failing command stops the run after the files are in
 place, and `--dry-run` prints the command instead of running it.
 
@@ -201,12 +227,11 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.opt.backup(enabled)` | `true`, `false` | Whether a file is copied aside before luadot writes over it. Defaults to `true`. |
 | `ld.opt.backup_dir(path)` | a directory | Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`. |
 | `ld.opt.backup_keep(count)` | a number of one or more | How many backups to keep; the oldest ones are dropped once there are more. Defaults to keeping every one of them. |
+| `ld.opt.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
-| `ld.git.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
-| `ld.git.ignore(patterns)` | a pattern or a list of them | Marks files as never managed. |
-| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a pattern matches, and names an `on_change` command for them. |
+| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, and marks them as never managed. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |
@@ -237,7 +262,7 @@ instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.repo_dir`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
 | `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
@@ -394,7 +419,7 @@ configuration can answer differently depending on what was asked:
 
 ```lua
 if ld.argv.name == "apply" then
-  ld.git.conflict("error")
+  ld.opt.conflict("error")
 end
 ```
 
@@ -461,9 +486,6 @@ stops instead of running git somewhere else:
 luadot: `ld.git`: no repository set; run `luadot clone <url>` first
 ```
 
-`ld.git.ignore` and `ld.git.conflict` stay what they are — the namespace carries
-them and answers a call of its own.
-
 ### Slow calls
 
 `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup` and `ld.setup.all` reach other
@@ -492,10 +514,10 @@ once. When the placement is deliberate, `ld.opt.pkg_warn(false)` turns every
 warning off, in any script; set it before the call it should cover, since the
 warning is emitted as the call runs.
 
-`ld.git.ignore` and `ld.rules` accumulate, so calling them several times adds to
-what came before. A rule needs a `match` pattern and sets `link`, `conflict`, or
-both. When several rules match a file, the last one wins, and whatever it leaves
-out falls back to the `ld.opt.link` and `ld.git.conflict` defaults.
+`ld.rules` accumulates, so calling it several times adds to what came before. A
+rule needs a `match` pattern and sets `link`, `conflict`, `on_change`, `ignore`,
+or any mix of them. When several rules match a file, the last one wins, and whatever it leaves
+out falls back to the `ld.opt.link` and `ld.opt.conflict` defaults.
 
 ### Splitting the configuration
 
@@ -512,7 +534,7 @@ under it and the configuration can be split like a Neovim one:
 ```
 
 ```lua
-ld.git.ignore(require("patterns"))
+ld.rules(require("patterns"))
 require("editors")
 ```
 

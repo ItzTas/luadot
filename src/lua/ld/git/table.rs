@@ -1,15 +1,10 @@
 use mlua::{Lua, Table};
 
 use super::super::path::Paths;
-use super::super::table::{Builder, build};
-use super::constants::{CONFLICT, IGNORE};
-use super::{conflict, ignore, run};
+use super::run;
 
 pub fn table(lua: &Lua, paths: &Paths) -> mlua::Result<Table> {
-    let functions: [(&str, Builder); 2] =
-        [(IGNORE, ignore::function), (CONFLICT, conflict::function)];
-
-    let git = build(lua, &functions)?;
+    let git = lua.create_table()?;
 
     let meta = lua.create_table()?;
     meta.set("__call", run::function(lua, paths)?)?;
@@ -27,7 +22,7 @@ mod tests {
     use crate::lua::runtime::runtime;
 
     #[test]
-    fn the_namespace_is_callable_and_carries_its_functions() {
+    fn the_namespace_is_callable_and_carries_no_function() {
         let lua = runtime().unwrap();
         let paths = Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot"));
         lua.globals()
@@ -38,8 +33,8 @@ mod tests {
             r#"
             local meta = getmetatable(git)
             assert(type(meta.__call) == "function", "git is not callable")
-            assert(type(git.ignore) == "function", "git.ignore is missing")
-            assert(type(git.conflict) == "function", "git.conflict is missing")
+            assert(git.conflict == nil, "git.conflict outlived the move to ld.opt")
+            assert(git.ignore == nil, "git.ignore outlived the move to ld.rules")
             "#,
         )
         .exec()

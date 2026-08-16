@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use glob::Pattern;
 use luadot::files::{ConflictPolicy, LinkMode};
-use luadot::lua::{Config, Rule};
+use luadot::lua::{Config, Matcher, Rule};
 use luadot::utils;
 use support::{PROBE_COUNT, RULE_COUNTS, managed_name};
 
@@ -97,16 +97,17 @@ fn configured(count: usize) -> Config {
     let mut config = Config::default();
     config.set_link(LinkMode::Hard);
     config.set_conflict(ConflictPolicy::Overwrite);
-    config.add_ignore(ignored(count));
+    config.add_rules(ignored(count));
     config.add_rules(rules(count));
 
     config
 }
 
-fn ignored(count: usize) -> Vec<Pattern> {
+fn ignored(count: usize) -> Vec<Rule> {
     (0..count)
         .map(|index| pattern(&format!(".cache/app{index:03}/**")))
         .chain([pattern("*.swp"), pattern(".local/state/**")])
+        .map(|pattern| Rule::new(pattern, None, None).with_ignore(Some(true)))
         .collect()
 }
 
@@ -122,8 +123,8 @@ fn rules(count: usize) -> Vec<Rule> {
         .collect()
 }
 
-fn pattern(raw: &str) -> Pattern {
-    Pattern::new(raw).expect("a valid pattern")
+fn pattern(raw: &str) -> Matcher {
+    Matcher::Glob(Pattern::new(raw).expect("a valid pattern"))
 }
 
 fn probes() -> Vec<PathBuf> {

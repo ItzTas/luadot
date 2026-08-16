@@ -152,7 +152,7 @@ mod tests {
         std::fs::write(&kept, "a").unwrap();
         std::fs::write(&ignored, "b").unwrap();
 
-        let config = lua::from_source(r#"ld.git.ignore({ "*.swp" })"#).unwrap();
+        let config = lua::from_source(r#"ld.rules({ match = "*.swp", ignore = true })"#).unwrap();
         let pairs = plan(&home, &repo, &[arg(&kept), arg(&ignored)], &config).unwrap();
 
         assert_eq!(pairs, vec![(kept, repo.join(".vimrc"))]);

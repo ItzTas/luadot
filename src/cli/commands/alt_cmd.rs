@@ -337,7 +337,7 @@ mod tests {
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
         write(&home.join(".zshrc"), "handwritten\n");
 
-        let config = lua::from_source(r#"ld.git.conflict("skip")"#).unwrap();
+        let config = lua::from_source(r#"ld.opt.conflict("skip")"#).unwrap();
         let outcomes = resolve(
             &config,
             &home,
@@ -509,7 +509,7 @@ mod tests {
         write(&file, "generated\n");
         write(&home.join(".zprofile"), "handwritten\n");
 
-        let config = lua::from_source(r#"ld.git.conflict("skip")"#).unwrap();
+        let config = lua::from_source(r#"ld.opt.conflict("skip")"#).unwrap();
         let outcomes = resolve(
             &config,
             &home,

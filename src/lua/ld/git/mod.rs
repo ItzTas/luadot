@@ -1,6 +1,4 @@
-mod conflict;
 mod constants;
-mod ignore;
 mod run;
 mod table;
 

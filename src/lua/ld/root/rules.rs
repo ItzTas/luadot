@@ -1,7 +1,7 @@
 use mlua::{Function, Lua, Table};
 
 use super::super::constants::{API, CONFLICT_POLICIES, LINK_MODES};
-use super::super::parse::{external, lookup, pattern};
+use super::super::parse::{external, lookup, matcher};
 use super::super::surface::{self, Surface};
 use super::constants::RULES;
 use crate::lua::{Config, Rule};
@@ -41,21 +41,22 @@ fn rules(list: &Table) -> mlua::Result<Vec<Rule>> {
 }
 
 fn rule(entry: &Table) -> mlua::Result<Rule> {
-    let raw: Option<String> = entry.get("match")?;
-    let raw = raw.ok_or_else(|| external("a rule needs a `match` pattern"))?;
+    let pattern = matcher(entry)?;
     let link: Option<String> = entry.get("link")?;
     let conflict: Option<String> = entry.get("conflict")?;
     let on_change: Option<String> = entry.get("on_change")?;
+    let ignore: Option<bool> = entry.get("ignore")?;
 
     Ok(Rule::new(
-        pattern(&raw)?,
+        pattern,
         link.map(|name| lookup(&LINK_MODES, &name, "link mode"))
             .transpose()?,
         conflict
             .map(|name| lookup(&CONFLICT_POLICIES, &name, "conflict policy"))
             .transpose()?,
     )
-    .with_on_change(on_change))
+    .with_on_change(on_change)
+    .with_ignore(ignore))
 }
 
 #[cfg(test)]
@@ -128,7 +129,7 @@ mod tests {
     fn a_rule_only_overrides_the_fields_it_sets() {
         let config = configure(
             r#"
-            ld.git.conflict("skip")
+            ld.opt.conflict("skip")
             ld.rules({ { match = ".ssh/**", link = "symbolic" } })
             "#,
         );
@@ -202,10 +203,174 @@ mod tests {
     }
 
     #[test]
+    fn a_rule_marks_the_files_it_matches_as_never_managed() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = "*.swp", ignore = true },
+              { match = ".cache/**", ignore = true },
+            })
+            "#,
+        );
+
+        assert!(config.is_ignored(Path::new(".vimrc.swp")));
+        assert!(config.is_ignored(Path::new(".cache/nvim/log")));
+        assert!(!config.is_ignored(Path::new(".vimrc")));
+    }
+
+    #[test]
+    fn ignoring_a_directory_ignores_its_contents() {
+        let config = configure(r#"ld.rules({ match = ".config/nvim", ignore = true })"#);
+
+        assert!(config.is_ignored(Path::new(".config/nvim")));
+        assert!(config.is_ignored(Path::new(".config/nvim/lua/plugins.lua")));
+        assert!(!config.is_ignored(Path::new(".config/zsh/.zshrc")));
+    }
+
+    #[test]
+    fn a_single_star_does_not_cross_a_separator() {
+        let config = configure(r#"ld.rules({ match = ".config/*", ignore = true })"#);
+
+        assert!(config.is_ignored(Path::new(".config/mimeapps.list")));
+        assert!(config.is_ignored(Path::new(".config/nvim/init.lua")));
+        assert!(!config.is_ignored(Path::new(".bashrc")));
+    }
+
+    #[test]
+    fn a_later_rule_takes_a_file_back_from_the_ignored_ones() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = ".cache/**", ignore = true },
+              { match = ".cache/keep/**", ignore = false },
+            })
+            "#,
+        );
+
+        assert!(config.is_ignored(Path::new(".cache/nvim/log")));
+        assert!(!config.is_ignored(Path::new(".cache/keep/list")));
+    }
+
+    #[test]
+    fn an_ignored_file_still_carries_the_other_keys_of_its_rule() {
+        let config = configure(
+            r#"
+            ld.rules({ match = ".ssh/**", ignore = true, link = "symbolic" })
+            "#,
+        );
+        let key = Path::new(".ssh/config");
+
+        assert!(config.is_ignored(key));
+        assert_eq!(config.link_mode(key), LinkMode::Symbolic);
+    }
+
+    #[test]
+    fn a_regex_matches_what_a_glob_cannot_express() {
+        let config = configure(
+            r#"
+            ld.rules({ regex = "^\\.config/(nvim|zsh)/", link = "symbolic" })
+            "#,
+        );
+
+        assert_eq!(
+            config.link_mode(Path::new(".config/nvim/init.lua")),
+            LinkMode::Symbolic
+        );
+        assert_eq!(
+            config.link_mode(Path::new(".config/zsh/.zshrc")),
+            LinkMode::Symbolic
+        );
+        assert_eq!(
+            config.link_mode(Path::new(".config/mako/config")),
+            LinkMode::Hard
+        );
+    }
+
+    #[test]
+    fn a_regex_carries_every_key_a_glob_carries() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { regex = "\\.sw[po]$", ignore = true },
+              { regex = "^\\.config/mako/", on_change = "makoctl reload" },
+            })
+            "#,
+        );
+
+        assert!(config.is_ignored(Path::new(".vimrc.swp")));
+        assert!(!config.is_ignored(Path::new(".vimrc")));
+        assert_eq!(
+            config.on_change(Path::new(".config/mako/config")),
+            Some("makoctl reload")
+        );
+    }
+
+    #[test]
+    fn a_regex_rule_ranks_with_the_glob_ones() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = ".config/**", link = "symbolic" },
+              { regex = "^\\.config/nvim/", link = "hard" },
+            })
+            "#,
+        );
+
+        assert_eq!(
+            config.link_mode(Path::new(".config/nvim/init.lua")),
+            LinkMode::Hard
+        );
+        assert_eq!(
+            config.link_mode(Path::new(".config/zsh/.zshrc")),
+            LinkMode::Symbolic
+        );
+    }
+
+    #[test]
+    fn a_regex_covers_the_subtree_of_a_directory_it_matches() {
+        let config = configure(r#"ld.rules({ regex = "^\\.ssh$", link = "symbolic" })"#);
+
+        assert_eq!(
+            config.link_mode(Path::new(".ssh/keys/id_ed25519")),
+            LinkMode::Symbolic
+        );
+    }
+
+    #[test]
+    fn rejects_a_rule_carrying_both_syntaxes() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = ".ssh/**", regex = "^\\.ssh/" })"#).unwrap_err()
+        );
+
+        assert!(err.contains("takes `match` or `regex`, not both"));
+    }
+
+    #[test]
+    fn rejects_an_invalid_regex() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ regex = "^[", ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("invalid regex `^[`"));
+    }
+
+    #[test]
     fn an_empty_list_declares_nothing() {
         let config = configure("ld.rules({})");
 
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Hard);
+    }
+
+    #[test]
+    fn rejects_an_invalid_pattern() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = "[", ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("invalid pattern `[`"));
     }
 
     #[test]
@@ -215,7 +380,7 @@ mod tests {
             from_source(r#"ld.rules({ link = "hard" })"#).unwrap_err()
         );
 
-        assert!(err.contains("needs a `match` pattern"));
+        assert!(err.contains("needs a `match` or `regex` pattern"));
     }
 
     #[test]
@@ -225,6 +390,6 @@ mod tests {
             from_source(r#"ld.rules({ { link = "hard" } })"#).unwrap_err()
         );
 
-        assert!(err.contains("needs a `match` pattern"));
+        assert!(err.contains("needs a `match` or `regex` pattern"));
     }
 }
