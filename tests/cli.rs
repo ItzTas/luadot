@@ -187,3 +187,55 @@ fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
     assert!(kind.is_symlink());
     assert_eq!(std::fs::read_link(&placed).unwrap(), repo.join(".bashrc"));
 }
+
+#[test]
+fn alt_resolves_both_template_forms_and_the_other_commands_walk_past_them() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(
+        &repo.join(".zshrc.luadot/luadot.lua"),
+        r#"return ld.alt.expand("zshrc.tmpl.zsh", { editor = "nvim" })"#,
+    );
+    write(
+        &repo.join(".zshrc.luadot/zshrc.tmpl.zsh"),
+        "export EDITOR=<%= editor %>\n",
+    );
+    write(
+        &repo.join(".zprofile.luadot"),
+        "<% for _, dir in ipairs({ \"a\", \"b\" }) do -%>\npath+=(<%= dir %>)\n<% end -%>\n",
+    );
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .arg("alt")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "resolved 2 template(s) into 2 file(s)",
+        ));
+    assert_eq!(
+        std::fs::read_to_string(home.join(".zshrc")).unwrap(),
+        "export EDITOR=nvim\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(home.join(".zprofile")).unwrap(),
+        "path+=(a)\npath+=(b)\n"
+    );
+
+    std::fs::remove_file(home.join(".zshrc")).unwrap();
+    std::fs::remove_file(home.join(".zprofile")).unwrap();
+
+    luadot(&home)
+        .arg("apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nothing to apply"));
+    luadot(&home)
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nothing is managed"));
+    assert!(!home.join(".zshrc").exists());
+    assert!(!home.join(".zprofile").exists());
+}
