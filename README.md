@@ -172,7 +172,7 @@ instead of hiding the call:
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
 | `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `ld.lua`, which builds the configuration | does nothing, warns |
-| `ld.alt.out`, `ld.alt.file`, `ld.alt.render` | `luadot.lua`, which produces a template's files | does nothing and yields `nil`, warns |
+| `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand` | `luadot.lua`, which produces a template's files | does nothing and yields `nil`, warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
 
@@ -461,10 +461,12 @@ so `.config/nvim/init.lua` is the pattern for `~/.config/nvim/init.lua`.
 
 ## Templates
 
-A directory whose name ends in `.luadot` is a template. It holds a `luadot.lua`
-deciding what ends up on the system, next to the files that decision picks from
-or renders. `luadot alt` is what runs them: `apply` and `status` walk past a
-template directory instead of mirroring it.
+A path whose name ends in `.luadot` is a template, in one of two forms. A
+**directory** holds a `luadot.lua` deciding what ends up on the system, next to
+the files that decision picks from or renders. A plain **file** is an embedded
+template rendered directly to the mirrored path, with nothing else around it.
+`luadot alt` is what runs both: `apply` and `status` walk past them instead of
+mirroring them.
 
 ```
 ~/dotfiles/
@@ -475,12 +477,13 @@ template directory instead of mirroring it.
 ├── .config/nvim/init.lua.luadot/  -- produces ~/.config/nvim/init.lua
 │   ├── luadot.lua
 │   └── init.tmpl.lua
+├── .zprofile.luadot               -- a standalone template, produces ~/.zprofile
 └── .vimrc                         -- a plain managed file
 ```
 
-The destination is the directory's own path without the suffix, so the
-repository keeps mirroring your home directory. A `dest` of your own overrides
-it.
+The destination is the template's own path without the suffix, so the
+repository keeps mirroring your home directory. Inside a directory, a `dest`
+of your own overrides it.
 
 `luadot.lua` has the `ld` interface, and declares what it produces either by
 calling `ld.alt.out` or by returning the same table:
@@ -505,6 +508,7 @@ ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 | `ld.alt.out(file)` | a table, a string or an `ld.alt.file` | Declares a file the template produces; repeated calls accumulate. |
 | `ld.alt.file(name)` | a path | A real file, linked to the destination like a managed one. |
 | `ld.alt.render(name, vars)` | a path and a table | Runs that Lua file with `vars` in scope and returns the string it returns. |
+| `ld.alt.expand(name, vars)` | a path and a table | Renders that embedded template with `vars` in scope and returns the string it emits. |
 | `ld.sys` | — | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.cmd(line)` | a command line | Runs it and returns what it printed; also `ld.cmd.<program>(args...)`. |
@@ -536,7 +540,8 @@ variables of the call in scope and the standard library still reachable:
 return string.format("vim.g.mapleader = %q\n", leader)
 ```
 
-`ld.alt.file` and `ld.alt.render` take a relative path starting at the template
+`ld.alt.file`, `ld.alt.render` and `ld.alt.expand` take a relative path
+starting at the template
 directory, and an absolute path — or one climbing out with `..` — anywhere else,
 so several templates can share a file kept elsewhere in the repository:
 
@@ -546,6 +551,68 @@ ld.alt.out({ content = ld.alt.file(ld.path.repo .. "/shared/aliases.zsh") })
 
 The template's own `lua/` directory is requirable, exactly like the
 configuration's.
+
+### Embedded templates
+
+`ld.alt.expand` renders an ERB-style embedded template: text emitted as it
+stands, Lua between `<%` and `%>`:
+
+```zsh
+export EDITOR=<%= ld.class.get("editor") or "nvim" %>
+<% for _, dir in ipairs({ "~/bin", "~/.local/bin" }) do -%>
+path+=(<%= dir %>)
+<% end -%>
+```
+
+| Tag | Effect |
+| --- | --- |
+| `<% ... %>` | Lua statements, emits nothing |
+| `<%_ ... %>` | the same, and trims the indentation before the tag |
+| `<%= expr %>` | emits `tostring(expr)`, raw |
+| `<%- expr %>` | an alias of `<%=` |
+| `<%# ... %>` | a comment, reaches no output |
+| `... -%>` | trims the newline after the tag |
+| `... _%>` | trims the spaces and the newline after the tag |
+| `<%%` | a literal `<%` |
+| `%%>` | a literal `%>`, inside a tag |
+
+There is one output tag and it is always raw — a dotfile is not HTML, so
+nothing is escaped. Every trim is bounded by its own line and can never join
+two lines. Errors report the template's own line, and a `%>` inside a Lua
+string, comment or long bracket does not close the tag.
+
+### The standalone form
+
+A `.luadot` **file** is an embedded template that needs no directory: `alt`
+renders it and places the result at the mirrored path, following the
+configured `link` and `conflict` rules. `ld.sys`, `ld.class`, `ld.cmd` and the
+rest of the interface are all there; what it does not have is what needs the
+directory:
+
+| Missing | Reason |
+| --- | --- |
+| several outputs | there is no `ld.alt.out` to call |
+| `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `ld.lua` still applies |
+| `require` of a `lua/` directory | there is no directory |
+| `ld.alt.*` | inert, warned |
+
+`ld.path.dir` is `nil` — there is no template directory; `ld.path.repo` still
+reaches a file shared elsewhere in the repository.
+
+### Editor support
+
+An editor sees `.luadot`, not `.zsh`, so highlighting needs a nudge. Neovim
+already ships the grammar this format parses as —
+`tree-sitter-embedded-template`, the `eruby`/`ejs` one:
+
+```lua
+vim.filetype.add({ pattern = { [".*%.luadot"] = "luadot" } })
+vim.treesitter.language.register("embedded_template", "luadot")
+```
+
+plus an `injections.scm` sending `(code)` to `lua` and `(content)` to the
+language of the file being generated. A `<%# luadot: zsh %>` comment on the
+first line names that language; the renderer ignores it.
 
 ## Benchmarks
 

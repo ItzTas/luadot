@@ -8,10 +8,6 @@ item can change before it lands.
 Templates exist: a `*.luadot/` directory with a `luadot.lua` inside, resolved by
 `luadot alt`. What was left out of that first pass:
 
-- **A mini-syntax for `ld.alt.render`.** Today a rendered file is a Lua script
-  returning a string, which is fine for a handful of substitutions and awkward
-  for a long configuration file. A `{{ var }}` form would read better; whether
-  it earns its own parser is the open question.
 - **`status` for what a template produces.** Templates only run under `alt`, so
   `status` says nothing about the files they generate. Reporting them means
   either running the templates outside `alt` or recording the last resolution.
