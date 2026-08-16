@@ -19,6 +19,8 @@ pub const PREVIEW_LIMIT: usize = 10;
 
 pub const YES_FLAGS: &str = "-y or --yes";
 
+pub const TEMPLATE_SKELETON: &str = "return \"\"\n";
+
 pub const STATUS_LABELS: [(FileStatus, &str, Tone); 4] = [
     (FileStatus::Synced, "synced", Tone::Good),
     (FileStatus::Missing, "missing", Tone::Warning),

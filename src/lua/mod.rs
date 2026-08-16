@@ -15,6 +15,7 @@ pub use config::{Class, Config, Matcher, Rule, config_path, load_config};
 pub use config::{from_classes, from_source};
 pub use exec::run_exec;
 pub use setup::{list_setups, run_setups};
+pub use template::constants::TEMPLATE_FILE;
 #[cfg(test)]
 pub use template::from_source as from_template;
 pub use template::{Content, Handle, Output, Template, load_template, load_template_file};

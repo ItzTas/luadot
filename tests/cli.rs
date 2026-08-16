@@ -383,6 +383,51 @@ fn alt_resolves_both_template_forms_and_the_other_commands_walk_past_them() {
 }
 
 #[test]
+fn new_creates_both_template_forms_and_alt_resolves_them() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repo).unwrap();
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .arg("new")
+        .arg(home.join(".config/nvim/init.lua"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("created"));
+    luadot(&home)
+        .args(["new", "-f", "~/.zprofile.luadot"])
+        .assert()
+        .success();
+
+    assert_eq!(
+        read(&repo.join(".config/nvim/init.lua.luadot/luadot.lua")),
+        "return \"\"\n"
+    );
+    assert_eq!(read(&repo.join(".zprofile.luadot")), "");
+
+    luadot(&home)
+        .arg("new")
+        .arg(home.join(".zprofile"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("already exists"));
+
+    luadot(&home)
+        .arg("alt")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "resolved 2 template(s) into 2 file(s)",
+        ));
+
+    assert_eq!(read(&home.join(".config/nvim/init.lua")), "");
+    assert_eq!(read(&home.join(".zprofile")), "");
+}
+
+#[test]
 fn a_rule_runs_its_command_once_for_every_file_apply_touched() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

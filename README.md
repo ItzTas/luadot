@@ -12,6 +12,7 @@ A dotfiles manager configured in Lua.
 | `luadot status [path]` | Lists the managed files whose system copy is not in sync. |
 | `luadot apply [-n] [path]` | Puts the repository's files back on the system. |
 | `luadot alt [-n] [path]` | Runs the templates and puts the files they produce on the system. |
+| `luadot new [-f] <path>` | Creates an empty template in the repository, for the file that path names. |
 | `luadot restore [-l] [-y] [-n] [backup]` | Puts back the files an earlier `apply` or `alt` replaced. |
 | `luadot edit <path>` | Opens the repository's copy of a file in `$VISUAL`/`$EDITOR`. |
 | `luadot exec <source\|file.lua> [args]...` | Runs Lua with `ld` installed, from a string or a `.lua` file. |
@@ -575,6 +576,21 @@ mirroring them.
 The destination is the template's own path without the suffix, so the
 repository keeps mirroring your home directory. Inside a directory, a `dest`
 of your own overrides it.
+
+`luadot new` creates either form, empty. It takes the path of the file the
+template is for, the `.luadot` suffix being added when it is not already
+there, and mirrors it into the repository the way `add` does:
+
+```
+luadot new ~/.zshrc                  -- ~/dotfiles/.zshrc.luadot/luadot.lua
+luadot new .config/nvim/init.lua     -- ~/dotfiles/.config/nvim/init.lua.luadot/luadot.lua
+luadot new -f ~/.zprofile            -- ~/dotfiles/.zprofile.luadot, a standalone template
+```
+
+A relative path is resolved against the directory you are in, and has to land
+inside your home directory. The directory form gets a `luadot.lua` returning
+an empty string, the file form is an empty file: both resolve to an empty file
+until you write them, and neither replaces anything that is already there.
 
 `luadot.lua` has the `ld` interface, and declares what it produces either by
 calling `ld.alt.out` or by returning the same table:
