@@ -21,10 +21,10 @@ pub struct ApplyArgs {
 }
 
 pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
-    let repo = utils::require_repo("apply")?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("apply", config.repo_dir())?;
 
     let home = utils::home_dir()?;
-    let config = lua::load_config()?;
 
     let root = match args.path.as_deref() {
         Some(path) => utils::managed_path("apply", &home, &repo, path)?,
@@ -36,7 +36,7 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         .filter(|entry| !config.is_ignored(utils::relative(&repo, &entry.target())))
         .filter_map(|entry| match entry {
             Entry::File(file) => Some(file),
-            Entry::Template(_) => None,
+            Entry::Template(_) | Entry::Standalone(_) => None,
         })
         .collect();
     if files.is_empty() {
@@ -46,7 +46,12 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
 
     let mut backup = match args.dry_run || !config.backup() {
         true => None,
-        false => Some(Backup::open("apply", &home)?),
+        false => Some(Backup::open(
+            "apply",
+            &home,
+            config.backup_dir(),
+            config.backup_keep(),
+        )?),
     };
 
     let mut created = 0u32;
@@ -97,7 +102,7 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         files.len()
     ));
     if let Some(backup) = backup.as_ref() {
-        backup.report();
+        backup.finish()?;
     }
 
     Ok(())

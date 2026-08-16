@@ -15,10 +15,10 @@ pub struct AddArgs {
 }
 
 pub fn add_cmd(args: AddArgs) -> Result<()> {
-    let repo = utils::require_repo("add")?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("add", config.repo_dir())?;
 
     let home = utils::home_dir()?;
-    let config = lua::load_config()?;
 
     for (source, dest) in plan(&home, &repo, &args.paths, &config)? {
         let relative = utils::relative(&repo, &dest);

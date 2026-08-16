@@ -7,6 +7,7 @@ use super::super::parse::external;
 use super::super::surface::{self, Surface};
 use super::constants::{NAMESPACE, RENDER};
 use super::file::resolve;
+use crate::lua::runtime::environment;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, (name, vars): (String, Option<Table>)| {
@@ -47,22 +48,6 @@ fn render(lua: &Lua, path: &Path, vars: Option<Table>) -> mlua::Result<String> {
             other.type_name()
         ))),
     }
-}
-
-fn environment(lua: &Lua, vars: Option<Table>) -> mlua::Result<Table> {
-    let environment = lua.create_table()?;
-    if let Some(vars) = vars {
-        for pair in vars.pairs::<Value, Value>() {
-            let (name, value) = pair?;
-            environment.set(name, value)?;
-        }
-    }
-
-    let meta = lua.create_table()?;
-    meta.set("__index", lua.globals())?;
-    environment.set_metatable(Some(meta))?;
-
-    Ok(environment)
 }
 
 #[cfg(test)]

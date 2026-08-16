@@ -5,12 +5,12 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 
-use crate::utils;
+use crate::{lua, utils};
 
 const DEFAULT_SHELL: &str = "/bin/sh";
 
 pub fn cd_cmd() -> Result<()> {
-    let repo = utils::require_repo("cd")?;
+    let repo = utils::require_repo("cd", lua::load_config()?.repo_dir())?;
 
     let shell = resolve_shell(env::var_os("SHELL"));
     let status = build_command(&shell, &repo)

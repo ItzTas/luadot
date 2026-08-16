@@ -25,6 +25,17 @@ fn app_dir(root: &Path) -> PathBuf {
     root.join(APP_DIR)
 }
 
+pub fn expand(home: &Path, path: &Path) -> PathBuf {
+    if let Ok(rest) = path.strip_prefix("~") {
+        return home.join(rest);
+    }
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+
+    home.join(path)
+}
+
 pub fn repo_path(home: &Path, repo: &Path, outside: &Path) -> Result<PathBuf> {
     let normalized = normalize(outside);
     let Ok(relative) = normalized.strip_prefix(home) else {
@@ -103,6 +114,25 @@ mod tests {
         assert_eq!(normalize(Path::new("/..")), PathBuf::from("/"));
         assert_eq!(normalize(Path::new("a/../b")), PathBuf::from("b"));
         assert_eq!(normalize(Path::new("../a")), PathBuf::from("../a"));
+    }
+
+    #[test]
+    fn expand_resolves_a_path_against_the_home_directory() {
+        let home = Path::new("/home/u");
+
+        assert_eq!(expand(home, Path::new("~")), PathBuf::from("/home/u"));
+        assert_eq!(
+            expand(home, Path::new("~/backups")),
+            PathBuf::from("/home/u/backups")
+        );
+        assert_eq!(
+            expand(home, Path::new("backups")),
+            PathBuf::from("/home/u/backups")
+        );
+        assert_eq!(
+            expand(home, Path::new("/data/backups")),
+            PathBuf::from("/data/backups")
+        );
     }
 
     #[test]

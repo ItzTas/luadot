@@ -9,25 +9,31 @@ use super::template::{is_template, template_target};
 pub enum Entry {
     File(PathBuf),
     Template(PathBuf),
+    Standalone(PathBuf),
 }
 
 impl Entry {
     pub fn path(&self) -> &Path {
         match self {
-            Self::File(path) | Self::Template(path) => path,
+            Self::File(path) | Self::Template(path) | Self::Standalone(path) => path,
         }
     }
 
     pub fn target(&self) -> PathBuf {
         match self {
             Self::File(path) => path.clone(),
-            Self::Template(dir) => template_target(dir).unwrap_or_else(|| dir.clone()),
+            Self::Template(path) | Self::Standalone(path) => {
+                template_target(path).unwrap_or_else(|| path.clone())
+            }
         }
     }
 }
 
 pub fn collect_entries(command: &str, root: &Path) -> Result<Vec<Entry>> {
     if !root.is_dir() {
+        if is_template(root) {
+            return Ok(vec![Entry::Standalone(root.to_path_buf())]);
+        }
         return Ok(vec![Entry::File(root.to_path_buf())]);
     }
 
@@ -45,7 +51,7 @@ pub fn collect_files(command: &str, root: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for entry in collect_entries(command, root)? {
         match entry {
-            Entry::File(path) => files.push(path),
+            Entry::File(path) | Entry::Standalone(path) => files.push(path),
             Entry::Template(dir) => files.extend(inside(command, &dir)?),
         }
     }
@@ -76,6 +82,10 @@ fn collect_into(command: &str, dir: &Path, entries: &mut Vec<Entry>) -> Result<(
             .file_type()
             .with_context(|| format!("{command}: failed to inspect {}", entry.path().display()))?;
         if !file_type.is_dir() {
+            if is_template(&entry.path()) {
+                entries.push(Entry::Standalone(entry.path()));
+                continue;
+            }
             entries.push(Entry::File(entry.path()));
             continue;
         }
@@ -183,11 +193,56 @@ mod tests {
     fn an_entry_targets_the_path_it_stands_for() {
         let file = PathBuf::from("/repo/.vimrc");
         let template = PathBuf::from("/repo/.zshrc.luadot");
+        let standalone = PathBuf::from("/repo/.zprofile.luadot");
 
         assert_eq!(Entry::File(file.clone()).target(), file);
         assert_eq!(
             Entry::Template(template).target(),
             PathBuf::from("/repo/.zshrc")
         );
+        assert_eq!(
+            Entry::Standalone(standalone).target(),
+            PathBuf::from("/repo/.zprofile")
+        );
+    }
+
+    #[test]
+    fn a_standalone_template_is_its_own_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let standalone = root.join(".zprofile.luadot");
+        std::fs::write(&standalone, "export HOST=<%= 1 %>\n").unwrap();
+        std::fs::write(root.join(".vimrc"), "plain").unwrap();
+
+        let entries = collect_entries("alt", root).unwrap();
+
+        assert_eq!(
+            entries,
+            vec![
+                Entry::File(root.join(".vimrc")),
+                Entry::Standalone(standalone),
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_entries_reports_a_standalone_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let standalone = dir.path().join(".zprofile.luadot");
+        std::fs::write(&standalone, "export HOST=1\n").unwrap();
+
+        assert_eq!(
+            collect_entries("alt", &standalone).unwrap(),
+            vec![Entry::Standalone(standalone)]
+        );
+    }
+
+    #[test]
+    fn collect_files_returns_a_standalone_template_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let standalone = dir.path().join(".zprofile.luadot");
+        std::fs::write(&standalone, "export HOST=1\n").unwrap();
+
+        assert_eq!(collect_files("rm", dir.path()).unwrap(), vec![standalone]);
     }
 }

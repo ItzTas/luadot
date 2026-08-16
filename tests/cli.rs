@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -7,6 +7,21 @@ fn luadot(home: &Path) -> Command {
     let mut command = Command::cargo_bin("luadot").unwrap();
     command.env_clear().env("HOME", home);
     command
+}
+
+fn read(path: &Path) -> String {
+    std::fs::read_to_string(path).unwrap()
+}
+
+fn only_dir(root: &Path) -> PathBuf {
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+
+    assert_eq!(dirs.len(), 1);
+
+    dirs.pop().unwrap()
 }
 
 fn write(path: &Path, contents: &str) {
@@ -38,16 +53,12 @@ fn version_prints_the_package_version() {
 fn help_lists_the_commands() {
     let home = tempfile::tempdir().unwrap();
 
-    luadot(home.path())
-        .arg("--help")
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("Usage: luadot")
-                .and(predicate::str::contains("apply"))
-                .and(predicate::str::contains("restore"))
-                .and(predicate::str::contains("completions")),
-        );
+    luadot(home.path()).arg("--help").assert().success().stdout(
+        predicate::str::contains("Usage: luadot")
+            .and(predicate::str::contains("apply"))
+            .and(predicate::str::contains("restore"))
+            .and(predicate::str::contains("completions")),
+    );
 }
 
 #[test]
@@ -169,6 +180,134 @@ fn add_then_apply_manage_a_file_end_to_end() {
 }
 
 #[test]
+fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_it() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&home.join(".bashrc"), "handwritten\n");
+    write(
+        &home.join(".config/luadot/ld.lua"),
+        r#"ld.opt.backup_dir("~/saved")"#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+
+    let saved = only_dir(&home.join("saved"));
+    assert_eq!(read(&saved.join(".bashrc")), "handwritten\n");
+    assert_eq!(read(&home.join(".bashrc")), "managed\n");
+    assert!(!home.join(".local/share/luadot/backups").exists());
+
+    luadot(&home)
+        .args(["restore", "--list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 file(s)"));
+
+    luadot(&home).args(["restore", "--yes"]).assert().success();
+    assert_eq!(read(&home.join(".bashrc")), "handwritten\n");
+}
+
+#[test]
+fn two_runs_in_a_row_keep_their_own_backup() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&home.join(".bashrc"), "first\n");
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+    std::fs::remove_file(home.join(".bashrc")).unwrap();
+    write(&home.join(".bashrc"), "second\n");
+    luadot(&home).arg("apply").assert().success();
+
+    let mut saved: Vec<String> = std::fs::read_dir(home.join(".local/share/luadot/backups"))
+        .unwrap()
+        .map(|entry| read(&entry.unwrap().path().join(".bashrc")))
+        .collect();
+    saved.sort();
+
+    assert_eq!(saved, ["first\n", "second\n"]);
+}
+
+#[test]
+fn the_configuration_points_luadot_at_its_own_repository() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("dotfiles");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/ld.lua"),
+        &format!("ld.opt.repo_dir({:?})", repo.display()),
+    );
+    write_state(&home, &root.path().join("gone"));
+
+    luadot(&home).arg("apply").assert().success();
+
+    assert_eq!(read(&home.join(".bashrc")), "managed\n");
+}
+
+#[test]
+fn clone_takes_the_directory_to_clone_into() {
+    let home = tempfile::tempdir().unwrap();
+
+    luadot(home.path())
+        .args(["clone", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[DIR]"));
+}
+
+#[test]
+fn a_limit_drops_the_oldest_backups() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&home.join(".config/luadot/ld.lua"), "ld.opt.backup_keep(2)");
+    write_state(&home, &repo);
+
+    for contents in ["first\n", "second\n", "third\n"] {
+        let _ = std::fs::remove_file(home.join(".bashrc"));
+        write(&home.join(".bashrc"), contents);
+        luadot(&home).arg("apply").assert().success();
+    }
+
+    let mut saved: Vec<String> = std::fs::read_dir(home.join(".local/share/luadot/backups"))
+        .unwrap()
+        .map(|entry| read(&entry.unwrap().path().join(".bashrc")))
+        .collect();
+    saved.sort();
+
+    assert_eq!(saved, ["second\n", "third\n"]);
+}
+
+#[test]
+fn rm_backs_up_what_it_takes_out_of_the_repository() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = home.join(".local/share/luadot/repo");
+    write(&repo.join(".vimrc"), "set number\n");
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args(["rm", "--yes", home.join(".vimrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    assert!(!repo.join(".vimrc").exists());
+    assert_eq!(read(&home.join(".vimrc")), "set number\n");
+
+    let saved = only_dir(&home.join(".local/share/luadot/backups"));
+    assert_eq!(
+        read(&saved.join(".local/share/luadot/repo/.vimrc")),
+        "set number\n"
+    );
+}
+
+#[test]
 fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -186,4 +325,56 @@ fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
     let kind = std::fs::symlink_metadata(&placed).unwrap().file_type();
     assert!(kind.is_symlink());
     assert_eq!(std::fs::read_link(&placed).unwrap(), repo.join(".bashrc"));
+}
+
+#[test]
+fn alt_resolves_both_template_forms_and_the_other_commands_walk_past_them() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(
+        &repo.join(".zshrc.luadot/luadot.lua"),
+        r#"return ld.alt.expand("zshrc.tmpl.zsh", { editor = "nvim" })"#,
+    );
+    write(
+        &repo.join(".zshrc.luadot/zshrc.tmpl.zsh"),
+        "export EDITOR=<%= editor %>\n",
+    );
+    write(
+        &repo.join(".zprofile.luadot"),
+        "<% for _, dir in ipairs({ \"a\", \"b\" }) do -%>\npath+=(<%= dir %>)\n<% end -%>\n",
+    );
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .arg("alt")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "resolved 2 template(s) into 2 file(s)",
+        ));
+    assert_eq!(
+        std::fs::read_to_string(home.join(".zshrc")).unwrap(),
+        "export EDITOR=nvim\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(home.join(".zprofile")).unwrap(),
+        "path+=(a)\npath+=(b)\n"
+    );
+
+    std::fs::remove_file(home.join(".zshrc")).unwrap();
+    std::fs::remove_file(home.join(".zprofile")).unwrap();
+
+    luadot(&home)
+        .arg("apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nothing to apply"));
+    luadot(&home)
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nothing is managed"));
+    assert!(!home.join(".zshrc").exists());
+    assert!(!home.join(".zprofile").exists());
 }

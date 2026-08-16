@@ -28,10 +28,10 @@ struct Run {
 }
 
 pub fn alt_cmd(args: AltArgs) -> Result<()> {
-    let repo = utils::require_repo("alt")?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("alt", config.repo_dir())?;
 
     let home = utils::home_dir()?;
-    let config = lua::load_config()?;
     let classes = state::load()?.classes().clone();
 
     let root = match args.path.as_deref() {
@@ -39,12 +39,12 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         None => repo.clone(),
     };
 
-    let templates: Vec<PathBuf> = files::collect_entries("alt", &root)?
+    let templates: Vec<Entry> = files::collect_entries("alt", &root)?
         .into_iter()
         .filter(|entry| !config.is_ignored(utils::relative(&repo, &entry.target())))
-        .filter_map(|entry| match entry {
-            Entry::Template(dir) => Some(dir),
-            Entry::File(_) => None,
+        .filter(|entry| match entry {
+            Entry::Template(_) | Entry::Standalone(_) => true,
+            Entry::File(_) => false,
         })
         .collect();
     if templates.is_empty() {
@@ -56,13 +56,18 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         dry_run: args.dry_run,
         backup: match args.dry_run || !config.backup() {
             true => None,
-            false => Some(Backup::open("alt", &home)?),
+            false => Some(Backup::open(
+                "alt",
+                &home,
+                config.backup_dir(),
+                config.backup_keep(),
+            )?),
         },
     };
 
     let mut outcomes: Vec<SyncOutcome> = Vec::new();
-    for dir in &templates {
-        outcomes.extend(resolve(&config, &home, &repo, dir, &classes, &mut run)?);
+    for entry in &templates {
+        outcomes.extend(resolve(&config, &home, &repo, entry, &classes, &mut run)?);
     }
 
     output::note(format!(
@@ -79,7 +84,7 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         count(&outcomes, SyncOutcome::Skipped),
     ));
     if let Some(backup) = run.backup.as_ref() {
-        backup.report();
+        backup.finish()?;
     }
 
     Ok(())
@@ -89,7 +94,7 @@ fn template_root(home: &Path, repo: &Path, arg: &str) -> Result<PathBuf> {
     let target = std::path::absolute(arg).with_context(|| format!("alt: invalid path {arg}"))?;
     let managed = utils::repo_path(home, repo, &target)?;
 
-    if let Some(dir) = files::template_dir(&managed).filter(|dir| dir.is_dir()) {
+    if let Some(dir) = files::template_dir(&managed).filter(|dir| dir.exists()) {
         return Ok(dir);
     }
     if managed.is_dir() {
@@ -106,14 +111,24 @@ fn resolve(
     config: &Config,
     home: &Path,
     repo: &Path,
-    dir: &Path,
+    entry: &Entry,
     classes: &Classes,
     run: &mut Run,
 ) -> Result<Vec<SyncOutcome>> {
-    lua::load_template("alt", home, repo, dir, classes)?
+    outputs(home, repo, entry, classes)?
         .iter()
         .map(|output| place(config, home, output, run))
         .collect()
+}
+
+fn outputs(home: &Path, repo: &Path, entry: &Entry, classes: &Classes) -> Result<Vec<Output>> {
+    match entry {
+        Entry::Template(dir) => lua::load_template("alt", home, repo, dir, classes),
+        Entry::Standalone(path) => Ok(vec![lua::load_template_file(
+            "alt", home, repo, path, classes,
+        )?]),
+        Entry::File(path) => bail!("alt: {} is not a template", path.display()),
+    }
 }
 
 fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result<SyncOutcome> {
@@ -194,7 +209,7 @@ mod tests {
             &Config::default(),
             &home,
             &repo,
-            &dir,
+            &Entry::Template(dir.clone()),
             &Classes::default(),
             &mut Run::default(),
         )
@@ -222,7 +237,7 @@ mod tests {
             &Config::default(),
             &home,
             &repo,
-            &dir,
+            &Entry::Template(dir.clone()),
             &Classes::default(),
             &mut Run::default(),
         )
@@ -238,7 +253,7 @@ mod tests {
             &Config::default(),
             &home,
             &repo,
-            &dir,
+            &Entry::Template(dir.clone()),
             &Classes::default(),
             &mut Run::default(),
         )
@@ -263,7 +278,7 @@ mod tests {
             &Config::default(),
             &home,
             &repo,
-            &dir,
+            &Entry::Template(dir.clone()),
             &Classes::default(),
             &mut Run::default(),
         )
@@ -290,7 +305,7 @@ mod tests {
             &Config::default(),
             &home,
             &repo,
-            &dir,
+            &Entry::Template(dir.clone()),
             &Classes::default(),
             &mut Run::default(),
         )
@@ -317,7 +332,7 @@ mod tests {
             &config,
             &home,
             &repo,
-            &dir,
+            &Entry::Template(dir.clone()),
             &Classes::default(),
             &mut Run::default(),
         )
@@ -346,7 +361,7 @@ mod tests {
             &Config::default(),
             &home,
             &repo,
-            &dir,
+            &Entry::Template(dir.clone()),
             &Classes::default(),
             &mut run,
         )
@@ -373,7 +388,7 @@ mod tests {
             &Config::default(),
             &home,
             &repo,
-            &dir,
+            &Entry::Template(dir.clone()),
             &Classes::default(),
             &mut run,
         )
@@ -404,7 +419,7 @@ mod tests {
             &Config::default(),
             &home,
             &repo,
-            &dir,
+            &Entry::Template(dir.clone()),
             &Classes::default(),
             &mut run,
         )
@@ -445,5 +460,130 @@ mod tests {
 
         assert!(err.contains("alt: "));
         assert!(err.contains("has no template in the repository"));
+    }
+
+    #[test]
+    fn a_standalone_template_lands_on_the_mirrored_path() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let file = repo.join(".zprofile.luadot");
+        write(&file, "export HOST=<%= 1 + 1 %>\n");
+
+        let outcomes = resolve(
+            &Config::default(),
+            &home,
+            &repo,
+            &Entry::Standalone(file),
+            &Classes::default(),
+            &mut Run::default(),
+        )
+        .unwrap();
+
+        assert_eq!(outcomes, vec![SyncOutcome::Created]);
+        assert_eq!(
+            std::fs::read_to_string(home.join(".zprofile")).unwrap(),
+            "export HOST=2\n"
+        );
+    }
+
+    #[test]
+    fn a_standalone_template_follows_the_configured_conflict_policy() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let file = repo.join(".zprofile.luadot");
+        write(&file, "generated\n");
+        write(&home.join(".zprofile"), "handwritten\n");
+
+        let config = lua::from_source(r#"ld.git.conflict("skip")"#).unwrap();
+        let outcomes = resolve(
+            &config,
+            &home,
+            &repo,
+            &Entry::Standalone(file),
+            &Classes::default(),
+            &mut Run::default(),
+        )
+        .unwrap();
+
+        assert_eq!(outcomes, vec![SyncOutcome::Skipped]);
+        assert_eq!(
+            std::fs::read_to_string(home.join(".zprofile")).unwrap(),
+            "handwritten\n"
+        );
+    }
+
+    #[test]
+    fn a_replaced_standalone_output_is_backed_up() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let file = repo.join(".zprofile.luadot");
+        write(&file, "generated\n");
+        write(&home.join(".zprofile"), "handwritten\n");
+
+        let saved = root.path().join("backup");
+        let mut run = Run {
+            dry_run: false,
+            backup: Some(Backup::at("alt", &home, saved.clone())),
+        };
+        resolve(
+            &Config::default(),
+            &home,
+            &repo,
+            &Entry::Standalone(file),
+            &Classes::default(),
+            &mut run,
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(home.join(".zprofile")).unwrap(),
+            "generated\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(saved.join(".zprofile")).unwrap(),
+            "handwritten\n"
+        );
+    }
+
+    #[test]
+    fn a_dry_run_reports_a_standalone_template_and_touches_nothing() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let file = repo.join(".zprofile.luadot");
+        write(&file, "generated\n");
+
+        let mut run = Run {
+            dry_run: true,
+            backup: None,
+        };
+        let outcomes = resolve(
+            &Config::default(),
+            &home,
+            &repo,
+            &Entry::Standalone(file),
+            &Classes::default(),
+            &mut run,
+        )
+        .unwrap();
+
+        assert_eq!(outcomes, vec![SyncOutcome::Created]);
+        assert!(!home.join(".zprofile").exists());
+    }
+
+    #[test]
+    fn a_standalone_template_is_reached_through_the_path_it_produces() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let file = repo.join(".zprofile.luadot");
+        write(&file, "generated\n");
+
+        let arg = home.join(".zprofile").to_string_lossy().into_owned();
+
+        assert_eq!(template_root(&home, &repo, &arg).unwrap(), file);
     }
 }

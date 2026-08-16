@@ -4,12 +4,15 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::files;
+use crate::lua;
 use crate::output::{self, Tone};
 use crate::utils;
 
 const PREVIEW_LIMIT: usize = 10;
 
 const YES_FLAGS: &str = "-y or --yes";
+
+const MILLIS: u64 = 1_000;
 
 const UNITS: [(u64, &str); 4] = [
     (86_400, "day"),
@@ -35,8 +38,8 @@ pub struct RestoreArgs {
 }
 
 pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
-    let root = utils::backups_dir()?;
-    let taken = taken(&root)?;
+    let root = utils::backups_root(lua::load_config()?.backup_dir())?;
+    let taken = utils::taken("restore", &root)?;
     if taken.is_empty() {
         output::note("no backup taken yet");
         return Ok(());
@@ -82,7 +85,10 @@ fn list(taken: &[(u64, PathBuf)]) -> Result<()> {
         let count = files::collect_files("restore", dir)?.len();
         output::field(
             stamp,
-            format!("{}  {count} file(s)", ago(now.saturating_sub(*stamp))),
+            format!(
+                "{}  {count} file(s)",
+                ago(now.saturating_sub(*stamp) / MILLIS)
+            ),
         );
     }
 
@@ -140,35 +146,6 @@ fn chosen<'a>(taken: &'a [(u64, PathBuf)], name: Option<&String>) -> Result<(u64
     };
 
     Ok((*stamp, dir.as_path()))
-}
-
-fn taken(root: &Path) -> Result<Vec<(u64, PathBuf)>> {
-    if !root.is_dir() {
-        return Ok(Vec::new());
-    }
-
-    let entries = std::fs::read_dir(root)
-        .with_context(|| format!("restore: failed to read {}", root.display()))?;
-
-    let mut taken = Vec::new();
-    for entry in entries {
-        let entry = entry.with_context(|| format!("restore: failed to read {}", root.display()))?;
-        if !entry.path().is_dir() {
-            continue;
-        }
-        let Some(stamp) = entry
-            .file_name()
-            .to_str()
-            .and_then(|name| name.parse().ok())
-        else {
-            continue;
-        };
-        taken.push((stamp, entry.path()));
-    }
-
-    taken.sort();
-
-    Ok(taken)
 }
 
 fn destination(dir: &Path, home: &Path, file: &Path) -> Result<PathBuf> {
@@ -246,27 +223,6 @@ mod tests {
         assert_eq!(ago(7_200), "2 hours ago");
         assert_eq!(ago(86_400), "1 day ago");
         assert_eq!(ago(200_000), "2 days ago");
-    }
-
-    #[test]
-    fn backups_are_read_oldest_first_and_anything_else_ignored() {
-        let root = tempfile::tempdir().unwrap();
-        for name in ["200", "100", "notes"] {
-            std::fs::create_dir(root.path().join(name)).unwrap();
-        }
-        std::fs::write(root.path().join("300"), "file").unwrap();
-
-        let taken = taken(root.path()).unwrap();
-
-        let stamps: Vec<u64> = taken.iter().map(|(stamp, _)| *stamp).collect();
-        assert_eq!(stamps, [100, 200]);
-    }
-
-    #[test]
-    fn a_missing_backups_directory_holds_nothing() {
-        let root = tempfile::tempdir().unwrap();
-
-        assert!(taken(&root.path().join("gone")).unwrap().is_empty());
     }
 
     #[test]

@@ -4,7 +4,7 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use clap::Args;
 
-use crate::utils;
+use crate::{lua, utils};
 
 #[derive(Debug, Args)]
 #[command(disable_help_flag = true)]
@@ -18,7 +18,7 @@ pub struct GitArgs {
 }
 
 pub fn git_cmd(args: GitArgs) -> Result<()> {
-    let repo = utils::require_repo("git")?;
+    let repo = utils::require_repo("git", lua::load_config()?.repo_dir())?;
 
     let status = build_command(&repo, &args.args)
         .status()

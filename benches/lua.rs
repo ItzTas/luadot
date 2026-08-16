@@ -12,7 +12,9 @@ const STARTUP: &str = "return \"generated\\n\"\n";
 const PICK: &str = "return ld.alt.file(\"variant.conf\")\n";
 const RENDER: &str =
     "ld.alt.out({ content = ld.alt.render(\"init.tmpl.conf\", { name = \"host\", size = 24 }) })\n";
+const EXPAND: &str = "ld.alt.out({ content = ld.alt.expand(\"init.tmpl.embed\", { name = \"host\", size = 24 }) })\n";
 const TEMPLATE: &str = "return string.format(\"name = %q\\nsize = %d\\n\", name, size)\n";
+const EMBED_LINES: usize = 64;
 
 fn templates(c: &mut Criterion) {
     let mut group = c.benchmark_group("template");
@@ -22,6 +24,7 @@ fn templates(c: &mut Criterion) {
         ("startup", STARTUP.to_string()),
         ("file", PICK.to_string()),
         ("render", RENDER.to_string()),
+        ("expand", EXPAND.to_string()),
         ("outputs", outputs(OUTPUT_COUNT)),
     ];
 
@@ -38,6 +41,18 @@ fn templates(c: &mut Criterion) {
         });
     }
 
+    let file = fixture.repo().join(".config/standalone/init.conf.luadot");
+    write(&file, &embedded(EMBED_LINES, "\"host\"", "24"));
+
+    group.bench_function("standalone", |b| {
+        b.iter(|| {
+            black_box(
+                lua::load_template_file("alt", fixture.home(), fixture.repo(), &file, &classes)
+                    .expect("a resolved standalone template"),
+            )
+        });
+    });
+
     group.finish();
 }
 
@@ -48,8 +63,20 @@ fn template(fixture: &Fixture, name: &str, script: &str) -> PathBuf {
     write(&dir.join("luadot.lua"), script);
     write(&dir.join("variant.conf"), "variant\n");
     write(&dir.join("init.tmpl.conf"), TEMPLATE);
+    write(
+        &dir.join("init.tmpl.embed"),
+        &embedded(EMBED_LINES, "name", "size"),
+    );
 
     dir
+}
+
+fn embedded(lines: usize, name: &str, size: &str) -> String {
+    let mut source = format!("name = <%= {name} %>\nsize = <%= {size} %>\n");
+    for index in 0..lines {
+        source.push_str(&format!("key{index:03} = <%= {size} + {index} %>\n"));
+    }
+    source
 }
 
 fn outputs(count: usize) -> String {

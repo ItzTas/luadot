@@ -6,7 +6,7 @@ A dotfiles manager configured in Lua.
 
 | Command | Effect |
 | --- | --- |
-| `luadot clone <url>` | Clones a dotfiles repository and makes it the managed one. |
+| `luadot clone <url> [dir]` | Clones a dotfiles repository and makes it the managed one. |
 | `luadot add <path>...` | Starts managing a file or directory, linking it into the repository. |
 | `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving your home copy in place. |
 | `luadot status [path]` | Lists the managed files whose system copy is not in sync. |
@@ -24,6 +24,29 @@ A dotfiles manager configured in Lua.
 
 `luadot --help` explains any command in place (`luadot rm --help`), and
 `luadot --version` prints the version.
+
+### Where the repository lives
+
+`clone` puts it in `~/.local/share/luadot/repo` (or `$XDG_DATA_HOME/luadot/repo`)
+and remembers the path, so nothing else has to be told about it. A directory of
+your own is given to `clone` directly, resolved against the directory you are
+in, the way `git clone` does it:
+
+```
+luadot clone git@github.com:me/dotfiles.git ~/dotfiles
+```
+
+`ld.opt.repo_dir` says it in the configuration instead, which is what a
+repository luadot did not clone needs — the one already sitting in `~/dotfiles`
+from before, or a checkout shared with another tool:
+
+```lua
+ld.opt.repo_dir("~/dotfiles")
+```
+
+It wins over what `clone` remembered, so it is also how a machine follows a
+repository that moved. The path is read on every command; luadot never moves the
+directory for you, and points at it where it stands.
 
 `status` reports one line per file that `apply` would touch, and a count for
 everything else:
@@ -67,38 +90,60 @@ Only the files that would change are listed, one line each, the same way
 
 ### Backups
 
-Every file `apply` or `alt` replaces is copied first, so an `overwrite` never
-loses what was on the system:
+Every file luadot destroys is copied first, so nothing it overwrites is lost:
+`apply` and `alt` save what they replace, and `rm` saves both the repository
+entry it deletes and the system symlink it writes over.
 
 ```
 luadot: applied 12 file(s) (0 created, 1 replaced, 11 unchanged, 0 skipped)
-luadot: backed up 1 replaced file(s) in ~/.local/share/luadot/backups/1786677956
+luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
 ```
 
-One directory per run, named after the moment it ran, holding the replaced
+One directory per run, named after the millisecond it ran, holding the saved
 files under the paths they had in your home directory. A symlink is kept as a
-symlink; nothing is written for a file that was created rather than replaced.
+symlink; nothing is written for a file that was created rather than replaced,
+and `add` takes no backup because it never writes over anything. Files outside
+your home directory have no mirrored path to be saved under, so they are
+reported and left alone.
 
 `luadot restore` puts the most recent one back, asking first and listing what
 is about to land:
 
 ```
 $ luadot restore --list
-1786677956  2 minutes ago  1 file(s)
-1786590012  1 day ago      4 file(s)
+1786677956412  2 minutes ago  1 file(s)
+1786590012773  1 day ago      4 file(s)
 
 $ luadot restore
   .zshrc
-Put 1 file(s) of backup 1786677956 back? [y/N]
+Put 1 file(s) of backup 1786677956412 back? [y/N]
 ```
 
-A backup of your own is reached by its name (`luadot restore 1786590012`), `-y`
-answers the question upfront and `-n` reports what would be put back. Restoring
-writes plain copies, so the files it touches stop being linked to the
+A backup of your own is reached by its name (`luadot restore 1786590012773`),
+`-y` answers the question upfront and `-n` reports what would be put back.
+Restoring writes plain copies, so the files it touches stop being linked to the
 repository until the next `apply`.
 
-`ld.opt.backup(false)` turns the whole thing off, and nothing is ever removed
-from the backup directory on its own — pruning it is yours to do.
+Backups live next to the repository, in `~/.local/share/luadot/backups` (or
+`$XDG_DATA_HOME/luadot/backups`), and `ld.opt.backup_dir` moves them anywhere
+you like. `ld.opt.backup(false)` turns the whole thing off.
+
+Nothing is pruned until you set a limit. `ld.opt.backup_keep(n)` keeps the `n`
+most recent backups and drops the older ones at the end of every run that takes
+one:
+
+```lua
+ld.opt.backup_keep(10)
+```
+
+```
+luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
+luadot: dropped 1 backup(s), keeping the 10 most recent
+```
+
+The limit counts whole backups, not the files inside them — a run either keeps
+everything it saved or is dropped as a whole, so a backup is never left half
+there. Without it the directory grows on every run and pruning is yours to do.
 
 `exec` runs Lua with the same `ld` interface the configuration gets, which is
 how you ask a machine what luadot sees on it:
@@ -135,8 +180,11 @@ ld.rules({
 | Call | Arguments | Effect |
 | --- | --- | --- |
 | `ld.opt.link(mode)` | `"hard"`, `"symbolic"` | Default strategy used to link a managed file. |
-| `ld.opt.backup(enabled)` | `true`, `false` | Whether `apply` and `alt` copy a file aside before replacing it. Defaults to `true`. |
+| `ld.opt.backup(enabled)` | `true`, `false` | Whether a file is copied aside before luadot writes over it. Defaults to `true`. |
+| `ld.opt.backup_dir(path)` | a directory | Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`. |
+| `ld.opt.backup_keep(count)` | a number of one or more | How many backups to keep; the oldest ones are dropped once there are more. Defaults to keeping every one of them. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
+| `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 | `ld.git.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.git.ignore(patterns)` | a pattern or a list of them | Marks files as never managed. |
@@ -171,8 +219,8 @@ instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `ld.lua`, which builds the configuration | does nothing, warns |
-| `ld.alt.out`, `ld.alt.file`, `ld.alt.render` | `luadot.lua`, which produces a template's files | does nothing and yields `nil`, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.repo_dir`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `ld.lua`, which builds the configuration | does nothing, warns |
+| `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand` | `luadot.lua`, which produces a template's files | does nothing and yields `nil`, warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
 
@@ -185,7 +233,10 @@ effect (silence it with `ld.opt.pkg_warn(false)`)
 ```
 
 `ld.path` carries `home` and `config` everywhere, `repo` once a repository is
-set, and `dir` inside a template.
+set, and `dir` inside a template. Inside `ld.lua` itself, `ld.path.repo` is the
+repository luadot knew about before the file ran, so it does not answer for an
+`ld.opt.repo_dir` set in that same file; every script luadot runs afterwards —
+`bootstrap.lua`, a setup script, a template — gets the resolved one.
 
 ### The machine
 
@@ -461,10 +512,12 @@ so `.config/nvim/init.lua` is the pattern for `~/.config/nvim/init.lua`.
 
 ## Templates
 
-A directory whose name ends in `.luadot` is a template. It holds a `luadot.lua`
-deciding what ends up on the system, next to the files that decision picks from
-or renders. `luadot alt` is what runs them: `apply` and `status` walk past a
-template directory instead of mirroring it.
+A path whose name ends in `.luadot` is a template, in one of two forms. A
+**directory** holds a `luadot.lua` deciding what ends up on the system, next to
+the files that decision picks from or renders. A plain **file** is an embedded
+template rendered directly to the mirrored path, with nothing else around it.
+`luadot alt` is what runs both: `apply` and `status` walk past them instead of
+mirroring them.
 
 ```
 ~/dotfiles/
@@ -475,12 +528,13 @@ template directory instead of mirroring it.
 ├── .config/nvim/init.lua.luadot/  -- produces ~/.config/nvim/init.lua
 │   ├── luadot.lua
 │   └── init.tmpl.lua
+├── .zprofile.luadot               -- a standalone template, produces ~/.zprofile
 └── .vimrc                         -- a plain managed file
 ```
 
-The destination is the directory's own path without the suffix, so the
-repository keeps mirroring your home directory. A `dest` of your own overrides
-it.
+The destination is the template's own path without the suffix, so the
+repository keeps mirroring your home directory. Inside a directory, a `dest`
+of your own overrides it.
 
 `luadot.lua` has the `ld` interface, and declares what it produces either by
 calling `ld.alt.out` or by returning the same table:
@@ -505,6 +559,7 @@ ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 | `ld.alt.out(file)` | a table, a string or an `ld.alt.file` | Declares a file the template produces; repeated calls accumulate. |
 | `ld.alt.file(name)` | a path | A real file, linked to the destination like a managed one. |
 | `ld.alt.render(name, vars)` | a path and a table | Runs that Lua file with `vars` in scope and returns the string it returns. |
+| `ld.alt.expand(name, vars)` | a path and a table | Renders that embedded template with `vars` in scope and returns the string it emits. |
 | `ld.sys` | — | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.cmd(line)` | a command line | Runs it and returns what it printed; also `ld.cmd.<program>(args...)`. |
@@ -536,7 +591,8 @@ variables of the call in scope and the standard library still reachable:
 return string.format("vim.g.mapleader = %q\n", leader)
 ```
 
-`ld.alt.file` and `ld.alt.render` take a relative path starting at the template
+`ld.alt.file`, `ld.alt.render` and `ld.alt.expand` take a relative path
+starting at the template
 directory, and an absolute path — or one climbing out with `..` — anywhere else,
 so several templates can share a file kept elsewhere in the repository:
 
@@ -546,6 +602,68 @@ ld.alt.out({ content = ld.alt.file(ld.path.repo .. "/shared/aliases.zsh") })
 
 The template's own `lua/` directory is requirable, exactly like the
 configuration's.
+
+### Embedded templates
+
+`ld.alt.expand` renders an ERB-style embedded template: text emitted as it
+stands, Lua between `<%` and `%>`:
+
+```zsh
+export EDITOR=<%= ld.class.get("editor") or "nvim" %>
+<% for _, dir in ipairs({ "~/bin", "~/.local/bin" }) do -%>
+path+=(<%= dir %>)
+<% end -%>
+```
+
+| Tag | Effect |
+| --- | --- |
+| `<% ... %>` | Lua statements, emits nothing |
+| `<%_ ... %>` | the same, and trims the indentation before the tag |
+| `<%= expr %>` | emits `tostring(expr)`, raw |
+| `<%- expr %>` | an alias of `<%=` |
+| `<%# ... %>` | a comment, reaches no output |
+| `... -%>` | trims the newline after the tag |
+| `... _%>` | trims the spaces and the newline after the tag |
+| `<%%` | a literal `<%` |
+| `%%>` | a literal `%>`, inside a tag |
+
+There is one output tag and it is always raw — a dotfile is not HTML, so
+nothing is escaped. Every trim is bounded by its own line and can never join
+two lines. Errors report the template's own line, and a `%>` inside a Lua
+string, comment or long bracket does not close the tag.
+
+### The standalone form
+
+A `.luadot` **file** is an embedded template that needs no directory: `alt`
+renders it and places the result at the mirrored path, following the
+configured `link` and `conflict` rules. `ld.sys`, `ld.class`, `ld.cmd` and the
+rest of the interface are all there; what it does not have is what needs the
+directory:
+
+| Missing | Reason |
+| --- | --- |
+| several outputs | there is no `ld.alt.out` to call |
+| `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `ld.lua` still applies |
+| `require` of a `lua/` directory | there is no directory |
+| `ld.alt.*` | inert, warned |
+
+`ld.path.dir` is `nil` — there is no template directory; `ld.path.repo` still
+reaches a file shared elsewhere in the repository.
+
+### Editor support
+
+An editor sees `.luadot`, not `.zsh`, so highlighting needs a nudge. Neovim
+already ships the grammar this format parses as —
+`tree-sitter-embedded-template`, the `eruby`/`ejs` one:
+
+```lua
+vim.filetype.add({ pattern = { [".*%.luadot"] = "luadot" } })
+vim.treesitter.language.register("embedded_template", "luadot")
+```
+
+plus an `injections.scm` sending `(code)` to `lua` and `(content)` to the
+language of the file being generated. A `<%# luadot: zsh %>` comment on the
+first line names that language; the renderer ignores it.
 
 ## Benchmarks
 

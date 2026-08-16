@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use mlua::{AppDataRefMut, Lua, UserData};
 
 use crate::files::{ConflictPolicy, LinkMode};
+use crate::utils;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Handle(PathBuf);
@@ -114,15 +115,7 @@ impl Template {
             return self.dest.clone();
         };
 
-        let path = Path::new(raw);
-        if let Ok(rest) = path.strip_prefix("~") {
-            return self.home.join(rest);
-        }
-        if path.is_absolute() {
-            return path.to_path_buf();
-        }
-
-        self.home.join(path)
+        utils::expand(&self.home, Path::new(raw))
     }
 }
 

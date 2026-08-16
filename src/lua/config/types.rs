@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use glob::Pattern;
 use mlua::{AppDataRefMut, Lua};
@@ -15,6 +15,9 @@ pub struct Config {
     classes: Vec<Class>,
     pkg_warn: bool,
     backup: bool,
+    backup_dir: Option<PathBuf>,
+    backup_keep: Option<u32>,
+    repo_dir: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -27,6 +30,9 @@ impl Default for Config {
             classes: Vec::new(),
             pkg_warn: true,
             backup: true,
+            backup_dir: None,
+            backup_keep: None,
+            repo_dir: None,
         }
     }
 }
@@ -87,6 +93,30 @@ impl Config {
 
     pub fn backup(&self) -> bool {
         self.backup
+    }
+
+    pub fn set_backup_dir(&mut self, dir: PathBuf) {
+        self.backup_dir = Some(dir);
+    }
+
+    pub fn backup_dir(&self) -> Option<&Path> {
+        self.backup_dir.as_deref()
+    }
+
+    pub fn set_backup_keep(&mut self, keep: u32) {
+        self.backup_keep = Some(keep);
+    }
+
+    pub fn backup_keep(&self) -> Option<u32> {
+        self.backup_keep
+    }
+
+    pub fn set_repo_dir(&mut self, dir: PathBuf) {
+        self.repo_dir = Some(dir);
+    }
+
+    pub fn repo_dir(&self) -> Option<&Path> {
+        self.repo_dir.as_deref()
     }
 
     pub fn link(&self) -> LinkMode {

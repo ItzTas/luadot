@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 
-use crate::utils;
+use crate::{lua, utils};
 
 #[derive(Debug, Args)]
 pub struct EditArgs {
@@ -10,7 +10,7 @@ pub struct EditArgs {
 }
 
 pub fn edit_cmd(args: EditArgs) -> Result<()> {
-    let repo = utils::require_repo("edit")?;
+    let repo = utils::require_repo("edit", lua::load_config()?.repo_dir())?;
     let home = utils::home_dir()?;
     let in_repo = utils::managed_path("edit", &home, &repo, &args.path)?;
 

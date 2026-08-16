@@ -22,10 +22,10 @@ pub struct StatusArgs {
 }
 
 pub fn status_cmd(args: StatusArgs) -> Result<()> {
-    let repo = utils::require_repo("status")?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("status", config.repo_dir())?;
 
     let home = utils::home_dir()?;
-    let config = lua::load_config()?;
 
     let root = match args.path.as_deref() {
         Some(path) => utils::managed_path("status", &home, &repo, path)?,
@@ -37,7 +37,7 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
         .filter(|entry| !config.is_ignored(utils::relative(&repo, &entry.target())))
         .filter_map(|entry| match entry {
             Entry::File(file) => Some(file),
-            Entry::Template(_) => None,
+            Entry::Template(_) | Entry::Standalone(_) => None,
         })
         .collect();
     if files.is_empty() {

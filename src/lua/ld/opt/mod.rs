@@ -1,7 +1,10 @@
 mod backup;
+mod backup_dir;
+mod backup_keep;
 mod constants;
 mod link;
 mod pkg_warn;
+mod repo_dir;
 mod table;
 mod value;
 

@@ -54,7 +54,7 @@ pub fn from_classes(dir: &Path, source: &str, classes: &Classes) -> Result<Vec<O
     )
 }
 
-fn destination(command: &str, home: &Path, repo: &Path, dir: &Path) -> Result<PathBuf> {
+pub(super) fn destination(command: &str, home: &Path, repo: &Path, dir: &Path) -> Result<PathBuf> {
     let Some(target) = template_target(dir) else {
         bail!("{command}: {} is not a template directory", dir.display());
     };

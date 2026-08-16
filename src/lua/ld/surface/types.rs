@@ -1,6 +1,6 @@
 use mlua::Lua;
 
-use super::constants::{COMMAND_COST, EXEC_LABEL, SETUP_LABEL, TEMPLATE_COST};
+use super::constants::{COMMAND_COST, EXEC_LABEL, SETUP_LABEL, STANDALONE_LABEL, TEMPLATE_COST};
 use crate::lua::bootstrap::constants::BOOTSTRAP_FILE;
 use crate::lua::config::constants::CONFIG_FILE;
 use crate::lua::template::constants::TEMPLATE_FILE;
@@ -11,6 +11,7 @@ pub enum Surface {
     Bootstrap,
     Setup,
     Template,
+    Standalone,
     Exec,
 }
 
@@ -29,6 +30,7 @@ impl Surface {
             Self::Bootstrap => BOOTSTRAP_FILE,
             Self::Setup => SETUP_LABEL,
             Self::Template => TEMPLATE_FILE,
+            Self::Standalone => STANDALONE_LABEL,
             Self::Exec => EXEC_LABEL,
         }
     }
@@ -36,7 +38,7 @@ impl Surface {
     pub fn cost(self) -> Option<&'static str> {
         match self {
             Self::Config => Some(COMMAND_COST),
-            Self::Template => Some(TEMPLATE_COST),
+            Self::Template | Self::Standalone => Some(TEMPLATE_COST),
             Self::Bootstrap | Self::Setup | Self::Exec => None,
         }
     }
@@ -53,6 +55,7 @@ mod tests {
         assert_eq!(Surface::Bootstrap.label(), "bootstrap.lua");
         assert_eq!(Surface::Setup.label(), "a setup script");
         assert_eq!(Surface::Template.label(), "luadot.lua");
+        assert_eq!(Surface::Standalone.label(), "a `.luadot` file");
         assert_eq!(Surface::Exec.label(), "luadot exec");
     }
 
@@ -60,6 +63,7 @@ mod tests {
     fn only_the_surfaces_running_again_and_again_carry_a_cost() {
         assert!(Surface::Config.cost().is_some());
         assert!(Surface::Template.cost().is_some());
+        assert!(Surface::Standalone.cost().is_some());
         assert!(Surface::Bootstrap.cost().is_none());
         assert!(Surface::Setup.cost().is_none());
         assert!(Surface::Exec.cost().is_none());
