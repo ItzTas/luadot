@@ -187,7 +187,7 @@ fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_i
     write(&repo.join(".bashrc"), "managed\n");
     write(&home.join(".bashrc"), "handwritten\n");
     write(
-        &home.join(".config/luadot/ld.lua"),
+        &home.join(".config/luadot/config.lua"),
         r#"ld.opt.backup_dir("~/saved")"#,
     );
     write_state(&home, &repo);
@@ -239,7 +239,7 @@ fn the_configuration_points_luadot_at_its_own_repository() {
     let repo = root.path().join("dotfiles");
     write(&repo.join(".bashrc"), "managed\n");
     write(
-        &home.join(".config/luadot/ld.lua"),
+        &home.join(".config/luadot/config.lua"),
         &format!("ld.opt.repo_dir({:?})", repo.display()),
     );
     write_state(&home, &root.path().join("gone"));
@@ -266,7 +266,7 @@ fn a_limit_drops_the_oldest_backups() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     write(&repo.join(".bashrc"), "managed\n");
-    write(&home.join(".config/luadot/ld.lua"), "ld.opt.backup_keep(2)");
+    write(&home.join(".config/luadot/config.lua"), "ld.opt.backup_keep(2)");
     write_state(&home, &repo);
 
     for contents in ["first\n", "second\n", "third\n"] {
@@ -314,7 +314,7 @@ fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
     let repo = root.path().join("repo");
     write(&repo.join(".bashrc"), "managed\n");
     write(
-        &home.join(".config/luadot/ld.lua"),
+        &home.join(".config/luadot/config.lua"),
         r#"ld.opt.link("symbolic")"#,
     );
     write_state(&home, &repo);

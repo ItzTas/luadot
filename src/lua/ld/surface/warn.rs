@@ -79,7 +79,7 @@ mod tests {
     fn the_configuration_surface_names_the_call_and_the_way_out() {
         let message = slow_message(Surface::Config, "pkg.install").unwrap();
 
-        assert!(message.contains("`ld.pkg.install` in ld.lua"));
+        assert!(message.contains("`ld.pkg.install` in config.lua"));
         assert!(message.contains("runs before every command"));
         assert!(message.contains("bootstrap.lua is where it belongs"));
         assert!(message.contains("`ld.opt.pkg_warn(false)`"));
@@ -104,7 +104,7 @@ mod tests {
         let message = inert_message(Surface::Setup, "rules", Surface::Config);
 
         assert!(message.contains("`ld.rules` in a setup script does nothing"));
-        assert!(message.contains("ld.lua is where it has an effect"));
+        assert!(message.contains("config.lua is where it has an effect"));
         assert!(message.contains("`ld.opt.pkg_warn(false)`"));
     }
 

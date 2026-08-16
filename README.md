@@ -157,11 +157,11 @@ The argument is a `.lua` path when it names an existing file or ends in `.lua`,
 and Lua source otherwise. Everything after it reaches the script through
 `ld.argv.args`. A file requires modules from the `lua/` directory next to it, a
 source string from the one in your configuration directory, and neither runs
-`ld.lua` first: `exec` is a scratchpad, not a command that configures anything.
+`config.lua` first: `exec` is a scratchpad, not a command that configures anything.
 
 ## Configuration
 
-luadot runs `~/.config/luadot/ld.lua` (or `$XDG_CONFIG_HOME/luadot/ld.lua`)
+luadot runs `~/.config/luadot/config.lua` (or `$XDG_CONFIG_HOME/luadot/config.lua`)
 before every command. The script configures luadot through the global `ld`
 interface; without the file, the defaults apply.
 
@@ -212,14 +212,14 @@ conditionals per machine, loops building pattern lists, local helper functions.
 
 ### One interface everywhere
 
-`ld` is the same interface in every script luadot runs — `ld.lua`,
+`ld` is the same interface in every script luadot runs — `config.lua`,
 `bootstrap.lua`, the setup scripts, a template's `luadot.lua` and
 `luadot exec` all carry every call. What changes is what a call *does* once it runs, and luadot says it
 instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.repo_dir`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `ld.lua`, which builds the configuration | does nothing, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.repo_dir`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
 | `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand` | `luadot.lua`, which produces a template's files | does nothing and yields `nil`, warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
@@ -228,12 +228,12 @@ A call away from where it has an effect is not an error; it runs, does nothing
 and says so:
 
 ```
-luadot: `ld.rules` in a setup script does nothing; ld.lua is where it has an
+luadot: `ld.rules` in a setup script does nothing; config.lua is where it has an
 effect (silence it with `ld.opt.pkg_warn(false)`)
 ```
 
 `ld.path` carries `home` and `config` everywhere, `repo` once a repository is
-set, and `dir` inside a template. Inside `ld.lua` itself, `ld.path.repo` is the
+set, and `dir` inside a template. Inside `config.lua` itself, `ld.path.repo` is the
 repository luadot knew about before the file ran, so it does not answer for an
 `ld.opt.repo_dir` set in that same file; every script luadot runs afterwards —
 `bootstrap.lua`, a setup script, a template — gets the resolved one.
@@ -313,7 +313,7 @@ ld.class({ name = "email", prompt = "Which email do you use for git?" })
 Declaring the same name twice replaces the first declaration, so a required
 module can declare a class the configuration then refines.
 
-`ld.class.get` reads the answer, and reads it the same in `ld.lua`,
+`ld.class.get` reads the answer, and reads it the same in `config.lua`,
 `bootstrap.lua`, a setup script, a template and `luadot exec`:
 
 ```lua
@@ -366,7 +366,7 @@ without one the command says so and names the way out,
 
 `bootstrap` asks for whatever is still unanswered before it runs
 `bootstrap.lua`, and so does `clone` when it offers to run it. The declarations
-come from `~/.config/luadot/ld.lua`, so a machine only reaches the ones its
+come from `~/.config/luadot/config.lua`, so a machine only reaches the ones its
 repository ships after that file is in place.
 
 ### The invocation
@@ -450,13 +450,13 @@ them and answers a call of its own.
 
 `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup` and `ld.setup.all` reach other
 programs, the package manager and the setup scripts, which takes seconds to
-minutes. `ld.lua` runs before every command, so a call to one of them there
+minutes. `config.lua` runs before every command, so a call to one of them there
 makes `status`, `apply`, `add` and the rest pay that cost every single time.
-They belong in `bootstrap.lua`, which runs once, and calling them from `ld.lua`
+They belong in `bootstrap.lua`, which runs once, and calling them from `config.lua`
 prints a warning:
 
 ```
-luadot: `ld.pkg.install` in ld.lua runs before every command and will slow all
+luadot: `ld.pkg.install` in config.lua runs before every command and will slow all
 of them down; bootstrap.lua is where it belongs (silence it with
 `ld.opt.pkg_warn(false)`)
 ```
@@ -486,7 +486,7 @@ under it and the configuration can be split like a Neovim one:
 
 ```
 ~/.config/luadot/
-├── ld.lua
+├── config.lua
 └── lua/
     ├── patterns.lua        -- require("patterns")
     └── editors/
@@ -499,7 +499,7 @@ require("editors")
 ```
 
 `ld` is a global, so a required module calls it directly, returns values for
-`ld.lua` to pass along, or exposes functions to be called from there.
+`config.lua` to pass along, or exposes functions to be called from there.
 
 ### Patterns
 
@@ -643,7 +643,7 @@ directory:
 | Missing | Reason |
 | --- | --- |
 | several outputs | there is no `ld.alt.out` to call |
-| `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `ld.lua` still applies |
+| `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `config.lua` still applies |
 | `require` of a `lua/` directory | there is no directory |
 | `ld.alt.*` | inert, warned |
 
