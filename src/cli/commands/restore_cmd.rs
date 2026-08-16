@@ -79,20 +79,33 @@ pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
 }
 
 fn list(taken: &[(u64, PathBuf)]) -> Result<()> {
-    let now = utils::now()?;
+    let rows = rows(taken, utils::now()?)?;
+    let width = rows
+        .iter()
+        .map(|(_, ago, _)| ago.chars().count())
+        .max()
+        .unwrap_or_default()
+        + output::GAP.len();
 
-    for (stamp, dir) in taken.iter().rev() {
-        let count = files::collect_files("restore", dir)?.len();
+    for (stamp, ago, count) in rows {
         output::field(
             stamp,
-            format!(
-                "{}  {count} file(s)",
-                ago(now.saturating_sub(*stamp) / MILLIS)
-            ),
+            format!("{}{count} file(s)", output::column(ago, width)),
         );
     }
 
     Ok(())
+}
+
+fn rows(taken: &[(u64, PathBuf)], now: u64) -> Result<Vec<(u64, String, usize)>> {
+    taken
+        .iter()
+        .rev()
+        .map(|(stamp, dir)| {
+            let count = files::collect_files("restore", dir)?.len();
+            Ok((*stamp, ago(now.saturating_sub(*stamp) / MILLIS), count))
+        })
+        .collect()
 }
 
 fn foresee(dir: &Path, home: &Path, saved: &[PathBuf], stamp: u64) -> Result<()> {
