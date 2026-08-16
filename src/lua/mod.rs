@@ -1,6 +1,7 @@
 mod bootstrap;
 mod config;
 mod constants;
+mod embed;
 mod exec;
 mod ld;
 mod runtime;
