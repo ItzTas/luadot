@@ -21,10 +21,10 @@ pub struct ApplyArgs {
 }
 
 pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
-    let repo = utils::require_repo("apply")?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("apply", config.repo_dir())?;
 
     let home = utils::home_dir()?;
-    let config = lua::load_config()?;
 
     let root = match args.path.as_deref() {
         Some(path) => utils::managed_path("apply", &home, &repo, path)?,

@@ -3,22 +3,24 @@ use mlua::{Lua, Table, Value};
 use super::super::constants::API;
 use super::super::parse::{external, lookup};
 use super::super::table::{Builder, build};
-use super::constants::{BACKUP, LINK, NAMESPACE, PKG_WARN};
-use super::{backup, link, pkg_warn};
+use super::constants::{BACKUP, LINK, NAMESPACE, PKG_WARN, REPO_DIR};
+use super::{backup, link, pkg_warn, repo_dir};
 
 type Setter = fn(&Lua, Value) -> mlua::Result<()>;
 
-const SETTERS: [(&str, Setter); 3] = [
+const SETTERS: [(&str, Setter); 4] = [
     (BACKUP, backup::set),
     (LINK, link::set),
     (PKG_WARN, pkg_warn::set),
+    (REPO_DIR, repo_dir::set),
 ];
 
 pub fn table(lua: &Lua) -> mlua::Result<Table> {
-    let functions: [(&str, Builder); 3] = [
+    let functions: [(&str, Builder); 4] = [
         (BACKUP, backup::function),
         (LINK, link::function),
         (PKG_WARN, pkg_warn::function),
+        (REPO_DIR, repo_dir::function),
     ];
 
     let opt = build(lua, &functions)?;
@@ -82,7 +84,7 @@ mod tests {
         );
 
         assert!(err.contains("unknown option `lnik`"));
-        assert!(err.contains("available: backup, link, pkg_warn"));
+        assert!(err.contains("available: backup, link, pkg_warn, repo_dir"));
     }
 
     #[test]

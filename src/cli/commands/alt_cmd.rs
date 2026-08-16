@@ -28,10 +28,10 @@ struct Run {
 }
 
 pub fn alt_cmd(args: AltArgs) -> Result<()> {
-    let repo = utils::require_repo("alt")?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("alt", config.repo_dir())?;
 
     let home = utils::home_dir()?;
-    let config = lua::load_config()?;
     let classes = state::load()?.classes().clone();
 
     let root = match args.path.as_deref() {

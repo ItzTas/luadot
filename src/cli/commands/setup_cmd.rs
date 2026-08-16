@@ -10,7 +10,7 @@ pub struct SetupArgs {
 }
 
 pub fn setup_cmd(args: SetupArgs) -> Result<()> {
-    let repo = utils::require_repo("setup")?;
+    let repo = utils::require_repo("setup", lua::load_config()?.repo_dir())?;
 
     if args.names.is_empty() {
         let names = lua::list_setups("setup", &repo)?;

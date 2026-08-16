@@ -2,6 +2,7 @@ mod backup;
 mod constants;
 mod link;
 mod pkg_warn;
+mod repo_dir;
 mod table;
 mod value;
 

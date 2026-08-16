@@ -6,7 +6,7 @@ A dotfiles manager configured in Lua.
 
 | Command | Effect |
 | --- | --- |
-| `luadot clone <url>` | Clones a dotfiles repository and makes it the managed one. |
+| `luadot clone <url> [dir]` | Clones a dotfiles repository and makes it the managed one. |
 | `luadot add <path>...` | Starts managing a file or directory, linking it into the repository. |
 | `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving your home copy in place. |
 | `luadot status [path]` | Lists the managed files whose system copy is not in sync. |
@@ -24,6 +24,29 @@ A dotfiles manager configured in Lua.
 
 `luadot --help` explains any command in place (`luadot rm --help`), and
 `luadot --version` prints the version.
+
+### Where the repository lives
+
+`clone` puts it in `~/.local/share/luadot/repo` (or `$XDG_DATA_HOME/luadot/repo`)
+and remembers the path, so nothing else has to be told about it. A directory of
+your own is given to `clone` directly, resolved against the directory you are
+in, the way `git clone` does it:
+
+```
+luadot clone git@github.com:me/dotfiles.git ~/dotfiles
+```
+
+`ld.opt.repo_dir` says it in the configuration instead, which is what a
+repository luadot did not clone needs — the one already sitting in `~/dotfiles`
+from before, or a checkout shared with another tool:
+
+```lua
+ld.opt.repo_dir("~/dotfiles")
+```
+
+It wins over what `clone` remembered, so it is also how a machine follows a
+repository that moved. The path is read on every command; luadot never moves the
+directory for you, and points at it where it stands.
 
 `status` reports one line per file that `apply` would touch, and a count for
 everything else:
@@ -137,6 +160,7 @@ ld.rules({
 | `ld.opt.link(mode)` | `"hard"`, `"symbolic"` | Default strategy used to link a managed file. |
 | `ld.opt.backup(enabled)` | `true`, `false` | Whether `apply` and `alt` copy a file aside before replacing it. Defaults to `true`. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
+| `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 | `ld.git.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.git.ignore(patterns)` | a pattern or a list of them | Marks files as never managed. |
@@ -171,7 +195,7 @@ instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `ld.lua`, which builds the configuration | does nothing, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.repo_dir`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `ld.lua`, which builds the configuration | does nothing, warns |
 | `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand` | `luadot.lua`, which produces a template's files | does nothing and yields `nil`, warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
@@ -185,7 +209,10 @@ effect (silence it with `ld.opt.pkg_warn(false)`)
 ```
 
 `ld.path` carries `home` and `config` everywhere, `repo` once a repository is
-set, and `dir` inside a template.
+set, and `dir` inside a template. Inside `ld.lua` itself, `ld.path.repo` is the
+repository luadot knew about before the file ran, so it does not answer for an
+`ld.opt.repo_dir` set in that same file; every script luadot runs afterwards —
+`bootstrap.lua`, a setup script, a template — gets the resolved one.
 
 ### The machine
 

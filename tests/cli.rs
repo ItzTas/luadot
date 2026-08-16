@@ -9,6 +9,10 @@ fn luadot(home: &Path) -> Command {
     command
 }
 
+fn read(path: &Path) -> String {
+    std::fs::read_to_string(path).unwrap()
+}
+
 fn write(path: &Path, contents: &str) {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).unwrap();
@@ -38,16 +42,12 @@ fn version_prints_the_package_version() {
 fn help_lists_the_commands() {
     let home = tempfile::tempdir().unwrap();
 
-    luadot(home.path())
-        .arg("--help")
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("Usage: luadot")
-                .and(predicate::str::contains("apply"))
-                .and(predicate::str::contains("restore"))
-                .and(predicate::str::contains("completions")),
-        );
+    luadot(home.path()).arg("--help").assert().success().stdout(
+        predicate::str::contains("Usage: luadot")
+            .and(predicate::str::contains("apply"))
+            .and(predicate::str::contains("restore"))
+            .and(predicate::str::contains("completions")),
+    );
 }
 
 #[test]
@@ -166,6 +166,34 @@ fn add_then_apply_manage_a_file_end_to_end() {
         .assert()
         .success()
         .stdout(predicate::str::contains("1 managed file(s)"));
+}
+
+#[test]
+fn the_configuration_points_luadot_at_its_own_repository() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("dotfiles");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/ld.lua"),
+        &format!("ld.opt.repo_dir({:?})", repo.display()),
+    );
+    write_state(&home, &root.path().join("gone"));
+
+    luadot(&home).arg("apply").assert().success();
+
+    assert_eq!(read(&home.join(".bashrc")), "managed\n");
+}
+
+#[test]
+fn clone_takes_the_directory_to_clone_into() {
+    let home = tempfile::tempdir().unwrap();
+
+    luadot(home.path())
+        .args(["clone", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[DIR]"));
 }
 
 #[test]

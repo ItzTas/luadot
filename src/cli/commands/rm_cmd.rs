@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::files;
+use crate::lua;
 use crate::output;
 use crate::utils;
 
@@ -36,7 +37,8 @@ enum Plan {
 }
 
 pub fn rm_cmd(args: RmArgs) -> Result<()> {
-    let repo = utils::require_repo("rm")?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("rm", config.repo_dir())?;
     let home = utils::home_dir()?;
 
     let files = plan(&home, &repo, &args.paths)?;
