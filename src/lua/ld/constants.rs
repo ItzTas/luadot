@@ -2,6 +2,10 @@ use crate::files::{ConflictPolicy, LinkMode};
 
 pub const API: &str = "ld";
 
+pub const MATCH: &str = "match";
+
+pub const REGEX: &str = "regex";
+
 pub const LINK_MODES: [(&str, LinkMode); 2] =
     [("hard", LinkMode::Hard), ("symbolic", LinkMode::Symbolic)];
 

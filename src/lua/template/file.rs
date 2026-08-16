@@ -115,6 +115,25 @@ mod tests {
     }
 
     #[test]
+    fn a_bare_name_has_nothing_to_define_it() {
+        let root = tempfile::tempdir().unwrap();
+
+        let err = format!(
+            "{:#}",
+            load(
+                root.path(),
+                ".zshrc.luadot",
+                "export EDITOR=<%= editor %>\n",
+                &Classes::default(),
+            )
+            .unwrap_err()
+        );
+
+        assert!(err.contains("alt: failed to run"));
+        assert!(err.contains("was nil"));
+    }
+
+    #[test]
     fn a_broken_template_reports_the_command_and_the_file() {
         let root = tempfile::tempdir().unwrap();
 

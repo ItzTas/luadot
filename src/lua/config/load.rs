@@ -119,7 +119,7 @@ mod tests {
         std::fs::create_dir_all(modules.join("editors")).unwrap();
         std::fs::write(
             modules.join("patterns.lua"),
-            r#"return { "*.swp", ".cache/**" }"#,
+            r#"return { { match = "*.swp", ignore = true }, { match = ".cache/**", ignore = true } }"#,
         )
         .unwrap();
         std::fs::write(
@@ -131,7 +131,7 @@ mod tests {
         std::fs::write(
             &path,
             r#"
-            ld.git.ignore(require("patterns"))
+            ld.rules(require("patterns"))
             require("editors")
             "#,
         )

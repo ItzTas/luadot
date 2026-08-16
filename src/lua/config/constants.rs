@@ -1,6 +1,6 @@
 use glob::MatchOptions;
 
-pub const CONFIG_FILE: &str = "ld.lua";
+pub const CONFIG_FILE: &str = "config.lua";
 
 pub const GIT_DIR: &str = ".git";
 

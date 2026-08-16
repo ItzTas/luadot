@@ -47,14 +47,11 @@ mod tests {
 
     const EVERY_CALL: &str = r#"
         assert(type(ld.rules) == "function", "rules is missing")
-        for _, name in ipairs({ "out", "file", "render" }) do
+        for _, name in ipairs({ "out", "file", "render", "expand", "read", "exists", "glob", "json" }) do
           assert(type(ld.alt[name]) == "function", "alt." .. name .. " is missing")
         end
-        for _, name in ipairs({ "ignore", "conflict" }) do
-          assert(type(ld.git[name]) == "function", "git." .. name .. " is missing")
-        end
         assert(type(getmetatable(ld.git).__call) == "function", "git is not callable")
-        for _, name in ipairs({ "backup", "backup_dir", "backup_keep", "link", "pkg_warn", "repo_dir" }) do
+        for _, name in ipairs({ "backup", "backup_dir", "backup_keep", "conflict", "link", "pkg_warn", "repo_dir" }) do
           assert(type(ld.opt[name]) == "function", "opt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.opt).__call) == "function", "opt is not callable")
@@ -138,10 +135,10 @@ mod tests {
             r#"
             ld.opt.pkg_warn(false)
             ld.rules({ { match = ".ssh/**", link = "symbolic" } })
+            ld.rules({ { match = "*.swp", ignore = true } })
             ld.opt.link("symbolic")
             ld.opt({ link = "symbolic" })
-            ld.git.ignore("*.swp")
-            ld.git.conflict("skip")
+            ld.opt.conflict("skip")
             ld.class({ name = "form-factor" })
             "#,
         );
@@ -171,6 +168,11 @@ mod tests {
             ld.opt.pkg_warn(false)
             assert(ld.alt.file("laptop.zsh") == nil, "alt.file produced a handle")
             assert(ld.alt.render("init.tmpl.lua") == nil, "alt.render produced a string")
+            assert(ld.alt.expand("init.tmpl.lua") == nil, "alt.expand produced a string")
+            assert(ld.alt.read("laptop.zsh") == nil, "alt.read produced a string")
+            assert(ld.alt.exists("laptop.zsh") == false, "alt.exists answered for a template")
+            assert(ld.alt.glob("*.zsh") == nil, "alt.glob produced a list")
+            assert(ld.alt.json({ n = 1 }) == '{\n  "n": 1\n}', "alt.json needs no template")
             ld.alt.out({ content = "generated\n" })
             "#,
         );

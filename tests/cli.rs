@@ -187,7 +187,7 @@ fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_i
     write(&repo.join(".bashrc"), "managed\n");
     write(&home.join(".bashrc"), "handwritten\n");
     write(
-        &home.join(".config/luadot/ld.lua"),
+        &home.join(".config/luadot/config.lua"),
         r#"ld.opt.backup_dir("~/saved")"#,
     );
     write_state(&home, &repo);
@@ -239,7 +239,7 @@ fn the_configuration_points_luadot_at_its_own_repository() {
     let repo = root.path().join("dotfiles");
     write(&repo.join(".bashrc"), "managed\n");
     write(
-        &home.join(".config/luadot/ld.lua"),
+        &home.join(".config/luadot/config.lua"),
         &format!("ld.opt.repo_dir({:?})", repo.display()),
     );
     write_state(&home, &root.path().join("gone"));
@@ -266,7 +266,10 @@ fn a_limit_drops_the_oldest_backups() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     write(&repo.join(".bashrc"), "managed\n");
-    write(&home.join(".config/luadot/ld.lua"), "ld.opt.backup_keep(2)");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        "ld.opt.backup_keep(2)",
+    );
     write_state(&home, &repo);
 
     for contents in ["first\n", "second\n", "third\n"] {
@@ -314,7 +317,7 @@ fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
     let repo = root.path().join("repo");
     write(&repo.join(".bashrc"), "managed\n");
     write(
-        &home.join(".config/luadot/ld.lua"),
+        &home.join(".config/luadot/config.lua"),
         r#"ld.opt.link("symbolic")"#,
     );
     write_state(&home, &repo);
@@ -377,4 +380,137 @@ fn alt_resolves_both_template_forms_and_the_other_commands_walk_past_them() {
         .stdout(predicate::str::contains("nothing is managed"));
     assert!(!home.join(".zshrc").exists());
     assert!(!home.join(".zprofile").exists());
+}
+
+#[test]
+fn new_creates_both_template_forms_and_alt_resolves_them() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repo).unwrap();
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .arg("new")
+        .arg(home.join(".config/nvim/init.lua"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("created"));
+    luadot(&home)
+        .args(["new", "-f", "~/.zprofile.luadot"])
+        .assert()
+        .success();
+
+    assert_eq!(
+        read(&repo.join(".config/nvim/init.lua.luadot/luadot.lua")),
+        "return \"\"\n"
+    );
+    assert_eq!(read(&repo.join(".zprofile.luadot")), "");
+
+    luadot(&home)
+        .arg("new")
+        .arg(home.join(".zprofile"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("already exists"));
+
+    luadot(&home)
+        .arg("alt")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "resolved 2 template(s) into 2 file(s)",
+        ));
+
+    assert_eq!(read(&home.join(".config/nvim/init.lua")), "");
+    assert_eq!(read(&home.join(".zprofile")), "");
+}
+
+#[test]
+fn a_rule_runs_its_command_once_for_every_file_apply_touched() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let reloaded = root.path().join("reloaded");
+    write(&repo.join(".config/mako/config"), "font=monospace\n");
+    write(&repo.join(".config/mako/colors"), "background=#000000\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        &format!(
+            r#"ld.rules({{ {{ match = ".config/mako/**", on_change = "printf x >> {}" }} }})"#,
+            reloaded.display()
+        ),
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+
+    assert_eq!(read(&home.join(".config/mako/config")), "font=monospace\n");
+    assert_eq!(read(&reloaded), "x");
+
+    std::fs::remove_file(&reloaded).unwrap();
+
+    luadot(&home).arg("apply").assert().success();
+    assert!(!reloaded.exists());
+}
+
+#[test]
+fn alt_builds_a_file_out_of_fragments_and_runs_the_command_that_follows_it() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let restarted = root.path().join("restarted");
+    write(
+        &repo.join(".zshrc.luadot/conf.d/20-path.zsh"),
+        "path+=(b)\n",
+    );
+    write(
+        &repo.join(".zshrc.luadot/conf.d/10-env.zsh"),
+        "export A=1\n",
+    );
+    write(
+        &repo.join(".zshrc.luadot/luadot.lua"),
+        &format!(
+            r#"
+            local parts = {{}}
+            for _, name in ipairs(ld.alt.glob("conf.d/*.zsh")) do
+              parts[#parts + 1] = ld.alt.read(name)
+            end
+
+            ld.alt.out({{
+              content = table.concat(parts, ""),
+              mode = "600",
+              on_change = "printf ok > {}",
+            }})
+            "#,
+            restarted.display()
+        ),
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("alt").assert().success();
+
+    assert_eq!(read(&home.join(".zshrc")), "export A=1\npath+=(b)\n");
+    assert_eq!(
+        std::fs::metadata(home.join(".zshrc"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o7777,
+        0o600
+    );
+    assert_eq!(read(&restarted), "ok");
+
+    std::fs::remove_file(&restarted).unwrap();
+
+    luadot(&home)
+        .arg("alt")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 unchanged"));
+    assert!(!restarted.exists());
 }

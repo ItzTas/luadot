@@ -2,7 +2,7 @@ use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
     AddArgs, AltArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, EditArgs,
-    ExecArgs, GitArgs, PushArgs, RestoreArgs, RmArgs, SetupArgs, StatusArgs,
+    ExecArgs, GitArgs, NewArgs, PushArgs, RestoreArgs, RmArgs, SetupArgs, StatusArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -39,6 +39,8 @@ pub enum Cmd {
     Apply(ApplyArgs),
     #[command(about = "Run the templates and put the files they produce on the system")]
     Alt(AltArgs),
+    #[command(about = "Create an empty template in the repository")]
+    New(NewArgs),
     #[command(about = "Put back the files an earlier apply or alt replaced")]
     Restore(RestoreArgs),
     #[command(about = "Open the repository's copy of a file in $VISUAL/$EDITOR")]
@@ -181,6 +183,25 @@ mod tests {
             }
             other => panic!("parsed {other:?}"),
         }
+    }
+
+    #[test]
+    fn new_takes_one_path_and_the_file_flag() {
+        let cli = parse(&["luadot", "new", "-f", "~/.zprofile"]).unwrap();
+
+        match cli.command {
+            Cmd::New(args) => {
+                assert!(args.file);
+                assert_eq!(args.path, "~/.zprofile");
+            }
+            other => panic!("parsed {other:?}"),
+        }
+    }
+
+    #[test]
+    fn new_refuses_a_second_path() {
+        let err = parse(&["luadot", "new", ".zshrc", ".vimrc"]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::UnknownArgument);
     }
 
     #[test]

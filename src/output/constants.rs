@@ -8,6 +8,8 @@ pub const LABEL_WIDTH: usize = 9;
 
 pub const FIELD_WIDTH: usize = 12;
 
+pub const GAP: &str = "  ";
+
 pub const STYLES: [(Tone, Style); 5] = [
     (Tone::Good, AnsiColor::Green.on_default()),
     (Tone::Warning, AnsiColor::Yellow.on_default()),

@@ -9,9 +9,7 @@ use crate::lua;
 use crate::output;
 use crate::utils::{self, Backup};
 
-const PREVIEW_LIMIT: usize = 10;
-
-const YES_FLAGS: &str = "-y or --yes";
+use super::super::constants::{PREVIEW_LIMIT, YES_FLAGS};
 
 #[derive(Debug, Args)]
 pub struct RmArgs {

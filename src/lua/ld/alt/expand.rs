@@ -89,6 +89,21 @@ mod tests {
     }
 
     #[test]
+    fn a_var_shadows_a_global() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+        std::fs::write(dir.join("shadow.tmpl"), "<%= type %>").unwrap();
+
+        let outputs = from_template(
+            &dir,
+            r#"return ld.alt.expand("shadow.tmpl", { type = "shadowed" })"#,
+        )
+        .unwrap();
+
+        assert_eq!(outputs[0].content(), &Content::Text("shadowed".to_string()));
+    }
+
+    #[test]
     fn the_vars_are_optional() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
@@ -127,6 +142,69 @@ mod tests {
         .unwrap();
 
         assert_eq!(outputs[0].content(), &Content::Text("shared 1".to_string()));
+    }
+
+    #[test]
+    fn a_template_expands_another_one() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+        std::fs::write(dir.join("header.tmpl.zsh"), "# <%= title %>\n").unwrap();
+        std::fs::write(
+            dir.join("zshrc.tmpl.zsh"),
+            "<%= ld.alt.expand(\"header.tmpl.zsh\", { title = \"zsh\" }) -%>\nexport EDITOR=<%= editor %>\n",
+        )
+        .unwrap();
+
+        let outputs = from_template(
+            &dir,
+            r#"return ld.alt.expand("zshrc.tmpl.zsh", { editor = "nvim" })"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            outputs[0].content(),
+            &Content::Text("# zsh\nexport EDITOR=nvim\n".to_string())
+        );
+    }
+
+    #[test]
+    fn every_template_keeps_its_own_vars_and_its_own_buffer() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+        std::fs::write(dir.join("partial.tmpl"), "[<%= name %>]").unwrap();
+        std::fs::write(
+            dir.join("outer.tmpl"),
+            "<%= name %><%= ld.alt.expand(\"partial.tmpl\", { name = \"inner\" }) %><%= name %>",
+        )
+        .unwrap();
+
+        let outputs = from_template(
+            &dir,
+            r#"return ld.alt.expand("outer.tmpl", { name = "outer" })"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            outputs[0].content(),
+            &Content::Text("outer[inner]outer".to_string())
+        );
+    }
+
+    #[test]
+    fn a_partial_that_fails_reports_its_own_file() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+        std::fs::write(dir.join("partial.tmpl"), "fine\n<%= missing() %>\n").unwrap();
+        std::fs::write(
+            dir.join("outer.tmpl"),
+            "<%= ld.alt.expand(\"partial.tmpl\") %>",
+        )
+        .unwrap();
+
+        let err = error(&dir, r#"return ld.alt.expand("outer.tmpl")"#);
+
+        assert!(err.contains("partial.tmpl"));
+        assert!(err.contains(":2:"));
     }
 
     #[test]

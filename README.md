@@ -12,6 +12,7 @@ A dotfiles manager configured in Lua.
 | `luadot status [path]` | Lists the managed files whose system copy is not in sync. |
 | `luadot apply [-n] [path]` | Puts the repository's files back on the system. |
 | `luadot alt [-n] [path]` | Runs the templates and puts the files they produce on the system. |
+| `luadot new [-f] <path>` | Creates an empty template in the repository, for the file that path names. |
 | `luadot restore [-l] [-y] [-n] [backup]` | Puts back the files an earlier `apply` or `alt` replaced. |
 | `luadot edit <path>` | Opens the repository's copy of a file in `$VISUAL`/`$EDITOR`. |
 | `luadot exec <source\|file.lua> [args]...` | Runs Lua with `ld` installed, from a string or a `.lua` file. |
@@ -157,25 +158,69 @@ The argument is a `.lua` path when it names an existing file or ends in `.lua`,
 and Lua source otherwise. Everything after it reaches the script through
 `ld.argv.args`. A file requires modules from the `lua/` directory next to it, a
 source string from the one in your configuration directory, and neither runs
-`ld.lua` first: `exec` is a scratchpad, not a command that configures anything.
+`config.lua` first: `exec` is a scratchpad, not a command that configures anything.
 
 ## Configuration
 
-luadot runs `~/.config/luadot/ld.lua` (or `$XDG_CONFIG_HOME/luadot/ld.lua`)
+luadot runs `~/.config/luadot/config.lua` (or `$XDG_CONFIG_HOME/luadot/config.lua`)
 before every command. The script configures luadot through the global `ld`
 interface; without the file, the defaults apply.
 
 ```lua
 ld.opt.link("hard")
 
-ld.git.conflict("overwrite")
-ld.git.ignore({ "*.swp", ".cache/**" })
+ld.opt.conflict("overwrite")
 
 ld.rules({
   { match = ".ssh/**", link = "symbolic", conflict = "skip" },
   { match = ".config/nvim/**", conflict = "error" },
+  { match = ".config/mako/**", on_change = "makoctl reload" },
+  { match = "*.swp", ignore = true },
+  { match = ".cache/**", ignore = true },
 })
 ```
+
+A single rule needs no list around it — `ld.rules({ match = ".ssh/**", link =
+"symbolic" })` is the same call carrying one entry.
+
+A rule names the files it covers through `match`, a glob, or through `regex`, a
+regular expression; a rule carries one of the two, never both.
+
+```lua
+ld.rules({
+  { regex = "^\\.config/(nvim|zsh)/", link = "symbolic" },
+  { regex = "\\.sw[po]$", ignore = true },
+})
+```
+
+The expression is [Rust's regex syntax][regex], matched against the path as
+written, with `/` as the separator and no anchoring of its own: `nvim` covers
+every path carrying that word, `^\.ssh/` only what sits under `.ssh/`. Lua
+escapes a backslash as `\\`, so a literal dot is `"\\."` inside the script.
+Neither backreferences nor lookaround exist there, which is what keeps every
+match linear in the length of the path.
+
+[regex]: https://docs.rs/regex/latest/regex/#syntax
+
+A rule carries four more keys, all optional next to `match` or `regex`:
+
+| Key | Values | Effect |
+| --- | --- | --- |
+| `link` | `"hard"`, `"symbolic"` | How the matching files are placed. |
+| `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the system copy differs. |
+| `on_change` | a command line | Runs after `apply` or `alt` created or replaced one of those files. |
+| `ignore` | `true`, `false` | Whether the matching files are left unmanaged. |
+
+Either syntax also matches a directory on behalf of everything under it, so
+`{ match = ".ssh" }` and `{ regex = "^\\.ssh$" }` both cover `.ssh/keys/id_ed25519`.
+
+The last matching rule wins, key by key, so a general rule is narrowed by a
+later one and never merged with it — `{ match = ".cache/**", ignore = true }`
+followed by `{ match = ".cache/keep/**", ignore = false }` ignores everything
+under `.cache/` but that one directory. `on_change` runs once per command line
+and per run, at the end: twenty files under `.config/mako/` changing reload mako
+once, not twenty times. A failing command stops the run after the files are in
+place, and `--dry-run` prints the command instead of running it.
 
 | Call | Arguments | Effect |
 | --- | --- | --- |
@@ -183,12 +228,11 @@ ld.rules({
 | `ld.opt.backup(enabled)` | `true`, `false` | Whether a file is copied aside before luadot writes over it. Defaults to `true`. |
 | `ld.opt.backup_dir(path)` | a directory | Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`. |
 | `ld.opt.backup_keep(count)` | a number of one or more | How many backups to keep; the oldest ones are dropped once there are more. Defaults to keeping every one of them. |
+| `ld.opt.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
-| `ld.git.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
-| `ld.git.ignore(patterns)` | a pattern or a list of them | Marks files as never managed. |
-| `ld.rules(rules)` | a list of rules | Overrides `link` and `conflict` for the files a pattern matches. |
+| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, and marks them as never managed. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |
@@ -212,28 +256,28 @@ conditionals per machine, loops building pattern lists, local helper functions.
 
 ### One interface everywhere
 
-`ld` is the same interface in every script luadot runs — `ld.lua`,
+`ld` is the same interface in every script luadot runs — `config.lua`,
 `bootstrap.lua`, the setup scripts, a template's `luadot.lua` and
 `luadot exec` all carry every call. What changes is what a call *does* once it runs, and luadot says it
 instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.repo_dir`, `ld.git.ignore`, `ld.git.conflict`, `ld.class` | `ld.lua`, which builds the configuration | does nothing, warns |
-| `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand` | `luadot.lua`, which produces a template's files | does nothing and yields `nil`, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
+| `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
-| `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
+| `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
 
 A call away from where it has an effect is not an error; it runs, does nothing
 and says so:
 
 ```
-luadot: `ld.rules` in a setup script does nothing; ld.lua is where it has an
+luadot: `ld.rules` in a setup script does nothing; config.lua is where it has an
 effect (silence it with `ld.opt.pkg_warn(false)`)
 ```
 
 `ld.path` carries `home` and `config` everywhere, `repo` once a repository is
-set, and `dir` inside a template. Inside `ld.lua` itself, `ld.path.repo` is the
+set, and `dir` inside a template. Inside `config.lua` itself, `ld.path.repo` is the
 repository luadot knew about before the file ran, so it does not answer for an
 `ld.opt.repo_dir` set in that same file; every script luadot runs afterwards —
 `bootstrap.lua`, a setup script, a template — gets the resolved one.
@@ -313,7 +357,7 @@ ld.class({ name = "email", prompt = "Which email do you use for git?" })
 Declaring the same name twice replaces the first declaration, so a required
 module can declare a class the configuration then refines.
 
-`ld.class.get` reads the answer, and reads it the same in `ld.lua`,
+`ld.class.get` reads the answer, and reads it the same in `config.lua`,
 `bootstrap.lua`, a setup script, a template and `luadot exec`:
 
 ```lua
@@ -366,7 +410,7 @@ without one the command says so and names the way out,
 
 `bootstrap` asks for whatever is still unanswered before it runs
 `bootstrap.lua`, and so does `clone` when it offers to run it. The declarations
-come from `~/.config/luadot/ld.lua`, so a machine only reaches the ones its
+come from `~/.config/luadot/config.lua`, so a machine only reaches the ones its
 repository ships after that file is in place.
 
 ### The invocation
@@ -376,7 +420,7 @@ configuration can answer differently depending on what was asked:
 
 ```lua
 if ld.argv.name == "apply" then
-  ld.git.conflict("error")
+  ld.opt.conflict("error")
 end
 ```
 
@@ -443,20 +487,17 @@ stops instead of running git somewhere else:
 luadot: `ld.git`: no repository set; run `luadot clone <url>` first
 ```
 
-`ld.git.ignore` and `ld.git.conflict` stay what they are — the namespace carries
-them and answers a call of its own.
-
 ### Slow calls
 
 `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup` and `ld.setup.all` reach other
 programs, the package manager and the setup scripts, which takes seconds to
-minutes. `ld.lua` runs before every command, so a call to one of them there
+minutes. `config.lua` runs before every command, so a call to one of them there
 makes `status`, `apply`, `add` and the rest pay that cost every single time.
-They belong in `bootstrap.lua`, which runs once, and calling them from `ld.lua`
+They belong in `bootstrap.lua`, which runs once, and calling them from `config.lua`
 prints a warning:
 
 ```
-luadot: `ld.pkg.install` in ld.lua runs before every command and will slow all
+luadot: `ld.pkg.install` in config.lua runs before every command and will slow all
 of them down; bootstrap.lua is where it belongs (silence it with
 `ld.opt.pkg_warn(false)`)
 ```
@@ -474,10 +515,10 @@ once. When the placement is deliberate, `ld.opt.pkg_warn(false)` turns every
 warning off, in any script; set it before the call it should cover, since the
 warning is emitted as the call runs.
 
-`ld.git.ignore` and `ld.rules` accumulate, so calling them several times adds to
-what came before. A rule needs a `match` pattern and sets `link`, `conflict`, or
-both. When several rules match a file, the last one wins, and whatever it leaves
-out falls back to the `ld.opt.link` and `ld.git.conflict` defaults.
+`ld.rules` accumulates, so calling it several times adds to what came before. A
+rule needs a `match` pattern and sets `link`, `conflict`, `on_change`, `ignore`,
+or any mix of them. When several rules match a file, the last one wins, and whatever it leaves
+out falls back to the `ld.opt.link` and `ld.opt.conflict` defaults.
 
 ### Splitting the configuration
 
@@ -486,7 +527,7 @@ under it and the configuration can be split like a Neovim one:
 
 ```
 ~/.config/luadot/
-├── ld.lua
+├── config.lua
 └── lua/
     ├── patterns.lua        -- require("patterns")
     └── editors/
@@ -494,12 +535,12 @@ under it and the configuration can be split like a Neovim one:
 ```
 
 ```lua
-ld.git.ignore(require("patterns"))
+ld.rules(require("patterns"))
 require("editors")
 ```
 
 `ld` is a global, so a required module calls it directly, returns values for
-`ld.lua` to pass along, or exposes functions to be called from there.
+`config.lua` to pass along, or exposes functions to be called from there.
 
 ### Patterns
 
@@ -536,6 +577,21 @@ The destination is the template's own path without the suffix, so the
 repository keeps mirroring your home directory. Inside a directory, a `dest`
 of your own overrides it.
 
+`luadot new` creates either form, empty. It takes the path of the file the
+template is for, the `.luadot` suffix being added when it is not already
+there, and mirrors it into the repository the way `add` does:
+
+```
+luadot new ~/.zshrc                  -- ~/dotfiles/.zshrc.luadot/luadot.lua
+luadot new .config/nvim/init.lua     -- ~/dotfiles/.config/nvim/init.lua.luadot/luadot.lua
+luadot new -f ~/.zprofile            -- ~/dotfiles/.zprofile.luadot, a standalone template
+```
+
+A relative path is resolved against the directory you are in, and has to land
+inside your home directory. The directory form gets a `luadot.lua` returning
+an empty string, the file form is an empty file: both resolve to an empty file
+until you write them, and neither replaces anything that is already there.
+
 `luadot.lua` has the `ld` interface, and declares what it produces either by
 calling `ld.alt.out` or by returning the same table:
 
@@ -560,6 +616,10 @@ ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 | `ld.alt.file(name)` | a path | A real file, linked to the destination like a managed one. |
 | `ld.alt.render(name, vars)` | a path and a table | Runs that Lua file with `vars` in scope and returns the string it returns. |
 | `ld.alt.expand(name, vars)` | a path and a table | Renders that embedded template with `vars` in scope and returns the string it emits. |
+| `ld.alt.read(name)` | a path | What that file holds, as a string, never run. |
+| `ld.alt.exists(name)` | a path | Whether that file is there. |
+| `ld.alt.glob(pattern)` | a pattern | The names of the files it matches, sorted, named the way `ld.alt.read` takes them. |
+| `ld.alt.json(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. |
 | `ld.sys` | — | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.cmd(line)` | a command line | Runs it and returns what it printed; also `ld.cmd.<program>(args...)`. |
@@ -575,6 +635,8 @@ A declared file carries what it needs and nothing else:
 | `dest` | a path | Where it lands; `~/` and a relative path both start at your home directory. Defaults to the mirrored path. |
 | `link` | `"hard"`, `"symbolic"` | How an `ld.alt.file` is placed. Defaults to the configured mode. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the destination already holds something else. Defaults to the configured policy. |
+| `mode` | three or four octal digits, as a string | The permissions of the generated file, `"600"` for one holding a secret. Defaults to what your umask gives. Only for generated content: an `ld.alt.file` is the repository's own copy and keeps its own mode. |
+| `on_change` | a command line | Runs through `sh -c` after the file is created or replaced, and only then — an unchanged file runs nothing. Wins over an `on_change` rule matching the same path. |
 
 Returning a string or an `ld.alt.file` is shorthand for a table carrying only
 `content`, so a template selecting a variant fits in one line:
@@ -603,6 +665,82 @@ ld.alt.out({ content = ld.alt.file(ld.path.repo .. "/shared/aliases.zsh") })
 The template's own `lua/` directory is requirable, exactly like the
 configuration's.
 
+### Building a file out of fragments
+
+`ld.alt.glob` lists what the template holds and `ld.alt.read` hands back the
+bytes, so one file can be assembled from fragments that are each versioned on
+their own:
+
+```lua
+-- .zshrc.luadot/luadot.lua
+local parts = {}
+for _, name in ipairs(ld.alt.glob("conf.d/*.zsh")) do
+  parts[#parts + 1] = ld.alt.read(name)
+end
+
+return table.concat(parts, "\n")
+```
+
+`*` stays inside one path segment and `**` crosses them, directories are never
+listed, and the names come back sorted — `10-env.zsh` before `20-path.zsh` — so
+the result never depends on the order the filesystem hands the directory over.
+`ld.alt.exists` answers for a single name, which is what a fallback needs:
+
+```lua
+local name = ld.alt.exists("laptop.zsh") and "laptop.zsh" or "default.zsh"
+return ld.alt.file(name)
+```
+
+A generated file that is JSON is built by `ld.alt.json` instead of by
+`string.format` and hope:
+
+```lua
+return ld.alt.json({
+  editor = ld.class.get("editor") or "nvim",
+  gpu = ld.sys.gpu.vendor,
+})
+```
+
+It takes a table of names or a list, never both in the same table, and its keys
+come out sorted, so the file changes only when the data does. It is the one
+`ld.alt` call that needs no template, so a standalone `.luadot` file has it too.
+
+### Secrets and reloads
+
+A generated file inherits your umask, which is wrong for one holding a secret,
+and a daemon reading a file has to be told the file changed:
+
+```lua
+ld.alt.out({
+  dest = "~/.netrc",
+  content = ld.alt.expand("netrc.tmpl", { token = ld.cmd("pass show api") }),
+  mode = "600",
+})
+
+ld.alt.out({
+  dest = "~/.config/mako/config",
+  content = ld.alt.read("mako.conf"),
+  on_change = "makoctl reload",
+})
+```
+
+`mode` is compared as well as written, so a file that already holds the right
+content with the wrong permissions is reported as differing and put back at
+`600`. `on_change` runs only when the file was actually created or replaced —
+`alt` over an unchanged file runs nothing — and `--dry-run` prints the command
+instead of running it.
+
+The same command belongs in `config.lua` when it is about a path rather than about
+one template, and there it covers plain managed files under `apply` too:
+
+```lua
+ld.rules({ { match = ".config/mako/**", on_change = "makoctl reload" } })
+```
+
+Both forms end up in the same list: every command is deduplicated and runs once,
+at the end of the run. A `on_change` declared by the template wins over a rule
+matching the same destination.
+
 ### Embedded templates
 
 `ld.alt.expand` renders an ERB-style embedded template: text emitted as it
@@ -618,19 +756,34 @@ path+=(<%= dir %>)
 | Tag | Effect |
 | --- | --- |
 | `<% ... %>` | Lua statements, emits nothing |
-| `<%_ ... %>` | the same, and trims the indentation before the tag |
+| `<%_ ... %>` | the same, and strips all whitespace before the tag, newlines included |
 | `<%= expr %>` | emits `tostring(expr)`, raw |
 | `<%- expr %>` | an alias of `<%=` |
 | `<%# ... %>` | a comment, reaches no output |
-| `... -%>` | trims the newline after the tag |
-| `... _%>` | trims the spaces and the newline after the tag |
+| `... -%>` | trims the newline after the tag, except on `<%#` |
+| `... _%>` | removes all whitespace after the tag, newlines included, except on `<%#` |
 | `<%%` | a literal `<%` |
 | `%%>` | a literal `%>`, inside a tag |
 
-There is one output tag and it is always raw — a dotfile is not HTML, so
-nothing is escaped. Every trim is bounded by its own line and can never join
-two lines. Errors report the template's own line, and a `%>` inside a Lua
-string, comment or long bracket does not close the tag.
+The tags are EJS's, with EJS's meanings. There is one output tag and it is
+always raw — a dotfile is not HTML, so nothing is escaped. Beware the
+slurping pair: `<%_` and `_%>` eat newlines too, welding the previous or the
+next line onto the tag's own, so an unindented `<%` closed by `-%>` is the
+everyday recipe. A comment closes on `%>` alone, so the newline after it
+survives and a `<%# ... %>` on a line of its own leaves a blank line behind;
+`<% --[[ ... ]] -%>` is the comment that takes its line with it. Errors report
+the template's own line, an output tag holding `nil` is an error rather than
+the word `nil` in the file, and a `%>` inside a Lua string, comment or long
+bracket does not close the tag.
+
+A template reaches the whole interface, `ld.alt.expand` included, so a partial
+is an ordinary call — each one keeps its own variables and emits into its own
+buffer:
+
+```zsh
+<%= ld.alt.expand("header.tmpl.zsh", { title = "zsh" }) -%>
+export EDITOR=<%= editor %>
+```
 
 ### The standalone form
 
@@ -643,9 +796,9 @@ directory:
 | Missing | Reason |
 | --- | --- |
 | several outputs | there is no `ld.alt.out` to call |
-| `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `ld.lua` still applies |
+| `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `config.lua` still applies |
 | `require` of a `lua/` directory | there is no directory |
-| `ld.alt.*` | inert, warned |
+| `ld.alt.*` | inert, warned; `ld.alt.json` is the exception, it needs no directory |
 
 `ld.path.dir` is `nil` — there is no template directory; `ld.path.repo` still
 reaches a file shared elsewhere in the repository.

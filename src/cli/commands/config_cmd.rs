@@ -6,7 +6,7 @@ use crate::output;
 use crate::state;
 use crate::utils;
 
-const UNSET: &str = "(none)";
+use super::super::constants::UNSET;
 
 #[derive(Debug, Args)]
 pub struct ConfigArgs {
@@ -48,21 +48,9 @@ fn show() -> Result<()> {
     output::field("conflict", config.conflict().name());
     output::field("backup", config.backup());
 
-    print_ignore(&config);
     print_rules(&config);
 
     Ok(())
-}
-
-fn print_ignore(config: &Config) {
-    if config.ignore().is_empty() {
-        return;
-    }
-
-    output::section("ignore");
-    for pattern in config.ignore() {
-        output::line(format!("  {pattern}"));
-    }
 }
 
 fn print_rules(config: &Config) {
@@ -83,6 +71,12 @@ fn overrides(rule: &Rule) -> String {
     }
     if let Some(conflict) = rule.conflict() {
         parts.push(format!("conflict={}", conflict.name()));
+    }
+    if let Some(on_change) = rule.on_change() {
+        parts.push(format!("on_change=`{on_change}`"));
+    }
+    if let Some(ignore) = rule.ignore() {
+        parts.push(format!("ignore={ignore}"));
     }
 
     if parts.is_empty() {
@@ -110,10 +104,15 @@ fn edit() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lua::Matcher;
+
+    fn glob(raw: &str) -> Matcher {
+        Matcher::Glob(glob::Pattern::new(raw).unwrap())
+    }
 
     #[test]
     fn overrides_renders_only_the_keys_a_rule_carries() {
-        let pattern = glob::Pattern::new(".ssh/**").unwrap();
+        let pattern = glob(".ssh/**");
 
         assert_eq!(overrides(&Rule::new(pattern.clone(), None, None)), "");
         assert_eq!(
@@ -131,6 +130,16 @@ mod tests {
                 Some(crate::files::ConflictPolicy::Skip)
             )),
             "  link=hard conflict=skip"
+        );
+    }
+
+    #[test]
+    fn overrides_renders_an_ignored_rule() {
+        let pattern = glob("*.swp");
+
+        assert_eq!(
+            overrides(&Rule::new(pattern, None, None).with_ignore(Some(true))),
+            "  ignore=true"
         );
     }
 }

@@ -20,6 +20,8 @@ pub struct Output {
     content: Content,
     link: Option<LinkMode>,
     conflict: Option<ConflictPolicy>,
+    mode: Option<u32>,
+    on_change: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -54,7 +56,19 @@ impl Output {
             content,
             link,
             conflict,
+            mode: None,
+            on_change: None,
         }
+    }
+
+    pub fn with_mode(mut self, mode: Option<u32>) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    pub fn with_on_change(mut self, on_change: Option<String>) -> Self {
+        self.on_change = on_change;
+        self
     }
 
     pub fn dest(&self) -> &Path {
@@ -71,6 +85,14 @@ impl Output {
 
     pub fn conflict(&self) -> Option<ConflictPolicy> {
         self.conflict
+    }
+
+    pub fn mode(&self) -> Option<u32> {
+        self.mode
+    }
+
+    pub fn on_change(&self) -> Option<&str> {
+        self.on_change.as_deref()
     }
 }
 

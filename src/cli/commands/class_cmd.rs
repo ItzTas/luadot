@@ -6,9 +6,7 @@ use crate::output;
 use crate::state;
 use crate::utils;
 
-const UNSET: &str = "(none)";
-
-const UNDECLARED: &str = "(not declared)";
+use super::super::constants::{UNDECLARED, UNSET};
 
 #[derive(Debug, Args)]
 pub struct ClassArgs {
@@ -96,7 +94,7 @@ fn set(name: Option<String>, values: Vec<String>) -> Result<()> {
 
 fn set_missing(config: &Config) -> Result<()> {
     if config.classes().is_empty() {
-        bail!("class: no class declared; declare one with `ld.class` in ld.lua");
+        bail!("class: no class declared; declare one with `ld.class` in config.lua");
     }
 
     let asked = utils::ask_missing("class", config.classes())?;

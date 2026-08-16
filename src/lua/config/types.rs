@@ -1,7 +1,9 @@
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use glob::Pattern;
 use mlua::{AppDataRefMut, Lua};
+use regex::Regex;
 
 use super::constants::{CLASS_QUESTION, GIT_DIR, MATCH};
 use crate::files::{ConflictPolicy, LinkMode};
@@ -10,7 +12,6 @@ use crate::files::{ConflictPolicy, LinkMode};
 pub struct Config {
     link: LinkMode,
     conflict: ConflictPolicy,
-    ignore: Vec<Pattern>,
     rules: Vec<Rule>,
     classes: Vec<Class>,
     pkg_warn: bool,
@@ -25,7 +26,6 @@ impl Default for Config {
         Self {
             link: LinkMode::default(),
             conflict: ConflictPolicy::default(),
-            ignore: Vec::new(),
             rules: Vec::new(),
             classes: Vec::new(),
             pkg_warn: true,
@@ -38,10 +38,18 @@ impl Default for Config {
 }
 
 #[derive(Debug, Clone)]
+pub enum Matcher {
+    Glob(Pattern),
+    Regex(Regex),
+}
+
+#[derive(Debug, Clone)]
 pub struct Rule {
-    pattern: Pattern,
+    pattern: Matcher,
     link: Option<LinkMode>,
     conflict: Option<ConflictPolicy>,
+    on_change: Option<String>,
+    ignore: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,10 +72,6 @@ impl Config {
 
     pub fn set_conflict(&mut self, conflict: ConflictPolicy) {
         self.conflict = conflict;
-    }
-
-    pub fn add_ignore(&mut self, patterns: Vec<Pattern>) {
-        self.ignore.extend(patterns);
     }
 
     pub fn add_rules(&mut self, rules: Vec<Rule>) {
@@ -127,10 +131,6 @@ impl Config {
         self.conflict
     }
 
-    pub fn ignore(&self) -> &[Pattern] {
-        &self.ignore
-    }
-
     pub fn rules(&self) -> &[Rule] {
         &self.rules
     }
@@ -147,9 +147,10 @@ impl Config {
         if inside_git_dir(relative) {
             return true;
         }
-        self.ignore
-            .iter()
-            .any(|pattern| matches_path_or_ancestor(pattern, relative))
+        self.matching(relative)
+            .filter_map(Rule::ignore)
+            .next_back()
+            .unwrap_or(false)
     }
 
     pub fn link_mode(&self, relative: &Path) -> LinkMode {
@@ -166,6 +167,12 @@ impl Config {
             .unwrap_or(self.conflict)
     }
 
+    pub fn on_change<'a>(&'a self, relative: &'a Path) -> Option<&'a str> {
+        self.matching(relative)
+            .filter_map(Rule::on_change)
+            .next_back()
+    }
+
     fn matching<'a>(&'a self, relative: &'a Path) -> impl DoubleEndedIterator<Item = &'a Rule> {
         self.rules
             .iter()
@@ -173,16 +180,46 @@ impl Config {
     }
 }
 
+impl Matcher {
+    fn matches(&self, relative: &Path) -> bool {
+        match self {
+            Self::Glob(pattern) => pattern.matches_path_with(relative, MATCH),
+            Self::Regex(regex) => regex.is_match(&relative.to_string_lossy()),
+        }
+    }
+}
+
+impl fmt::Display for Matcher {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Glob(pattern) => write!(formatter, "{pattern}"),
+            Self::Regex(regex) => write!(formatter, "/{regex}/"),
+        }
+    }
+}
+
 impl Rule {
-    pub fn new(pattern: Pattern, link: Option<LinkMode>, conflict: Option<ConflictPolicy>) -> Self {
+    pub fn new(pattern: Matcher, link: Option<LinkMode>, conflict: Option<ConflictPolicy>) -> Self {
         Self {
             pattern,
             link,
             conflict,
+            on_change: None,
+            ignore: None,
         }
     }
 
-    pub fn pattern(&self) -> &Pattern {
+    pub fn with_on_change(mut self, on_change: Option<String>) -> Self {
+        self.on_change = on_change;
+        self
+    }
+
+    pub fn with_ignore(mut self, ignore: Option<bool>) -> Self {
+        self.ignore = ignore;
+        self
+    }
+
+    pub fn pattern(&self) -> &Matcher {
         &self.pattern
     }
 
@@ -192,6 +229,14 @@ impl Rule {
 
     pub fn conflict(&self) -> Option<ConflictPolicy> {
         self.conflict
+    }
+
+    pub fn on_change(&self) -> Option<&str> {
+        self.on_change.as_deref()
+    }
+
+    pub fn ignore(&self) -> Option<bool> {
+        self.ignore
     }
 }
 
@@ -235,10 +280,10 @@ fn inside_git_dir(relative: &Path) -> bool {
         .any(|component| component.as_os_str() == GIT_DIR)
 }
 
-fn matches_path_or_ancestor(pattern: &Pattern, relative: &Path) -> bool {
+fn matches_path_or_ancestor(pattern: &Matcher, relative: &Path) -> bool {
     std::iter::successors(Some(relative), |path| path.parent())
         .take_while(|path| !path.as_os_str().is_empty())
-        .any(|path| pattern.matches_path_with(path, MATCH))
+        .any(|path| pattern.matches(path))
 }
 
 #[cfg(test)]
@@ -268,7 +313,38 @@ mod tests {
     fn the_config_file_itself_can_be_managed() {
         let config = Config::default();
 
-        assert!(!config.is_ignored(Path::new(".config/luadot/ld.lua")));
+        assert!(!config.is_ignored(Path::new(".config/luadot/config.lua")));
+    }
+
+    #[test]
+    fn a_regex_reads_the_path_as_a_string() {
+        let matcher = Matcher::Regex(Regex::new(r"\.config/[^/]+/init\.lua$").unwrap());
+
+        assert!(matcher.matches(Path::new(".config/nvim/init.lua")));
+        assert!(!matcher.matches(Path::new(".config/nvim/lua/init.lua")));
+    }
+
+    #[test]
+    fn a_regex_covers_a_subtree_through_its_ancestors() {
+        let matcher = Matcher::Regex(Regex::new(r"^\.ssh$").unwrap());
+
+        assert!(matches_path_or_ancestor(
+            &matcher,
+            Path::new(".ssh/keys/id_ed25519")
+        ));
+        assert!(!matches_path_or_ancestor(&matcher, Path::new(".sshrc")));
+    }
+
+    #[test]
+    fn a_matcher_prints_the_syntax_it_was_written_in() {
+        assert_eq!(
+            Matcher::Glob(Pattern::new(".ssh/**").unwrap()).to_string(),
+            ".ssh/**"
+        );
+        assert_eq!(
+            Matcher::Regex(Regex::new(r"^\.ssh").unwrap()).to_string(),
+            r"/^\.ssh/"
+        );
     }
 
     #[test]

@@ -6,7 +6,7 @@ use clap::Args;
 use crate::files::{self, Entry, SyncOutcome};
 use crate::lua;
 use crate::output;
-use crate::utils::{self, Backup};
+use crate::utils::{self, Backup, Hooks};
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
@@ -54,6 +54,7 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         )?),
     };
 
+    let mut hooks = Hooks::new(args.dry_run);
     let mut created = 0u32;
     let mut replaced = 0u32;
     let mut unchanged = 0u32;
@@ -85,6 +86,8 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
             }
         };
 
+        hooks.record(outcome, config.on_change(relative));
+
         match outcome {
             SyncOutcome::Created => created += 1,
             SyncOutcome::Replaced => replaced += 1,
@@ -104,6 +107,7 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     if let Some(backup) = backup.as_ref() {
         backup.finish()?;
     }
+    hooks.finish("apply")?;
 
     Ok(())
 }

@@ -5,13 +5,8 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use super::commands;
+use super::constants::{DEFAULT_FILTER, TRACE_FILTER, VERBOSE_FILTER};
 use super::types::{Cli, Cmd};
-
-const DEFAULT_FILTER: &str = "warn";
-
-const VERBOSE_FILTER: &str = "luadot=debug";
-
-const TRACE_FILTER: &str = "luadot=trace";
 
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
@@ -51,6 +46,7 @@ fn dispatch(cli: Cli) -> Result<()> {
         Cmd::Edit(args) => commands::edit_cmd(args),
         Cmd::Exec(args) => commands::exec_cmd(args),
         Cmd::Git(args) => commands::git_cmd(args),
+        Cmd::New(args) => commands::new_cmd(args),
         Cmd::Push(args) => commands::push_cmd(args),
         Cmd::Rm(args) => commands::rm_cmd(args),
         Cmd::Setup(args) => commands::setup_cmd(args),

@@ -51,7 +51,7 @@ mod tests {
 
     #[test]
     fn every_surface_names_where_it_runs() {
-        assert_eq!(Surface::Config.label(), "ld.lua");
+        assert_eq!(Surface::Config.label(), "config.lua");
         assert_eq!(Surface::Bootstrap.label(), "bootstrap.lua");
         assert_eq!(Surface::Setup.label(), "a setup script");
         assert_eq!(Surface::Template.label(), "luadot.lua");

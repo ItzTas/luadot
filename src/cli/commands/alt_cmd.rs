@@ -7,7 +7,7 @@ use crate::files::{self, Entry, SyncOutcome};
 use crate::lua::{self, Config, Content, Output};
 use crate::output;
 use crate::state::{self, Classes};
-use crate::utils::{self, Backup};
+use crate::utils::{self, Backup, Hooks};
 
 #[derive(Debug, Args)]
 pub struct AltArgs {
@@ -25,6 +25,7 @@ pub struct AltArgs {
 struct Run {
     dry_run: bool,
     backup: Option<Backup>,
+    hooks: Hooks,
 }
 
 pub fn alt_cmd(args: AltArgs) -> Result<()> {
@@ -63,6 +64,7 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
                 config.backup_keep(),
             )?),
         },
+        hooks: Hooks::new(args.dry_run),
     };
 
     let mut outcomes: Vec<SyncOutcome> = Vec::new();
@@ -86,6 +88,7 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
     if let Some(backup) = run.backup.as_ref() {
         backup.finish()?;
     }
+    run.hooks.finish("alt")?;
 
     Ok(())
 }
@@ -140,15 +143,18 @@ fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result
 
     let status = match output.content() {
         Content::File(source) => files::file_status(mode, source, output.dest()),
-        Content::Text(text) => files::text_status(output.dest(), text),
+        Content::Text(text) => files::text_status(output.dest(), text, output.mode()),
     }
     .with_context(|| format!("alt: failed to inspect {}", output.dest().display()))?;
 
     let predicted = files::predict(policy, status, output.dest())
         .with_context(|| format!("alt: failed to place {}", output.dest().display()))?;
 
+    let on_change = output.on_change().or_else(|| config.on_change(relative));
+
     if run.dry_run {
         utils::preview(predicted, relative.display());
+        run.hooks.record(predicted, on_change);
         return Ok(predicted);
     }
 
@@ -158,11 +164,15 @@ fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result
         backup.save(output.dest())?;
     }
 
-    match output.content() {
+    let outcome = match output.content() {
         Content::File(source) => files::sync_file(policy, mode, source, output.dest()),
-        Content::Text(text) => files::write_file(policy, output.dest(), text),
+        Content::Text(text) => files::write_file(policy, output.dest(), text, output.mode()),
     }
-    .with_context(|| format!("alt: failed to place {}", output.dest().display()))
+    .with_context(|| format!("alt: failed to place {}", output.dest().display()))?;
+
+    run.hooks.record(outcome, on_change);
+
+    Ok(outcome)
 }
 
 fn count(outcomes: &[SyncOutcome], kind: SyncOutcome) -> usize {
@@ -327,7 +337,7 @@ mod tests {
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
         write(&home.join(".zshrc"), "handwritten\n");
 
-        let config = lua::from_source(r#"ld.git.conflict("skip")"#).unwrap();
+        let config = lua::from_source(r#"ld.opt.conflict("skip")"#).unwrap();
         let outcomes = resolve(
             &config,
             &home,
@@ -356,6 +366,7 @@ mod tests {
         let mut run = Run {
             dry_run: true,
             backup: None,
+            hooks: Hooks::new(true),
         };
         let outcomes = resolve(
             &Config::default(),
@@ -383,6 +394,7 @@ mod tests {
         let mut run = Run {
             dry_run: true,
             backup: None,
+            hooks: Hooks::new(true),
         };
         let outcomes = resolve(
             &Config::default(),
@@ -414,6 +426,7 @@ mod tests {
         let mut run = Run {
             dry_run: false,
             backup: Some(Backup::at("alt", &home, saved.clone())),
+            hooks: Hooks::default(),
         };
         resolve(
             &Config::default(),
@@ -496,7 +509,7 @@ mod tests {
         write(&file, "generated\n");
         write(&home.join(".zprofile"), "handwritten\n");
 
-        let config = lua::from_source(r#"ld.git.conflict("skip")"#).unwrap();
+        let config = lua::from_source(r#"ld.opt.conflict("skip")"#).unwrap();
         let outcomes = resolve(
             &config,
             &home,
@@ -527,6 +540,7 @@ mod tests {
         let mut run = Run {
             dry_run: false,
             backup: Some(Backup::at("alt", &home, saved.clone())),
+            hooks: Hooks::default(),
         };
         resolve(
             &Config::default(),
@@ -559,6 +573,7 @@ mod tests {
         let mut run = Run {
             dry_run: true,
             backup: None,
+            hooks: Hooks::new(true),
         };
         let outcomes = resolve(
             &Config::default(),
@@ -585,5 +600,218 @@ mod tests {
         let arg = home.join(".zprofile").to_string_lossy().into_owned();
 
         assert_eq!(template_root(&home, &repo, &arg).unwrap(), file);
+    }
+
+    fn mode(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o7777
+    }
+
+    fn resolved(home: &Path, repo: &Path, dir: &Path, run: &mut Run) -> Vec<SyncOutcome> {
+        resolve(
+            &Config::default(),
+            home,
+            repo,
+            &Entry::Template(dir.to_path_buf()),
+            &Classes::default(),
+            run,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_declared_mode_lands_on_the_generated_file() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let dir = repo.join(".netrc.luadot");
+        write(
+            &dir.join("luadot.lua"),
+            r#"return { content = "machine example\n", mode = "600" }"#,
+        );
+
+        let outcomes = resolved(&home, &repo, &dir, &mut Run::default());
+
+        assert_eq!(outcomes, vec![SyncOutcome::Created]);
+        assert_eq!(mode(&home.join(".netrc")), 0o600);
+    }
+
+    #[test]
+    fn a_file_whose_mode_diverges_is_written_again() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let dir = repo.join(".netrc.luadot");
+        write(
+            &dir.join("luadot.lua"),
+            r#"return { content = "machine example\n", mode = "600" }"#,
+        );
+        write(&home.join(".netrc"), "machine example\n");
+        std::fs::set_permissions(home.join(".netrc"), std::fs::Permissions::from_mode(0o644))
+            .unwrap();
+
+        let outcomes = resolved(&home, &repo, &dir, &mut Run::default());
+
+        assert_eq!(outcomes, vec![SyncOutcome::Replaced]);
+        assert_eq!(mode(&home.join(".netrc")), 0o600);
+
+        let outcomes = resolved(&home, &repo, &dir, &mut Run::default());
+
+        assert_eq!(outcomes, vec![SyncOutcome::AlreadySynced]);
+    }
+
+    fn resolved_with(
+        config: &Config,
+        home: &Path,
+        repo: &Path,
+        dir: &Path,
+        run: &mut Run,
+    ) -> Vec<SyncOutcome> {
+        let outcomes = resolve(
+            config,
+            home,
+            repo,
+            &Entry::Template(dir.to_path_buf()),
+            &Classes::default(),
+            run,
+        )
+        .unwrap();
+        run.hooks.finish("alt").unwrap();
+
+        outcomes
+    }
+
+    #[test]
+    fn a_command_runs_only_when_the_file_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let dir = repo.join(".config/mako/config.luadot");
+        let restarted = root.path().join("restarted");
+        write(
+            &dir.join("luadot.lua"),
+            &format!(
+                r#"return {{ content = "font=monospace\n", on_change = "printf ok > {}" }}"#,
+                restarted.display()
+            ),
+        );
+
+        let config = Config::default();
+        let outcomes = resolved_with(&config, &home, &repo, &dir, &mut Run::default());
+
+        assert_eq!(outcomes, vec![SyncOutcome::Created]);
+        assert_eq!(std::fs::read_to_string(&restarted).unwrap(), "ok");
+
+        std::fs::remove_file(&restarted).unwrap();
+        let outcomes = resolved_with(&config, &home, &repo, &dir, &mut Run::default());
+
+        assert_eq!(outcomes, vec![SyncOutcome::AlreadySynced]);
+        assert!(!restarted.exists());
+    }
+
+    #[test]
+    fn a_rule_of_the_configuration_names_the_command() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let dir = repo.join(".config/mako/config.luadot");
+        let restarted = root.path().join("restarted");
+        write(&dir.join("luadot.lua"), r#"return "font=monospace\n""#);
+
+        let config = lua::from_source(&format!(
+            r#"ld.rules({{ {{ match = ".config/mako/**", on_change = "printf ok > {}" }} }})"#,
+            restarted.display()
+        ))
+        .unwrap();
+
+        let outcomes = resolved_with(&config, &home, &repo, &dir, &mut Run::default());
+
+        assert_eq!(outcomes, vec![SyncOutcome::Created]);
+        assert_eq!(std::fs::read_to_string(&restarted).unwrap(), "ok");
+    }
+
+    #[test]
+    fn a_declared_command_wins_over_the_rule() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let dir = repo.join(".config/mako/config.luadot");
+        let declared = root.path().join("declared");
+        let ruled = root.path().join("ruled");
+        write(
+            &dir.join("luadot.lua"),
+            &format!(
+                r#"return {{ content = "font=monospace\n", on_change = "printf ok > {}" }}"#,
+                declared.display()
+            ),
+        );
+
+        let config = lua::from_source(&format!(
+            r#"ld.rules({{ {{ match = ".config/mako/**", on_change = "printf ok > {}" }} }})"#,
+            ruled.display()
+        ))
+        .unwrap();
+
+        resolved_with(&config, &home, &repo, &dir, &mut Run::default());
+
+        assert!(declared.exists());
+        assert!(!ruled.exists());
+    }
+
+    #[test]
+    fn a_command_that_fails_stops_the_run() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let dir = repo.join(".zshrc.luadot");
+        write(
+            &dir.join("luadot.lua"),
+            r#"return { content = "generated\n", on_change = "exit 4" }"#,
+        );
+
+        let mut run = Run::default();
+        resolve(
+            &Config::default(),
+            &home,
+            &repo,
+            &Entry::Template(dir),
+            &Classes::default(),
+            &mut run,
+        )
+        .unwrap();
+
+        let err = run.hooks.finish("alt").unwrap_err().to_string();
+
+        assert_eq!(err, "alt: `exit 4` exited with status 4");
+        assert!(home.join(".zshrc").exists());
+    }
+
+    #[test]
+    fn a_dry_run_never_runs_the_command() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let dir = repo.join(".zshrc.luadot");
+        let restarted = root.path().join("restarted");
+        write(
+            &dir.join("luadot.lua"),
+            &format!(
+                r#"return {{ content = "generated\n", on_change = "printf ok > {}" }}"#,
+                restarted.display()
+            ),
+        );
+
+        let mut run = Run {
+            dry_run: true,
+            backup: None,
+            hooks: Hooks::new(true),
+        };
+        let outcomes = resolved_with(&Config::default(), &home, &repo, &dir, &mut run);
+
+        assert_eq!(outcomes, vec![SyncOutcome::Created]);
+        assert!(!restarted.exists());
     }
 }

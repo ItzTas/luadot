@@ -5,7 +5,7 @@ use clap::Args;
 
 use crate::{git, lua, state, utils};
 
-const REPO_DIR: &str = "repo";
+use super::super::constants::DEFAULT_REPO_DIR;
 
 #[derive(Debug, Args)]
 pub struct CloneArgs {
@@ -37,7 +37,7 @@ fn destination(home: &Path, arg: Option<&str>, configured: Option<&Path>) -> Res
         return Ok(utils::expand(home, configured));
     }
 
-    Ok(utils::data_dir()?.join(REPO_DIR))
+    Ok(utils::data_dir()?.join(DEFAULT_REPO_DIR))
 }
 
 fn offer_bootstrap(repo: &Path) -> Result<()> {
@@ -83,6 +83,6 @@ mod tests {
     fn without_either_it_lands_where_luadot_keeps_its_data() {
         let dir = destination(Path::new("/home/u"), None, None).unwrap();
 
-        assert_eq!(dir, utils::data_dir().unwrap().join(REPO_DIR));
+        assert_eq!(dir, utils::data_dir().unwrap().join(DEFAULT_REPO_DIR));
     }
 }

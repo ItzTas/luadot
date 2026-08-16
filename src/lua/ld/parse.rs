@@ -1,4 +1,9 @@
 use glob::Pattern;
+use mlua::Table;
+use regex::Regex;
+
+use super::constants::{MATCH, REGEX};
+use crate::lua::Matcher;
 
 pub fn external(message: impl Into<String>) -> mlua::Error {
     mlua::Error::external(message.into())
@@ -8,8 +13,32 @@ pub fn chain(err: anyhow::Error) -> mlua::Error {
     external(format!("{err:#}"))
 }
 
-pub fn pattern(raw: &str) -> mlua::Result<Pattern> {
-    Pattern::new(raw).map_err(|err| external(format!("invalid pattern `{raw}`: {err}")))
+pub fn matcher(entry: &Table) -> mlua::Result<Matcher> {
+    let glob: Option<String> = entry.get(MATCH)?;
+    let expression: Option<String> = entry.get(REGEX)?;
+
+    match (glob, expression) {
+        (Some(_), Some(_)) => Err(external(format!(
+            "a rule takes `{MATCH}` or `{REGEX}`, not both"
+        ))),
+        (Some(glob), None) => pattern(&glob),
+        (None, Some(expression)) => regex(&expression),
+        (None, None) => Err(external(format!(
+            "a rule needs a `{MATCH}` or `{REGEX}` pattern"
+        ))),
+    }
+}
+
+pub fn pattern(raw: &str) -> mlua::Result<Matcher> {
+    Pattern::new(raw)
+        .map(Matcher::Glob)
+        .map_err(|err| external(format!("invalid pattern `{raw}`: {err}")))
+}
+
+pub fn regex(raw: &str) -> mlua::Result<Matcher> {
+    Regex::new(raw)
+        .map(Matcher::Regex)
+        .map_err(|err| external(format!("invalid regex `{raw}`: {err}")))
 }
 
 pub fn lookup<T: Copy>(entries: &[(&str, T)], name: &str, field: &str) -> mlua::Result<T> {
@@ -66,6 +95,16 @@ mod tests {
 
         assert!(err.contains("unknown number `three`"));
         assert!(err.contains("available: one, two"));
+    }
+
+    #[test]
+    fn regex_reports_an_invalid_expression() {
+        assert!(
+            regex("^[")
+                .unwrap_err()
+                .to_string()
+                .contains("invalid regex `^[`")
+        );
     }
 
     #[test]

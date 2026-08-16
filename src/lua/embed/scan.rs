@@ -21,7 +21,7 @@ pub fn scan(source: &str) -> Result<Vec<Segment>> {
 
 enum Kind {
     Statement,
-    Trimmed,
+    Slurped,
     Expression,
     Comment,
 }
@@ -29,7 +29,7 @@ enum Kind {
 enum Close {
     Plain,
     TrimNewline,
-    TrimSpaces,
+    Slurp,
 }
 
 struct Scanner<'a> {
@@ -58,9 +58,10 @@ impl Scanner<'_> {
 
             self.advance(OPEN.len());
             let opened = self.line;
+            self.reject_unclaimed(opened)?;
             let kind = self.kind();
-            if matches!(kind, Kind::Trimmed) {
-                trim_indent(&mut literal);
+            if matches!(kind, Kind::Slurped) {
+                slurp_before(&mut literal);
             }
             flush(&mut segments, &mut literal, literal_line);
 
@@ -71,7 +72,7 @@ impl Scanner<'_> {
                     segments.push(Segment::Expression { lua, line: opened });
                     self.trim_after(close);
                 }
-                Kind::Statement | Kind::Trimmed => {
+                Kind::Statement | Kind::Slurped => {
                     let (lua, close) = self.code(opened)?;
                     segments.push(Segment::Statement { lua, line: opened });
                     self.trim_after(close);
@@ -84,10 +85,19 @@ impl Scanner<'_> {
         Ok(segments)
     }
 
+    fn reject_unclaimed(&self, opened: usize) -> Result<()> {
+        for spelling in ["|==", "|=", "|", "~", "=="] {
+            if self.starts_with(spelling) {
+                bail!("unsupported tag `{OPEN}{spelling}` opened on line {opened}");
+            }
+        }
+        Ok(())
+    }
+
     fn kind(&mut self) -> Kind {
         let kind = match self.bytes.get(self.pos) {
             Some(b'=' | b'-') => Kind::Expression,
-            Some(b'_') => Kind::Trimmed,
+            Some(b'_') => Kind::Slurped,
             Some(b'#') => Kind::Comment,
             _ => return Kind::Statement,
         };
@@ -103,9 +113,12 @@ impl Scanner<'_> {
                 lua.push_str(CLOSE);
                 continue;
             }
+            if self.starts_with("=%>") {
+                bail!("unsupported closing tag `=%>` on line {}", self.line);
+            }
             if self.starts_with("_%>") {
                 self.advance(3);
-                return Ok((lua, Close::TrimSpaces));
+                return Ok((lua, Close::Slurp));
             }
             if self.starts_with("-%>") {
                 self.advance(3);
@@ -206,14 +219,20 @@ impl Scanner<'_> {
     }
 
     fn trim_after(&mut self, close: Close) {
-        if matches!(close, Close::Plain) {
-            return;
+        match close {
+            Close::Plain => {}
+            Close::Slurp => self.slurp_after(),
+            Close::TrimNewline => self.trim_newline(),
         }
-        if matches!(close, Close::TrimSpaces) {
-            while matches!(self.bytes.get(self.pos), Some(b' ' | b'\t')) {
-                self.pos += 1;
-            }
+    }
+
+    fn slurp_after(&mut self) {
+        while matches!(self.bytes.get(self.pos), Some(b' ' | b'\t' | b'\r' | b'\n')) {
+            self.advance(1);
         }
+    }
+
+    fn trim_newline(&mut self) {
         if self.bytes.get(self.pos) == Some(&b'\r') && self.bytes.get(self.pos + 1) == Some(&b'\n')
         {
             self.advance(2);
@@ -267,8 +286,8 @@ fn flush(segments: &mut Vec<Segment>, literal: &mut String, line: usize) {
     });
 }
 
-fn trim_indent(literal: &mut String) {
-    while literal.ends_with(' ') || literal.ends_with('\t') {
+fn slurp_before(literal: &mut String) {
+    while literal.ends_with([' ', '\t', '\r', '\n']) {
         literal.pop();
     }
 }
@@ -335,10 +354,10 @@ mod tests {
     }
 
     #[test]
-    fn the_underscore_open_trims_the_indentation_before_the_tag() {
+    fn the_underscore_open_slurps_all_the_whitespace_before_the_tag() {
         assert_eq!(
             scan("a\n  \t<%_ x = 1 %>").unwrap(),
-            vec![literal("a\n", 1), statement(" x = 1 ", 2)]
+            vec![literal("a", 1), statement(" x = 1 ", 2)]
         );
     }
 
@@ -351,25 +370,25 @@ mod tests {
     }
 
     #[test]
-    fn the_underscore_close_trims_the_spaces_and_the_newline_after_the_tag() {
+    fn the_underscore_close_slurps_all_the_whitespace_after_the_tag() {
         assert_eq!(
-            scan("<% x = 1 _%>  \t\nb").unwrap(),
-            vec![statement(" x = 1 ", 1), literal("b", 2)]
+            scan("<% x = 1 _%>  \t\n\n  b").unwrap(),
+            vec![statement(" x = 1 ", 1), literal("b", 3)]
         );
     }
 
     #[test]
-    fn an_indented_block_keeps_its_lines_intact() {
+    fn the_slurping_pair_welds_the_surrounding_lines() {
         let source = "export A=1\n  <%_ for _, dir in ipairs(paths) do -%>\npath+=(<%= dir %>)\n  <%_ end -%>\n";
 
         assert_eq!(
             scan(source).unwrap(),
             vec![
-                literal("export A=1\n", 1),
+                literal("export A=1", 1),
                 statement(" for _, dir in ipairs(paths) do ", 2),
                 literal("path+=(", 3),
                 expression(" dir ", 3),
-                literal(")\n", 3),
+                literal(")", 3),
                 statement(" end ", 4),
             ]
         );
@@ -422,6 +441,25 @@ mod tests {
             scan("<% s = [==[%> ]] ]==] %>").unwrap(),
             vec![statement(" s = [==[%> ]] ]==] ", 1)]
         );
+    }
+
+    #[test]
+    fn an_unclaimed_spelling_is_an_error() {
+        for source in [
+            "<%~ x %>",
+            "<%| x %>",
+            "<%|= x %>",
+            "<%|== x %>",
+            "<%== x %>",
+        ] {
+            let err = scan(source).unwrap_err().to_string();
+            assert!(err.contains("unsupported tag"), "{source}: {err}");
+            assert!(err.contains("line 1"), "{source}: {err}");
+        }
+
+        let err = scan("a\n<%= x =%>").unwrap_err().to_string();
+        assert!(err.contains("`=%>`"));
+        assert!(err.contains("line 2"));
     }
 
     #[test]

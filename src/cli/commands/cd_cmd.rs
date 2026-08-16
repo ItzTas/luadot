@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::{lua, utils};
 
-const DEFAULT_SHELL: &str = "/bin/sh";
+use super::super::constants::DEFAULT_SHELL;
 
 pub fn cd_cmd() -> Result<()> {
     let repo = utils::require_repo("cd", lua::load_config()?.repo_dir())?;
