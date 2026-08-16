@@ -178,6 +178,9 @@ ld.rules({
 })
 ```
 
+A single rule needs no list around it — `ld.rules({ match = ".ssh/**", link =
+"symbolic" })` is the same call carrying one entry.
+
 A rule carries three keys, all optional next to `match`:
 
 | Key | Values | Effect |
@@ -203,7 +206,7 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 | `ld.git.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.git.ignore(patterns)` | a pattern or a list of them | Marks files as never managed. |
-| `ld.rules(rules)` | a list of rules | Overrides `link` and `conflict` for the files a pattern matches, and names an `on_change` command for them. |
+| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a pattern matches, and names an `on_change` command for them. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |

@@ -19,6 +19,14 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 }
 
 fn rules(list: &Table) -> mlua::Result<Vec<Rule>> {
+    if list.is_empty() {
+        return Ok(Vec::new());
+    }
+    if list.raw_len() == 0 {
+        let rule = rule(list).map_err(|err| external(format!("`{API}.rules`: {err}")))?;
+        return Ok(vec![rule]);
+    }
+
     list.clone()
         .sequence_values::<Table>()
         .enumerate()
@@ -160,6 +168,54 @@ mod tests {
             config.link_mode(Path::new(".ssh/keys/id_ed25519")),
             LinkMode::Symbolic
         );
+    }
+
+    #[test]
+    fn a_single_rule_needs_no_list_around_it() {
+        let config = configure(r#"ld.rules({ match = ".ssh/**", link = "symbolic" })"#);
+
+        assert_eq!(
+            config.link_mode(Path::new(".ssh/config")),
+            LinkMode::Symbolic
+        );
+    }
+
+    #[test]
+    fn both_forms_land_in_the_same_configuration() {
+        let config = configure(
+            r#"
+            ld.rules({ match = ".ssh/**", conflict = "skip" })
+            ld.rules({
+              { match = ".config/nvim/**", link = "symbolic" },
+            })
+            "#,
+        );
+
+        assert_eq!(
+            config.conflict_policy(Path::new(".ssh/config")),
+            ConflictPolicy::Skip
+        );
+        assert_eq!(
+            config.link_mode(Path::new(".config/nvim/init.lua")),
+            LinkMode::Symbolic
+        );
+    }
+
+    #[test]
+    fn an_empty_list_declares_nothing() {
+        let config = configure("ld.rules({})");
+
+        assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Hard);
+    }
+
+    #[test]
+    fn rejects_a_lone_rule_without_a_pattern() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ link = "hard" })"#).unwrap_err()
+        );
+
+        assert!(err.contains("needs a `match` pattern"));
     }
 
     #[test]
