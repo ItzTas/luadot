@@ -37,7 +37,7 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
         .filter(|entry| !config.is_ignored(utils::relative(&repo, &entry.target())))
         .filter_map(|entry| match entry {
             Entry::File(file) => Some(file),
-            Entry::Template(_) => None,
+            Entry::Template(_) | Entry::Standalone(_) => None,
         })
         .collect();
     if files.is_empty() {

@@ -17,4 +17,4 @@ pub use exec::run_exec;
 pub use setup::{list_setups, run_setups};
 #[cfg(test)]
 pub use template::from_source as from_template;
-pub use template::{Content, Handle, Output, Template, load_template};
+pub use template::{Content, Handle, Output, Template, load_template, load_template_file};
