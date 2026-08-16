@@ -378,3 +378,91 @@ fn alt_resolves_both_template_forms_and_the_other_commands_walk_past_them() {
     assert!(!home.join(".zshrc").exists());
     assert!(!home.join(".zprofile").exists());
 }
+
+#[test]
+fn a_rule_runs_its_command_once_for_every_file_apply_touched() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let reloaded = root.path().join("reloaded");
+    write(&repo.join(".config/mako/config"), "font=monospace\n");
+    write(&repo.join(".config/mako/colors"), "background=#000000\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        &format!(
+            r#"ld.rules({{ {{ match = ".config/mako/**", on_change = "printf x >> {}" }} }})"#,
+            reloaded.display()
+        ),
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+
+    assert_eq!(read(&home.join(".config/mako/config")), "font=monospace\n");
+    assert_eq!(read(&reloaded), "x");
+
+    std::fs::remove_file(&reloaded).unwrap();
+
+    luadot(&home).arg("apply").assert().success();
+    assert!(!reloaded.exists());
+}
+
+#[test]
+fn alt_builds_a_file_out_of_fragments_and_runs_the_command_that_follows_it() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let restarted = root.path().join("restarted");
+    write(
+        &repo.join(".zshrc.luadot/conf.d/20-path.zsh"),
+        "path+=(b)\n",
+    );
+    write(
+        &repo.join(".zshrc.luadot/conf.d/10-env.zsh"),
+        "export A=1\n",
+    );
+    write(
+        &repo.join(".zshrc.luadot/luadot.lua"),
+        &format!(
+            r#"
+            local parts = {{}}
+            for _, name in ipairs(ld.alt.glob("conf.d/*.zsh")) do
+              parts[#parts + 1] = ld.alt.read(name)
+            end
+
+            ld.alt.out({{
+              content = table.concat(parts, ""),
+              mode = "600",
+              on_change = "printf ok > {}",
+            }})
+            "#,
+            restarted.display()
+        ),
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("alt").assert().success();
+
+    assert_eq!(read(&home.join(".zshrc")), "export A=1\npath+=(b)\n");
+    assert_eq!(
+        std::fs::metadata(home.join(".zshrc"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o7777,
+        0o600
+    );
+    assert_eq!(read(&restarted), "ok");
+
+    std::fs::remove_file(&restarted).unwrap();
+
+    luadot(&home)
+        .arg("alt")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 unchanged"));
+    assert!(!restarted.exists());
+}

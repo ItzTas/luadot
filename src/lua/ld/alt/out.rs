@@ -43,16 +43,58 @@ fn from_table(lua: &Lua, entry: &Table) -> mlua::Result<Output> {
     let dest: Option<String> = entry.get("dest")?;
     let link: Option<String> = entry.get("link")?;
     let conflict: Option<String> = entry.get("conflict")?;
+    let on_change: Option<String> = entry.get("on_change")?;
+
+    let content = content(&entry.get::<Value>("content")?)?;
+    let mode = mode(&entry.get::<Value>("mode")?, &content)?;
 
     Ok(Output::new(
         destination(lua, dest.as_deref())?,
-        content(&entry.get::<Value>("content")?)?,
+        content,
         link.map(|name| lookup(&LINK_MODES, &name, "link mode"))
             .transpose()?,
         conflict
             .map(|name| lookup(&CONFLICT_POLICIES, &name, "conflict policy"))
             .transpose()?,
-    ))
+    )
+    .with_mode(mode)
+    .with_on_change(on_change))
+}
+
+fn mode(value: &Value, content: &Content) -> mlua::Result<Option<u32>> {
+    let raw = match value {
+        Value::Nil => return Ok(None),
+        Value::String(text) => text.to_str()?.to_string(),
+        other => {
+            return Err(external(format!(
+                "`{API}.{NAMESPACE}.{OUT}` needs a `mode` holding an octal string like \"600\", got {}",
+                other.type_name()
+            )));
+        }
+    };
+
+    if let Content::File(path) = content {
+        return Err(external(format!(
+            "`{API}.{NAMESPACE}.{OUT}` cannot set a `mode` on `{API}.{NAMESPACE}.{FILE}`: {} is the repository's own copy",
+            path.display()
+        )));
+    }
+
+    bits(&raw).map(Some)
+}
+
+fn bits(raw: &str) -> mlua::Result<u32> {
+    let octal =
+        (3..=4).contains(&raw.len()) && raw.bytes().all(|digit| (b'0'..b'8').contains(&digit));
+    if !octal {
+        return Err(external(format!(
+            "`{API}.{NAMESPACE}.{OUT}` needs a `mode` of three or four octal digits, got `{raw}`"
+        )));
+    }
+
+    Ok(raw
+        .bytes()
+        .fold(0, |bits, digit| bits * 8 + u32::from(digit - b'0')))
 }
 
 fn destination(lua: &Lua, raw: Option<&str>) -> mlua::Result<PathBuf> {
@@ -115,5 +157,89 @@ mod tests {
         let err = error(&dir, r#"ld.alt.out({ content = "x", conflict = "ask" })"#);
 
         assert!(err.contains("unknown conflict policy `ask`"));
+    }
+
+    #[test]
+    fn a_mode_is_read_as_octal() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+
+        let outputs =
+            from_template(&dir, r#"ld.alt.out({ content = "x", mode = "600" })"#).unwrap();
+
+        assert_eq!(outputs[0].mode(), Some(0o600));
+
+        let outputs =
+            from_template(&dir, r#"ld.alt.out({ content = "x", mode = "0644" })"#).unwrap();
+
+        assert_eq!(outputs[0].mode(), Some(0o644));
+    }
+
+    #[test]
+    fn a_file_carries_no_mode_of_its_own() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+
+        let outputs = from_template(&dir, r#"ld.alt.out({ content = "x" })"#).unwrap();
+
+        assert_eq!(outputs[0].mode(), None);
+    }
+
+    #[test]
+    fn rejects_a_mode_that_is_not_three_or_four_octal_digits() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+
+        for raw in ["60", "60000", "6o0", "800", "+60"] {
+            let err = error(
+                &dir,
+                &format!(r#"ld.alt.out({{ content = "x", mode = "{raw}" }})"#),
+            );
+
+            assert!(err.contains("three or four octal digits"), "{raw}");
+            assert!(err.contains(raw), "{raw}");
+        }
+    }
+
+    #[test]
+    fn rejects_a_mode_that_is_not_a_string() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+
+        let err = error(&dir, r#"ld.alt.out({ content = "x", mode = 600 })"#);
+
+        assert!(err.contains("needs a `mode` holding an octal string like \"600\""));
+    }
+
+    #[test]
+    fn rejects_a_mode_on_a_file_of_the_repository() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+        std::fs::write(dir.join("netrc"), "machine example").unwrap();
+
+        let err = error(
+            &dir,
+            r#"ld.alt.out({ content = ld.alt.file("netrc"), mode = "600" })"#,
+        );
+
+        assert!(err.contains("cannot set a `mode` on `ld.alt.file`"));
+        assert!(err.contains("netrc"));
+    }
+
+    #[test]
+    fn a_command_runs_when_the_file_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template(root.path());
+
+        let outputs = from_template(
+            &dir,
+            r#"ld.alt.out({ content = "x", on_change = "systemctl --user restart mako" })"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            outputs[0].on_change(),
+            Some("systemctl --user restart mako")
+        );
     }
 }

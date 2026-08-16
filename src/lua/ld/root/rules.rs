@@ -37,6 +37,7 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
     let raw = raw.ok_or_else(|| external("a rule needs a `match` pattern"))?;
     let link: Option<String> = entry.get("link")?;
     let conflict: Option<String> = entry.get("conflict")?;
+    let on_change: Option<String> = entry.get("on_change")?;
 
     Ok(Rule::new(
         pattern(&raw)?,
@@ -45,7 +46,8 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
         conflict
             .map(|name| lookup(&CONFLICT_POLICIES, &name, "conflict policy"))
             .transpose()?,
-    ))
+    )
+    .with_on_change(on_change))
 }
 
 #[cfg(test)]
@@ -126,6 +128,28 @@ mod tests {
 
         assert_eq!(config.link_mode(key), LinkMode::Symbolic);
         assert_eq!(config.conflict_policy(key), ConflictPolicy::Skip);
+    }
+
+    #[test]
+    fn a_rule_names_the_command_the_files_it_matches_run() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = ".config/**", on_change = "notify-send updated" },
+              { match = ".config/mako/**", on_change = "makoctl reload" },
+            })
+            "#,
+        );
+
+        assert_eq!(
+            config.on_change(Path::new(".config/mako/config")),
+            Some("makoctl reload")
+        );
+        assert_eq!(
+            config.on_change(Path::new(".config/zsh/.zshrc")),
+            Some("notify-send updated")
+        );
+        assert_eq!(config.on_change(Path::new(".bashrc")), None);
     }
 
     #[test]

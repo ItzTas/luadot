@@ -174,8 +174,23 @@ ld.git.ignore({ "*.swp", ".cache/**" })
 ld.rules({
   { match = ".ssh/**", link = "symbolic", conflict = "skip" },
   { match = ".config/nvim/**", conflict = "error" },
+  { match = ".config/mako/**", on_change = "makoctl reload" },
 })
 ```
+
+A rule carries three keys, all optional next to `match`:
+
+| Key | Values | Effect |
+| --- | --- | --- |
+| `link` | `"hard"`, `"symbolic"` | How the matching files are placed. |
+| `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the system copy differs. |
+| `on_change` | a command line | Runs after `apply` or `alt` created or replaced one of those files. |
+
+The last matching rule wins, key by key, so a general rule is narrowed by a
+later one and never merged with it. `on_change` runs once per command line and
+per run, at the end: twenty files under `.config/mako/` changing reload mako
+once, not twenty times. A failing command stops the run after the files are in
+place, and `--dry-run` prints the command instead of running it.
 
 | Call | Arguments | Effect |
 | --- | --- | --- |
@@ -188,7 +203,7 @@ ld.rules({
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 | `ld.git.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.git.ignore(patterns)` | a pattern or a list of them | Marks files as never managed. |
-| `ld.rules(rules)` | a list of rules | Overrides `link` and `conflict` for the files a pattern matches. |
+| `ld.rules(rules)` | a list of rules | Overrides `link` and `conflict` for the files a pattern matches, and names an `on_change` command for them. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |
@@ -579,6 +594,8 @@ A declared file carries what it needs and nothing else:
 | `dest` | a path | Where it lands; `~/` and a relative path both start at your home directory. Defaults to the mirrored path. |
 | `link` | `"hard"`, `"symbolic"` | How an `ld.alt.file` is placed. Defaults to the configured mode. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the destination already holds something else. Defaults to the configured policy. |
+| `mode` | three or four octal digits, as a string | The permissions of the generated file, `"600"` for one holding a secret. Defaults to what your umask gives. Only for generated content: an `ld.alt.file` is the repository's own copy and keeps its own mode. |
+| `on_change` | a command line | Runs through `sh -c` after the file is created or replaced, and only then — an unchanged file runs nothing. Wins over an `on_change` rule matching the same path. |
 
 Returning a string or an `ld.alt.file` is shorthand for a table carrying only
 `content`, so a template selecting a variant fits in one line:
@@ -646,6 +663,42 @@ return ld.alt.json({
 It takes a table of names or a list, never both in the same table, and its keys
 come out sorted, so the file changes only when the data does. It is the one
 `ld.alt` call that needs no template, so a standalone `.luadot` file has it too.
+
+### Secrets and reloads
+
+A generated file inherits your umask, which is wrong for one holding a secret,
+and a daemon reading a file has to be told the file changed:
+
+```lua
+ld.alt.out({
+  dest = "~/.netrc",
+  content = ld.alt.expand("netrc.tmpl", { token = ld.cmd("pass show api") }),
+  mode = "600",
+})
+
+ld.alt.out({
+  dest = "~/.config/mako/config",
+  content = ld.alt.read("mako.conf"),
+  on_change = "makoctl reload",
+})
+```
+
+`mode` is compared as well as written, so a file that already holds the right
+content with the wrong permissions is reported as differing and put back at
+`600`. `on_change` runs only when the file was actually created or replaced —
+`alt` over an unchanged file runs nothing — and `--dry-run` prints the command
+instead of running it.
+
+The same command belongs in `config.lua` when it is about a path rather than about
+one template, and there it covers plain managed files under `apply` too:
+
+```lua
+ld.rules({ { match = ".config/mako/**", on_change = "makoctl reload" } })
+```
+
+Both forms end up in the same list: every command is deduplicated and runs once,
+at the end of the run. A `on_change` declared by the template wins over a rule
+matching the same destination.
 
 ### Embedded templates
 

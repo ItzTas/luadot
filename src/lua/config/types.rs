@@ -42,6 +42,7 @@ pub struct Rule {
     pattern: Pattern,
     link: Option<LinkMode>,
     conflict: Option<ConflictPolicy>,
+    on_change: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,6 +167,12 @@ impl Config {
             .unwrap_or(self.conflict)
     }
 
+    pub fn on_change<'a>(&'a self, relative: &'a Path) -> Option<&'a str> {
+        self.matching(relative)
+            .filter_map(Rule::on_change)
+            .next_back()
+    }
+
     fn matching<'a>(&'a self, relative: &'a Path) -> impl DoubleEndedIterator<Item = &'a Rule> {
         self.rules
             .iter()
@@ -179,7 +186,13 @@ impl Rule {
             pattern,
             link,
             conflict,
+            on_change: None,
         }
+    }
+
+    pub fn with_on_change(mut self, on_change: Option<String>) -> Self {
+        self.on_change = on_change;
+        self
     }
 
     pub fn pattern(&self) -> &Pattern {
@@ -192,6 +205,10 @@ impl Rule {
 
     pub fn conflict(&self) -> Option<ConflictPolicy> {
         self.conflict
+    }
+
+    pub fn on_change(&self) -> Option<&str> {
+        self.on_change.as_deref()
     }
 }
 
@@ -268,7 +285,7 @@ mod tests {
     fn the_config_file_itself_can_be_managed() {
         let config = Config::default();
 
-        assert!(!config.is_ignored(Path::new(".config/luadot/ld.lua")));
+        assert!(!config.is_ignored(Path::new(".config/luadot/config.lua")));
     }
 
     #[test]

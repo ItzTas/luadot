@@ -84,6 +84,9 @@ fn overrides(rule: &Rule) -> String {
     if let Some(conflict) = rule.conflict() {
         parts.push(format!("conflict={}", conflict.name()));
     }
+    if let Some(on_change) = rule.on_change() {
+        parts.push(format!("on_change=`{on_change}`"));
+    }
 
     if parts.is_empty() {
         return String::new();
