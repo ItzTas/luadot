@@ -39,8 +39,7 @@ mod tests {
 
     #[test]
     fn takes_a_list_of_keys() {
-        let config =
-            from_source(r#"ld.crypt.recipients({ "age1first", "age1second" })"#).unwrap();
+        let config = from_source(r#"ld.crypt.recipients({ "age1first", "age1second" })"#).unwrap();
 
         assert_eq!(config.crypt_recipients(), ["age1first", "age1second"]);
     }
@@ -60,10 +59,7 @@ mod tests {
 
     #[test]
     fn rejects_an_empty_list() {
-        let err = format!(
-            "{:#}",
-            from_source("ld.crypt.recipients({})").unwrap_err()
-        );
+        let err = format!("{:#}", from_source("ld.crypt.recipients({})").unwrap_err());
 
         assert!(err.contains("`ld.crypt.recipients` takes a key or a list of keys"));
     }

@@ -37,14 +37,16 @@ pub fn decrypt_into(
     dest: &Path,
 ) -> Result<()> {
     require_identity(command, backend, identity)?;
-    run(command, decrypt_command(backend, identity, source, Some(dest))).map(|_| ())
+    run(
+        command,
+        decrypt_command(backend, identity, source, Some(dest)),
+    )
+    .map(|_| ())
 }
 
 fn require_identity(command: &str, backend: Backend, identity: Option<&Path>) -> Result<()> {
     if backend == Backend::Age && identity.is_none() {
-        bail!(
-            "{command}: decrypting with age needs `ld.crypt.identity` in the configuration"
-        );
+        bail!("{command}: decrypting with age needs `ld.crypt.identity` in the configuration");
     }
     Ok(())
 }

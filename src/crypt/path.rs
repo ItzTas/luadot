@@ -74,7 +74,10 @@ mod tests {
             logical(Path::new("home/.netrc.age")),
             PathBuf::from("home/.netrc")
         );
-        assert_eq!(logical(Path::new("home/.netrc")), PathBuf::from("home/.netrc"));
+        assert_eq!(
+            logical(Path::new("home/.netrc")),
+            PathBuf::from("home/.netrc")
+        );
     }
 
     #[test]
@@ -82,7 +85,10 @@ mod tests {
         for backend in [Backend::Age, Backend::Gpg] {
             let cipher = stored(Path::new("home/.netrc"), backend);
 
-            assert_eq!(split(&cipher), Some((PathBuf::from("home/.netrc"), backend)));
+            assert_eq!(
+                split(&cipher),
+                Some((PathBuf::from("home/.netrc"), backend))
+            );
         }
     }
 
@@ -92,10 +98,7 @@ mod tests {
         let target = dir.path().join(".netrc");
         std::fs::write(stored(&target, Backend::Gpg), "cipher").unwrap();
 
-        assert_eq!(
-            stored_variant(&target),
-            Some(stored(&target, Backend::Gpg))
-        );
+        assert_eq!(stored_variant(&target), Some(stored(&target, Backend::Gpg)));
         assert_eq!(stored_variant(&dir.path().join(".vimrc")), None);
     }
 }

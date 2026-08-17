@@ -66,7 +66,9 @@ mod tests {
     #[test]
     fn keys_reads_a_list_of_keys() {
         let lua = runtime().unwrap();
-        let list = lua.create_sequence_from(["age1first", "age1second"]).unwrap();
+        let list = lua
+            .create_sequence_from(["age1first", "age1second"])
+            .unwrap();
 
         assert_eq!(
             keys(&Value::Table(list), "recipients").unwrap(),

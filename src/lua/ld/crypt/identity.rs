@@ -51,7 +51,10 @@ mod tests {
 
     #[test]
     fn rejects_an_empty_path() {
-        let err = format!("{:#}", from_source(r#"ld.crypt.identity("  ")"#).unwrap_err());
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.crypt.identity("  ")"#).unwrap_err()
+        );
 
         assert!(err.contains("`ld.crypt.identity` takes a path, got an empty string"));
     }
