@@ -61,7 +61,7 @@ mod tests {
 
         let output = load(
             root.path(),
-            ".config/nvim/init.lua.luadot",
+            "home/.config/nvim/init.lua.luadot",
             "vim.g.x = <%= 1 + 1 %>\n",
             &Classes::default(),
         )
@@ -87,7 +87,7 @@ mod tests {
 
         let output = load(
             root.path(),
-            ".zshrc.luadot",
+            "home/.zshrc.luadot",
             "<%= type(ld.sys.host.name) %> on a <%= ld.class.get(\"form-factor\") %>",
             &classes,
         )
@@ -105,7 +105,7 @@ mod tests {
 
         let output = load(
             root.path(),
-            ".zshrc.luadot",
+            "home/.zshrc.luadot",
             "<% ld.alt.out({ content = \"x\" }) %><%= tostring(ld.alt.file(\"nope\")) %> <%= tostring(ld.path.dir) %>",
             &Classes::default(),
         )
@@ -122,7 +122,7 @@ mod tests {
             "{:#}",
             load(
                 root.path(),
-                ".zshrc.luadot",
+                "home/.zshrc.luadot",
                 "export EDITOR=<%= editor %>\n",
                 &Classes::default(),
             )
@@ -141,7 +141,7 @@ mod tests {
             "{:#}",
             load(
                 root.path(),
-                ".zshrc.luadot",
+                "home/.zshrc.luadot",
                 "fine\n<%= missing() %>\n",
                 &Classes::default(),
             )

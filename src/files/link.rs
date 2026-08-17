@@ -8,6 +8,7 @@ pub enum LinkMode {
     #[default]
     Hard,
     Symbolic,
+    Copy,
 }
 
 impl LinkMode {
@@ -15,6 +16,7 @@ impl LinkMode {
         match self {
             Self::Hard => "hard",
             Self::Symbolic => "symbolic",
+            Self::Copy => "copy",
         }
     }
 }
@@ -29,6 +31,7 @@ pub fn link(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
     match mode {
         LinkMode::Hard => hard(source, dest),
         LinkMode::Symbolic => symbolic(source, dest),
+        LinkMode::Copy => copy(source, dest),
     }
 }
 
@@ -50,6 +53,27 @@ fn symbolic(source: &Path, dest: &Path) -> Result<()> {
             source.display()
         )
     })
+}
+
+fn copy(source: &Path, dest: &Path) -> Result<()> {
+    let failed = || {
+        format!(
+            "files: failed to copy {} -> {}",
+            source.display(),
+            dest.display()
+        )
+    };
+
+    let mut reader = std::fs::File::open(source).with_context(failed)?;
+    let mut writer = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dest)
+        .with_context(failed)?;
+    std::io::copy(&mut reader, &mut writer).with_context(failed)?;
+
+    let permissions = reader.metadata().with_context(failed)?.permissions();
+    std::fs::set_permissions(dest, permissions).with_context(failed)
 }
 
 #[cfg(test)]
@@ -99,5 +123,44 @@ mod tests {
         std::fs::write(&dest, "existing").unwrap();
 
         assert!(link(LinkMode::Hard, &source, &dest).is_err());
+        assert!(link(LinkMode::Copy, &source, &dest).is_err());
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "existing");
+    }
+
+    #[test]
+    fn copy_duplicates_the_contents_into_a_new_inode() {
+        use std::os::unix::fs::MetadataExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source.txt");
+        let dest = dir.path().join("dest.txt");
+        std::fs::write(&source, "hello").unwrap();
+
+        link(LinkMode::Copy, &source, &dest).unwrap();
+
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
+        assert_ne!(
+            std::fs::metadata(&source).unwrap().ino(),
+            std::fs::metadata(&dest).unwrap().ino()
+        );
+
+        std::fs::write(&source, "changed").unwrap();
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
+    }
+
+    #[test]
+    fn copy_preserves_the_mode_of_the_source() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source.txt");
+        let dest = dir.path().join("dest.txt");
+        std::fs::write(&source, "secret").unwrap();
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+        link(LinkMode::Copy, &source, &dest).unwrap();
+
+        let mode = std::fs::metadata(&dest).unwrap().permissions().mode() & 0o7777;
+        assert_eq!(mode, 0o600);
     }
 }

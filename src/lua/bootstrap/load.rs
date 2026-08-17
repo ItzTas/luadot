@@ -67,20 +67,23 @@ mod tests {
 
         assert_eq!(
             path,
-            PathBuf::from("/data/repo/.config/luadot/bootstrap.lua")
+            PathBuf::from("/data/repo/home/.config/luadot/bootstrap.lua")
         );
     }
 
     #[test]
-    fn resolve_rejects_a_config_outside_home() {
-        let err = resolve(
+    fn resolve_maps_a_config_outside_home_under_root() {
+        let path = resolve(
             Path::new("/home/u"),
             Path::new("/etc/luadot"),
             Path::new("/data/repo"),
         )
-        .unwrap_err();
+        .unwrap();
 
-        assert!(err.to_string().contains("not inside your home directory"));
+        assert_eq!(
+            path,
+            PathBuf::from("/data/repo/root/etc/luadot/bootstrap.lua")
+        );
     }
 
     #[test]

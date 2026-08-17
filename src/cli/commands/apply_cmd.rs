@@ -1,10 +1,11 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args;
 
+use crate::crypt;
 use crate::files::{self, Entry, SyncOutcome};
-use crate::lua;
+use crate::lua::{self, Config};
 use crate::output;
 use crate::utils::{self, Backup, Hooks};
 
@@ -20,6 +21,13 @@ pub struct ApplyArgs {
     pub dry_run: bool,
 }
 
+#[derive(Debug, Default)]
+struct Run {
+    dry_run: bool,
+    backup: Option<Backup>,
+    hooks: Hooks,
+}
+
 pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     let config = lua::load_config()?;
     let repo = utils::require_repo("apply", config.repo_dir())?;
@@ -33,7 +41,11 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
 
     let files: Vec<PathBuf> = files::collect_entries("apply", &root)?
         .into_iter()
-        .filter(|entry| !config.is_ignored(utils::relative(&repo, &entry.target())))
+        .filter(|entry| {
+            let target = entry.target();
+            let relative = utils::relative(&repo, &target);
+            utils::is_managed(relative) && !config.is_ignored(&crypt::logical(relative))
+        })
         .filter_map(|entry| match entry {
             Entry::File(file) => Some(file),
             Entry::Template(_) | Entry::Standalone(_) => None,
@@ -44,49 +56,39 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         return Ok(());
     }
 
-    let mut backup = match args.dry_run || !config.backup() {
-        true => None,
-        false => Some(Backup::open(
-            "apply",
-            &home,
-            config.backup_dir(),
-            config.backup_keep(),
-        )?),
+    let mut run = Run {
+        dry_run: args.dry_run,
+        backup: match args.dry_run || !config.backup() {
+            true => None,
+            false => Some(Backup::open(
+                "apply",
+                &home,
+                config.backup_dir(),
+                config.backup_keep(),
+            )?),
+        },
+        hooks: Hooks::new(args.dry_run),
     };
 
-    let mut hooks = Hooks::new(args.dry_run);
     let mut created = 0u32;
     let mut replaced = 0u32;
     let mut unchanged = 0u32;
     let mut skipped = 0u32;
     for file in &files {
         let relative = utils::relative(&repo, file);
-        let dest = utils::system_path(&home, &repo, file)?;
-        let mode = config.link_mode(relative);
-        let policy = config.conflict_policy(relative);
 
-        let status = files::file_status(mode, file, &dest)
-            .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
-        let predicted = files::predict(policy, status, &dest)
-            .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
-
-        let outcome = match args.dry_run {
-            true => {
-                utils::preview(predicted, relative.display());
-                predicted
+        let outcome = match crypt::split(relative) {
+            Some((stripped, backend)) => {
+                place_encrypted(&config, backend, &stripped, file, &home, &repo, &mut run)?
             }
-            false => {
-                if predicted == SyncOutcome::Replaced
-                    && let Some(backup) = backup.as_mut()
-                {
-                    backup.save(&dest)?;
+            None => {
+                let dest = utils::system_path(&home, &repo, file)?;
+                match utils::is_root(relative) {
+                    true => place_root(&config, relative, file, &dest, &mut run)?,
+                    false => place_home(&config, relative, file, &dest, &mut run)?,
                 }
-                files::sync_file(policy, mode, file, &dest)
-                    .with_context(|| format!("apply: failed to apply {}", dest.display()))?
             }
         };
-
-        hooks.record(outcome, config.on_change(relative));
 
         match outcome {
             SyncOutcome::Created => created += 1,
@@ -104,10 +106,126 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         },
         files.len()
     ));
-    if let Some(backup) = backup.as_ref() {
+    if let Some(backup) = run.backup.as_ref() {
         backup.finish()?;
     }
-    hooks.finish("apply")?;
+    run.hooks.finish("apply")?;
 
     Ok(())
+}
+
+fn place_home(
+    config: &Config,
+    relative: &Path,
+    file: &Path,
+    dest: &Path,
+    run: &mut Run,
+) -> Result<SyncOutcome> {
+    let mode = config.link_mode(relative);
+    let policy = config.conflict_policy(relative);
+
+    let status = files::file_status(mode, file, dest)
+        .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
+    let predicted = files::predict(policy, status, dest)
+        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+    if run.dry_run {
+        utils::preview(predicted, relative.display());
+        run.hooks.record(predicted, config.on_change(relative));
+        return Ok(predicted);
+    }
+
+    if predicted == SyncOutcome::Replaced
+        && let Some(backup) = run.backup.as_mut()
+    {
+        backup.save(dest)?;
+    }
+    let outcome = files::sync_file(policy, mode, file, dest)
+        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+    run.hooks.record(outcome, config.on_change(relative));
+
+    Ok(outcome)
+}
+
+fn place_encrypted(
+    config: &Config,
+    backend: crypt::Backend,
+    stripped: &Path,
+    file: &Path,
+    home: &Path,
+    repo: &Path,
+    run: &mut Run,
+) -> Result<SyncOutcome> {
+    if utils::is_root(stripped) {
+        bail!(
+            "apply: {}: encrypted system files are not supported",
+            stripped.display()
+        );
+    }
+
+    let dest = utils::system_path(home, repo, &repo.join(stripped))?;
+    let policy = config.conflict_policy(stripped);
+    let identity = config
+        .crypt_identity()
+        .map(|path| utils::expand(home, path));
+
+    let contents = crypt::decrypt("apply", backend, identity.as_deref(), file)
+        .with_context(|| format!("apply: failed to decrypt {}", file.display()))?;
+    let status = crypt::plain_status("apply", &contents, &dest)
+        .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
+    let predicted = files::predict(policy, status, &dest)
+        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+    if run.dry_run {
+        utils::preview(predicted, stripped.display());
+        run.hooks.record(predicted, config.on_change(stripped));
+        return Ok(predicted);
+    }
+
+    if predicted == SyncOutcome::Replaced
+        && let Some(backup) = run.backup.as_mut()
+    {
+        backup.save(&dest)?;
+    }
+    let outcome = crypt::place("apply", policy, &contents, &dest)
+        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+    run.hooks.record(outcome, config.on_change(stripped));
+
+    Ok(outcome)
+}
+
+fn place_root(
+    config: &Config,
+    relative: &Path,
+    file: &Path,
+    dest: &Path,
+    run: &mut Run,
+) -> Result<SyncOutcome> {
+    let policy = config.conflict_policy(relative);
+    let mode = config.mode(relative);
+
+    let status = files::escalated_status(file, dest, mode)
+        .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
+    let predicted = files::predict(policy, status, dest)
+        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+    if run.dry_run {
+        utils::preview(predicted, relative.display());
+        run.hooks.record(predicted, config.on_change(relative));
+        return Ok(predicted);
+    }
+
+    if predicted == SyncOutcome::Replaced
+        && let Some(backup) = run.backup.as_mut()
+    {
+        backup.save(dest)?;
+    }
+    let outcome = files::sync_system(policy, file, dest, mode, config.owner(relative))
+        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+    run.hooks.record(outcome, config.on_change(relative));
+
+    Ok(outcome)
 }

@@ -4,7 +4,7 @@ use super::tone::Tone;
 
 pub const PREFIX: &str = "luadot";
 
-pub const LABEL_WIDTH: usize = 9;
+pub const LABEL_WIDTH: usize = 11;
 
 pub const FIELD_WIDTH: usize = 12;
 

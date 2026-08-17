@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::{API, CONFLICT_POLICIES, LINK_MODES};
-use super::super::parse::{external, lookup};
+use super::super::parse::{external, lookup, mode_bits};
 use super::super::surface::{self, Surface};
 use super::constants::{FILE, NAMESPACE, OUT};
 use super::file::handle;
@@ -80,21 +80,7 @@ fn mode(value: &Value, content: &Content) -> mlua::Result<Option<u32>> {
         )));
     }
 
-    bits(&raw).map(Some)
-}
-
-fn bits(raw: &str) -> mlua::Result<u32> {
-    let octal =
-        (3..=4).contains(&raw.len()) && raw.bytes().all(|digit| (b'0'..b'8').contains(&digit));
-    if !octal {
-        return Err(external(format!(
-            "`{API}.{NAMESPACE}.{OUT}` needs a `mode` of three or four octal digits, got `{raw}`"
-        )));
-    }
-
-    Ok(raw
-        .bytes()
-        .fold(0, |bits, digit| bits * 8 + u32::from(digit - b'0')))
+    mode_bits(&raw, &format!("`{API}.{NAMESPACE}.{OUT}`")).map(Some)
 }
 
 fn destination(lua: &Lua, raw: Option<&str>) -> mlua::Result<PathBuf> {

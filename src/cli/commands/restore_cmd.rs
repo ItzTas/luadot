@@ -162,27 +162,32 @@ fn chosen<'a>(taken: &'a [(u64, PathBuf)], name: Option<&String>) -> Result<(u64
 }
 
 fn destination(dir: &Path, home: &Path, file: &Path) -> Result<PathBuf> {
-    let relative = file.strip_prefix(dir).with_context(|| {
+    utils::system_path(home, dir, file).with_context(|| {
         format!(
-            "restore: {} is not inside the backup {}",
+            "restore: {} cannot be placed back from the backup {}",
             file.display(),
             dir.display()
         )
-    })?;
-
-    Ok(home.join(relative))
+    })
 }
 
 fn put_back(command: &str, dir: &Path, home: &Path, file: &Path) -> Result<()> {
     let dest = destination(dir, home, file)?;
 
+    match put_plain(command, file, &dest) {
+        Err(err) if files::permission_denied(&err) => files::escalate_entry(command, file, &dest),
+        other => other,
+    }
+}
+
+fn put_plain(command: &str, file: &Path, dest: &Path) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("{command}: failed to create {}", parent.display()))?;
     }
-    clear(command, &dest)?;
+    clear(command, dest)?;
 
-    utils::copy_entry(command, file, &dest)
+    utils::copy_entry(command, file, dest)
 }
 
 fn clear(command: &str, dest: &Path) -> Result<()> {
@@ -279,7 +284,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let home = root.path().join("home");
-        let saved = dir.join(".config/nvim/init.lua");
+        let saved = dir.join("home/.config/nvim/init.lua");
         std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
         std::fs::write(&saved, "backed up").unwrap();
 
@@ -297,9 +302,9 @@ mod tests {
         let dir = root.path().join("backup");
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let saved = dir.join(".zshrc");
+        let saved = dir.join("home/.zshrc");
         let managed = repo.join(".zshrc");
-        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
         std::fs::create_dir_all(&home).unwrap();
         std::fs::create_dir_all(&repo).unwrap();
         std::fs::write(&saved, "handwritten").unwrap();
@@ -320,8 +325,8 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let home = root.path().join("home");
-        let saved = dir.join(".zshrc");
-        std::fs::create_dir_all(&dir).unwrap();
+        let saved = dir.join("home/.zshrc");
+        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
         std::fs::create_dir_all(home.join(".zshrc")).unwrap();
         std::fs::write(&saved, "handwritten").unwrap();
 

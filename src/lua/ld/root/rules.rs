@@ -1,7 +1,7 @@
 use mlua::{Function, Lua, Table};
 
 use super::super::constants::{API, CONFLICT_POLICIES, LINK_MODES};
-use super::super::parse::{external, lookup, matcher};
+use super::super::parse::{external, lookup, matcher, mode_bits, owner_name};
 use super::super::surface::{self, Surface};
 use super::constants::RULES;
 use crate::lua::{Config, Rule};
@@ -46,6 +46,9 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
     let conflict: Option<String> = entry.get("conflict")?;
     let on_change: Option<String> = entry.get("on_change")?;
     let ignore: Option<bool> = entry.get("ignore")?;
+    let mode: Option<String> = entry.get("mode")?;
+    let owner: Option<String> = entry.get("owner")?;
+    let encrypt: Option<bool> = entry.get("encrypt")?;
 
     Ok(Rule::new(
         pattern,
@@ -56,7 +59,10 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
             .transpose()?,
     )
     .with_on_change(on_change)
-    .with_ignore(ignore))
+    .with_ignore(ignore)
+    .with_mode(mode.map(|raw| mode_bits(&raw, "a rule")).transpose()?)
+    .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?)
+    .with_encrypt(encrypt))
 }
 
 #[cfg(test)]
@@ -262,6 +268,81 @@ mod tests {
 
         assert!(config.is_ignored(key));
         assert_eq!(config.link_mode(key), LinkMode::Symbolic);
+    }
+
+    #[test]
+    fn a_rule_carries_a_mode_and_an_owner() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = "root/etc/**", mode = "0644", owner = "root:root" },
+              { match = "root/etc/sudoers.d/**", mode = "0440" },
+            })
+            "#,
+        );
+
+        let sudoers = Path::new("root/etc/sudoers.d/wheel");
+        assert_eq!(config.mode(sudoers), Some(0o440));
+        assert_eq!(config.owner(sudoers), Some("root:root"));
+
+        let pacman = Path::new("root/etc/pacman.conf");
+        assert_eq!(config.mode(pacman), Some(0o644));
+
+        let bashrc = Path::new("home/.bashrc");
+        assert_eq!(config.mode(bashrc), None);
+        assert_eq!(config.owner(bashrc), None);
+    }
+
+    #[test]
+    fn a_rule_marks_the_files_it_matches_as_encrypted() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = "home/.ssh/id_*", encrypt = true },
+              { match = "home/.config/*/secrets.toml", encrypt = true },
+            })
+            "#,
+        );
+
+        assert!(config.encrypt(Path::new("home/.ssh/id_ed25519")));
+        assert!(config.encrypt(Path::new("home/.config/mail/secrets.toml")));
+        assert!(!config.encrypt(Path::new("home/.ssh/config")));
+        assert!(!config.encrypt(Path::new("home/.bashrc")));
+    }
+
+    #[test]
+    fn a_later_rule_takes_a_file_back_from_the_encrypted_ones() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = "home/.ssh/**", encrypt = true },
+              { match = "home/.ssh/*.pub", encrypt = false },
+            })
+            "#,
+        );
+
+        assert!(config.encrypt(Path::new("home/.ssh/id_ed25519")));
+        assert!(!config.encrypt(Path::new("home/.ssh/id_ed25519.pub")));
+    }
+
+    #[test]
+    fn rejects_an_invalid_mode() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = "root/etc/**", mode = "80" })"#).unwrap_err()
+        );
+
+        assert!(err.contains("three or four octal digits"));
+    }
+
+    #[test]
+    fn rejects_an_invalid_owner() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = "root/etc/**", owner = "a:b:c" })"#).unwrap_err()
+        );
+
+        assert!(err.contains("needs an `owner`"));
     }
 
     #[test]

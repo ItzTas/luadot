@@ -122,7 +122,7 @@ mod tests {
 
         assert_eq!(
             destination(&home, &repo, &arg(&home.join(".zshrc"))).unwrap(),
-            repo.join(".zshrc.luadot")
+            repo.join("home/.zshrc.luadot")
         );
     }
 
@@ -132,7 +132,7 @@ mod tests {
 
         assert_eq!(
             destination(&home, &repo, &arg(&home.join(".zshrc.luadot"))).unwrap(),
-            repo.join(".zshrc.luadot")
+            repo.join("home/.zshrc.luadot")
         );
     }
 
@@ -142,7 +142,7 @@ mod tests {
 
         assert_eq!(
             destination(&home, &repo, &arg(&home.join(".config/nvim/init.lua"))).unwrap(),
-            repo.join(".config/nvim/init.lua.luadot")
+            repo.join("home/.config/nvim/init.lua.luadot")
         );
     }
 
@@ -152,19 +152,18 @@ mod tests {
 
         assert_eq!(
             destination(&home, &repo, "~/.zshrc").unwrap(),
-            repo.join(".zshrc.luadot")
+            repo.join("home/.zshrc.luadot")
         );
     }
 
     #[test]
-    fn a_path_outside_the_home_directory_is_refused() {
+    fn a_system_path_lands_under_the_root_prefix() {
         let (_root, home, repo) = home_and_repo();
 
-        let err = destination(&home, &repo, "/etc/passwd")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("not inside your home directory"));
+        assert_eq!(
+            destination(&home, &repo, "/etc/zsh/zshrc").unwrap(),
+            repo.join("root/etc/zsh/zshrc.luadot")
+        );
     }
 
     #[test]

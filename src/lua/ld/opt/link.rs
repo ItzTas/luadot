@@ -41,7 +41,7 @@ mod tests {
         let err = format!("{:#}", from_source(r#"ld.opt.link("magic")"#).unwrap_err());
 
         assert!(err.contains("unknown link mode `magic`"));
-        assert!(err.contains("hard, symbolic"));
+        assert!(err.contains("hard, symbolic, copy"));
     }
 
     #[test]

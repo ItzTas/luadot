@@ -87,7 +87,7 @@ fn place(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
     create_parent(dest)?;
     match mode {
         LinkMode::Hard => hard_or_copy(source, dest),
-        LinkMode::Symbolic => link(mode, source, dest),
+        LinkMode::Symbolic | LinkMode::Copy => link(mode, source, dest),
     }
 }
 
@@ -127,7 +127,29 @@ pub(super) fn already_synced(mode: LinkMode, source: &Path, dest: &Path) -> Resu
     match mode {
         LinkMode::Hard => Ok(same_file(source, dest)),
         LinkMode::Symbolic => points_to(dest, source),
+        LinkMode::Copy => copied(source, dest),
     }
+}
+
+fn copied(source: &Path, dest: &Path) -> Result<bool> {
+    let Ok(meta) = std::fs::symlink_metadata(dest) else {
+        return Ok(false);
+    };
+    if !meta.file_type().is_file() {
+        return Ok(false);
+    }
+    if same_file(source, dest) {
+        return Ok(false);
+    }
+
+    same_contents(source, dest)
+}
+
+pub(super) fn same_contents(source: &Path, dest: &Path) -> Result<bool> {
+    let expected = std::fs::read(source)
+        .with_context(|| format!("files: failed to read {}", source.display()))?;
+
+    Ok(matches!(std::fs::read(dest), Ok(found) if found == expected))
 }
 
 fn points_to(dest: &Path, source: &Path) -> Result<bool> {
@@ -306,6 +328,63 @@ mod tests {
         )
         .unwrap();
         assert_eq!(outcome, SyncOutcome::AlreadySynced);
+    }
+
+    #[test]
+    fn copy_mode_creates_an_independent_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        let dest = dir.path().join("dest");
+        write(&source, "data");
+
+        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Copy, &source, &dest).unwrap();
+
+        assert_eq!(outcome, SyncOutcome::Created);
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
+        assert_ne!(
+            std::fs::metadata(&source).unwrap().ino(),
+            std::fs::metadata(&dest).unwrap().ino()
+        );
+
+        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Copy, &source, &dest).unwrap();
+        assert_eq!(outcome, SyncOutcome::AlreadySynced);
+    }
+
+    #[test]
+    fn copy_mode_replaces_a_hard_link_with_a_real_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        let dest = dir.path().join("dest");
+        write(&source, "data");
+        std::fs::hard_link(&source, &dest).unwrap();
+
+        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Copy, &source, &dest).unwrap();
+
+        assert_eq!(outcome, SyncOutcome::Replaced);
+        assert_ne!(
+            std::fs::metadata(&source).unwrap().ino(),
+            std::fs::metadata(&dest).unwrap().ino()
+        );
+    }
+
+    #[test]
+    fn copy_mode_replaces_a_symlink_with_a_real_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        let dest = dir.path().join("dest");
+        write(&source, "data");
+        std::os::unix::fs::symlink(&source, &dest).unwrap();
+
+        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Copy, &source, &dest).unwrap();
+
+        assert_eq!(outcome, SyncOutcome::Replaced);
+        assert!(
+            !std::fs::symlink_metadata(&dest)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
     }
 
     #[test]

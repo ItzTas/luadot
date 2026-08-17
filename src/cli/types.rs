@@ -1,8 +1,8 @@
 use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
-    AddArgs, AltArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, EditArgs,
-    ExecArgs, GitArgs, NewArgs, PushArgs, RestoreArgs, RmArgs, SetupArgs, StatusArgs,
+    AddArgs, AltArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs,
+    EditArgs, ExecArgs, GitArgs, NewArgs, PushArgs, RestoreArgs, RmArgs, SetupArgs, StatusArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -35,6 +35,8 @@ pub enum Cmd {
     Rm(RmArgs),
     #[command(about = "List the managed files whose system copy is not in sync")]
     Status(StatusArgs),
+    #[command(about = "Show what the repository holds and the system does not")]
+    Diff(DiffArgs),
     #[command(about = "Put the repository's files back on the system")]
     Apply(ApplyArgs),
     #[command(about = "Run the templates and put the files they produce on the system")]

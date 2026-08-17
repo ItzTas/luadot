@@ -7,9 +7,10 @@ A dotfiles manager configured in Lua.
 | Command | Effect |
 | --- | --- |
 | `luadot clone <url> [dir]` | Clones a dotfiles repository and makes it the managed one. |
-| `luadot add <path>...` | Starts managing a file or directory, linking it into the repository. |
-| `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving your home copy in place. |
+| `luadot add <path>...` | Starts managing a file or directory, mirroring it into the repository. |
+| `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving the system copy in place. |
 | `luadot status [path]` | Lists the managed files whose system copy is not in sync. |
+| `luadot diff [path]` | Shows what the repository holds and the system does not. |
 | `luadot apply [-n] [path]` | Puts the repository's files back on the system. |
 | `luadot alt [-n] [path]` | Runs the templates and puts the files they produce on the system. |
 | `luadot new [-f] <path>` | Creates an empty template in the repository, for the file that path names. |
@@ -56,6 +57,42 @@ everything else:
 - `unlinked` — the contents match, but the system copy is not the link the
   configuration asks for.
 - `differs` — the system copy holds something else.
+- `unreadable` — a system file luadot may not read; `status` never asks for
+  privilege, `apply` does.
+
+`diff` picks up where `status` stops, and shows the content behind a `differs`:
+
+```
+$ luadot diff
+diff --git repository/home/.vimrc system/home/.vimrc
+--- repository/home/.vimrc
++++ system/home/.vimrc
+@@ -1,2 +1,2 @@
+ set number
+-set ruler
++set paste
+luadot: 1 of 12 managed file(s) differ
+```
+
+The repository is the left side and the system the right side, so what the
+diff adds is what `apply` would overwrite and what it removes is what `add`
+would bring in. A path narrows the report to that file or to everything below
+that directory. A file the system does not have shows its whole content as
+absent from the right side; one reported `unlinked` holds the same content and
+has nothing to show.
+
+The diff itself is `git diff`, run over a private copy of the two sides, so
+your pager, your colors and your `diff.*` settings are the ones that apply, and
+binary files are reported as differing instead of printed. Since git only
+records the executable bit, a system file whose content matches but whose mode
+drifted gets a line of its own:
+
+```
+mode       root/etc/sudoers.d/wheel 0644 -> 0440
+```
+
+Templates are left out, their repository side not existing until `alt` runs
+them; the summary says how many were skipped.
 
 `rm` is the inverse of `add`: it removes the file from the repository and leaves
 your home directory with a plain, unmanaged copy of it. When the system copy is
@@ -66,13 +103,127 @@ Directories that become empty are pruned from the repository.
 Removing more than one file asks first, listing what is about to go:
 
 ```
-  .config/nvim/init.lua
-  .config/nvim/lua/plugins.lua
+  home/.config/nvim/init.lua
+  home/.config/nvim/lua/plugins.lua
 Stop managing 2 file(s)? [y/N]
 ```
 
 `-y` (or `--yes`) answers it upfront, which is also what a script needs: without
 a terminal to ask on, `rm` refuses rather than assuming an answer.
+
+### The layout
+
+The repository mirrors the machine under two directories: `home/` holds what
+lives in your home directory, `root/` holds the rest of the filesystem, path
+for path. `add` chooses between them by the path it is given:
+
+```
+luadot add ~/.zshrc          -- lands in home/.zshrc
+luadot add /etc/pacman.conf  -- lands in root/etc/pacman.conf
+```
+
+Anything at the top level outside the two directories — the repository's own
+README, a license — is the repository's own and is never applied anywhere.
+
+### What git refuses to keep
+
+`add` reads the repository's `.gitignore` before it writes anything: a file git
+would never track has no business being mirrored there, where it would sit
+outside every commit and be gone on the next clone. A path named on the command
+line that lands on an excluded destination stops the run:
+
+```
+$ luadot add ~/.cache
+add: /home/u/.cache lands on home/.cache, which the repository's .gitignore excludes
+```
+
+Walking a directory is quieter: the excluded files are left out and the rest is
+added, so `luadot add ~/.config/nvim` brings the configuration in and leaves the
+logs behind. Nested `.gitignore` files, negated patterns, `.git/info/exclude`
+and the global excludes file all count, exactly as git reads them; a repository
+git does not track excludes nothing.
+
+### System files
+
+Files under `root/` go through the same commands as everything else, with two
+differences. They are always placed as plain copies, never links: a hard link
+would leave the repository's copy owned by root, and a symlink into your home
+directory breaks for anything that runs while your home is unavailable. And
+writing them usually takes privilege: every operation is tried as you first,
+and only when the filesystem answers "permission denied" does luadot run
+`sudo` for that one file (`install` to place it, `cat` to read it), so a run
+that never touches a privileged path never asks for a password.
+
+The mode and owner a system file should carry come from the rules:
+
+```lua
+ld.rules({
+  { match = "root/etc/**", mode = "0644", owner = "root:root" },
+  { match = "root/etc/sudoers.d/**", mode = "0440" },
+})
+```
+
+Without a `mode`, the repository file's own permission bits are applied;
+without an `owner`, the file belongs to whoever wrote it — you when no
+privilege was needed, root when sudo was. `status` reports a system file it
+cannot read as `unreadable` and moves on; `apply` and `diff` read it through
+`sudo cat` before deciding what to do.
+
+### Encrypted files
+
+Some dotfiles hold secrets — SSH private keys, API tokens, `~/.netrc` — and a
+public repository is no place for their plaintext. An `encrypt` rule keeps the
+file managed anyway: the repository stores only ciphertext, and the plaintext
+only ever exists in your home directory.
+
+```lua
+ld.crypt.recipients("age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p")
+ld.crypt.identity("~/.keys/age.txt")
+
+ld.rules({
+  { match = "home/.ssh/id_*", encrypt = true },
+  { match = "home/.netrc", encrypt = true },
+})
+```
+
+Encryption runs through the `age` or `gpg` binary on your `PATH` — luadot
+ships no cryptography of its own. `age` is the default;
+`ld.crypt.backend("gpg")` switches. The stored file keeps its path and gains
+the backend's extension, so `add ~/.netrc` lands in `home/.netrc.age` and the
+repository shows at a glance what is encrypted; the extension is what marks a
+file as encrypted from then on, whatever the rules say later.
+
+- `add` encrypts the file into the repository instead of linking it, and never
+  writes the plaintext there.
+- `apply` decrypts to the home directory. Linking is bypassed — a link to
+  ciphertext would be useless — so the file is always a plain copy, written
+  with mode `600`, whatever `link` says.
+- `status` compares the decrypted content against the system copy and reports
+  the file `unreadable` when it cannot decrypt.
+- `edit` decrypts to a private temporary directory (`0700`, under
+  `$XDG_RUNTIME_DIR` when it exists), opens the editor there, re-encrypts and
+  removes the plaintext, even when the editor exits badly. An unchanged file is
+  left alone, so the ciphertext only churns when the content did change.
+- `rm` deletes the ciphertext from the repository; when the system copy is
+  missing it decrypts one last time to leave the plaintext behind.
+- Conflict policies apply as usual, comparing the decrypted content against
+  what is on the system.
+
+Encrypting is done to the `recipients` — age public keys, or key ids for gpg —
+and decrypting with age needs the `identity`, the private key file. gpg ignores
+the identity and uses its own keyring for both directions. A failed decryption
+stops `apply` with the tool's own error rather than skipping the file.
+
+Files under `root/` cannot be encrypted: their apply path runs through `sudo`
+and staged writes, which would spill plaintext through pipes owned by other
+processes.
+
+| Call | Arguments | Effect |
+| --- | --- | --- |
+| `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
+| `ld.crypt.recipients(keys)` | a key or a list of them | Public keys or key ids the files are encrypted to. |
+| `ld.crypt.identity(path)` | a path | Private key used to decrypt with age; gpg uses its keyring. `~` and a relative path resolve against your home directory. |
+| `ld.crypt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 
 ### Seeing it first
 
@@ -81,8 +232,8 @@ and touch nothing — no file written, no backup taken:
 
 ```
 $ luadot apply --dry-run
-create   .config/nvim/init.lua
-replace  .zshrc
+create   home/.config/nvim/init.lua
+replace  home/.zshrc
 luadot: would apply 12 file(s) (1 created, 1 replaced, 10 unchanged, 0 skipped)
 ```
 
@@ -101,11 +252,10 @@ luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
 ```
 
 One directory per run, named after the millisecond it ran, holding the saved
-files under the paths they had in your home directory. A symlink is kept as a
-symlink; nothing is written for a file that was created rather than replaced,
-and `add` takes no backup because it never writes over anything. Files outside
-your home directory have no mirrored path to be saved under, so they are
-reported and left alone.
+files under the same `home/` and `root/` layout the repository uses, so a
+replaced `/etc` file is saved and restored like any other. A symlink is kept
+as a symlink; nothing is written for a file that was created rather than
+replaced, and `add` takes no backup because it never writes over anything.
 
 `luadot restore` puts the most recent one back, asking first and listing what
 is about to land:
@@ -116,7 +266,7 @@ $ luadot restore --list
 1786590012773  1 day ago      4 file(s)
 
 $ luadot restore
-  .zshrc
+  home/.zshrc
 Put 1 file(s) of backup 1786677956412 back? [y/N]
 ```
 
@@ -172,59 +322,63 @@ ld.opt.link("hard")
 ld.opt.conflict("overwrite")
 
 ld.rules({
-  { match = ".ssh/**", link = "symbolic", conflict = "skip" },
-  { match = ".config/nvim/**", conflict = "error" },
-  { match = ".config/mako/**", on_change = "makoctl reload" },
-  { match = "*.swp", ignore = true },
-  { match = ".cache/**", ignore = true },
+  { match = "home/.ssh/**", link = "symbolic", conflict = "skip" },
+  { match = "home/.config/nvim/**", conflict = "error" },
+  { match = "home/.config/mako/**", on_change = "makoctl reload" },
+  { match = "**/*.swp", ignore = true },
+  { match = "home/.cache/**", ignore = true },
 })
 ```
 
-A single rule needs no list around it — `ld.rules({ match = ".ssh/**", link =
-"symbolic" })` is the same call carrying one entry.
+A single rule needs no list around it — `ld.rules({ match = "home/.ssh/**",
+link = "symbolic" })` is the same call carrying one entry.
 
 A rule names the files it covers through `match`, a glob, or through `regex`, a
 regular expression; a rule carries one of the two, never both.
 
 ```lua
 ld.rules({
-  { regex = "^\\.config/(nvim|zsh)/", link = "symbolic" },
+  { regex = "^home/\\.config/(nvim|zsh)/", link = "symbolic" },
   { regex = "\\.sw[po]$", ignore = true },
 })
 ```
 
 The expression is [Rust's regex syntax][regex], matched against the path as
 written, with `/` as the separator and no anchoring of its own: `nvim` covers
-every path carrying that word, `^\.ssh/` only what sits under `.ssh/`. Lua
+every path carrying that word, `^home/\.ssh/` only what sits under `~/.ssh/`. Lua
 escapes a backslash as `\\`, so a literal dot is `"\\."` inside the script.
 Neither backreferences nor lookaround exist there, which is what keeps every
 match linear in the length of the path.
 
 [regex]: https://docs.rs/regex/latest/regex/#syntax
 
-A rule carries four more keys, all optional next to `match` or `regex`:
+A rule carries seven more keys, all optional next to `match` or `regex`:
 
 | Key | Values | Effect |
 | --- | --- | --- |
-| `link` | `"hard"`, `"symbolic"` | How the matching files are placed. |
+| `link` | `"hard"`, `"symbolic"`, `"copy"` | How the matching files are placed. Files under `root/` are always copies, whatever it says. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the system copy differs. |
 | `on_change` | a command line | Runs after `apply` or `alt` created or replaced one of those files. |
 | `ignore` | `true`, `false` | Whether the matching files are left unmanaged. |
+| `mode` | three or four octal digits, as a string | The permission bits a matching file under `root/` is placed with. |
+| `owner` | `"user"` or `"user:group"` | Who owns a matching file under `root/`. |
+| `encrypt` | `true`, `false` | Whether `add` stores the matching files encrypted. Only for files under `home/`. |
 
 Either syntax also matches a directory on behalf of everything under it, so
-`{ match = ".ssh" }` and `{ regex = "^\\.ssh$" }` both cover `.ssh/keys/id_ed25519`.
+`{ match = "home/.ssh" }` and `{ regex = "^home/\\.ssh$" }` both cover
+`home/.ssh/keys/id_ed25519`.
 
 The last matching rule wins, key by key, so a general rule is narrowed by a
-later one and never merged with it — `{ match = ".cache/**", ignore = true }`
-followed by `{ match = ".cache/keep/**", ignore = false }` ignores everything
-under `.cache/` but that one directory. `on_change` runs once per command line
+later one and never merged with it — `{ match = "home/.cache/**", ignore = true }`
+followed by `{ match = "home/.cache/keep/**", ignore = false }` ignores
+everything under `~/.cache/` but that one directory. `on_change` runs once per command line
 and per run, at the end: twenty files under `.config/mako/` changing reload mako
 once, not twenty times. A failing command stops the run after the files are in
 place, and `--dry-run` prints the command instead of running it.
 
 | Call | Arguments | Effect |
 | --- | --- | --- |
-| `ld.opt.link(mode)` | `"hard"`, `"symbolic"` | Default strategy used to link a managed file. |
+| `ld.opt.link(mode)` | `"hard"`, `"symbolic"`, `"copy"` | Default strategy used to link a managed file. |
 | `ld.opt.backup(enabled)` | `true`, `false` | Whether a file is copied aside before luadot writes over it. Defaults to `true`. |
 | `ld.opt.backup_dir(path)` | a directory | Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`. |
 | `ld.opt.backup_keep(count)` | a number of one or more | How many backups to keep; the oldest ones are dropped once there are more. Defaults to keeping every one of them. |
@@ -232,7 +386,11 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
-| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, and marks them as never managed. |
+| `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
+| `ld.crypt.recipients(keys)` | a key or a list of them | Public keys or key ids encrypted files are encrypted to. |
+| `ld.crypt.identity(path)` | a path | Private key used to decrypt with age. |
+| `ld.crypt(options)` | a table of options | Sets several crypt options at once; only the keys it carries. |
+| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, and marks them as encrypted. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |
@@ -263,7 +421,7 @@ instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.crypt.backend`, `ld.crypt.recipients`, `ld.crypt.identity`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
 | `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
@@ -362,12 +520,12 @@ module can declare a class the configuration then refines.
 
 ```lua
 if ld.class.get("form-factor") == "laptop" then
-  ld.rules({ { match = ".config/tlp/**", link = "symbolic" } })
+  ld.rules({ { match = "home/.config/tlp/**", link = "symbolic" } })
 end
 ```
 
 ```lua
--- .zshrc.luadot/luadot.lua
+-- home/.zshrc.luadot/luadot.lua
 return ld.alt.file(ld.class.get("form-factor") .. ".zsh")
 ```
 
@@ -544,8 +702,9 @@ require("editors")
 
 ### Patterns
 
-Patterns are relative to the repository root, which mirrors your home directory,
-so `.config/nvim/init.lua` is the pattern for `~/.config/nvim/init.lua`.
+Patterns are relative to the repository root, so `home/.config/nvim/init.lua`
+is the pattern for `~/.config/nvim/init.lua` and `root/etc/pacman.conf` the one
+for `/etc/pacman.conf`.
 
 - `*` matches within a single path segment, `**` crosses segments.
 - A pattern naming a directory covers everything under it.
@@ -562,19 +721,22 @@ mirroring them.
 
 ```
 ~/dotfiles/
-├── .zshrc.luadot/                 -- produces ~/.zshrc
-│   ├── luadot.lua
-│   ├── laptop.zsh
-│   └── desktop.zsh
-├── .config/nvim/init.lua.luadot/  -- produces ~/.config/nvim/init.lua
-│   ├── luadot.lua
-│   └── init.tmpl.lua
-├── .zprofile.luadot               -- a standalone template, produces ~/.zprofile
-└── .vimrc                         -- a plain managed file
+├── home/
+│   ├── .zshrc.luadot/                 -- produces ~/.zshrc
+│   │   ├── luadot.lua
+│   │   ├── laptop.zsh
+│   │   └── desktop.zsh
+│   ├── .config/nvim/init.lua.luadot/  -- produces ~/.config/nvim/init.lua
+│   │   ├── luadot.lua
+│   │   └── init.tmpl.lua
+│   ├── .zprofile.luadot               -- a standalone template, produces ~/.zprofile
+│   └── .vimrc                         -- a plain managed file
+└── root/
+    └── etc/motd.luadot                -- produces /etc/motd
 ```
 
 The destination is the template's own path without the suffix, so the
-repository keeps mirroring your home directory. Inside a directory, a `dest`
+repository keeps mirroring the system. Inside a directory, a `dest`
 of your own overrides it.
 
 `luadot new` creates either form, empty. It takes the path of the file the
@@ -582,9 +744,9 @@ template is for, the `.luadot` suffix being added when it is not already
 there, and mirrors it into the repository the way `add` does:
 
 ```
-luadot new ~/.zshrc                  -- ~/dotfiles/.zshrc.luadot/luadot.lua
-luadot new .config/nvim/init.lua     -- ~/dotfiles/.config/nvim/init.lua.luadot/luadot.lua
-luadot new -f ~/.zprofile            -- ~/dotfiles/.zprofile.luadot, a standalone template
+luadot new ~/.zshrc                  -- ~/dotfiles/home/.zshrc.luadot/luadot.lua
+luadot new .config/nvim/init.lua     -- ~/dotfiles/home/.config/nvim/init.lua.luadot/luadot.lua
+luadot new -f ~/.zprofile            -- ~/dotfiles/home/.zprofile.luadot, a standalone template
 ```
 
 A relative path is resolved against the directory you are in, and has to land
@@ -596,7 +758,7 @@ until you write them, and neither replaces anything that is already there.
 calling `ld.alt.out` or by returning the same table:
 
 ```lua
--- .zshrc.luadot/luadot.lua
+-- home/.zshrc.luadot/luadot.lua
 return {
   content = (ld.sys.host.name == "thinkpad") and ld.alt.file("laptop.zsh")
       or ld.alt.file("desktop.zsh"),
@@ -605,7 +767,7 @@ return {
 ```
 
 ```lua
--- .config/nvim/init.lua.luadot/luadot.lua
+-- home/.config/nvim/init.lua.luadot/luadot.lua
 ld.alt.out({ content = ld.alt.render("init.tmpl.lua", { leader = " " }) })
 ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 ```
@@ -633,7 +795,7 @@ A declared file carries what it needs and nothing else:
 | --- | --- | --- |
 | `content` | a string or an `ld.alt.file` | What lands on the system: a string is written, a file is linked. Required. |
 | `dest` | a path | Where it lands; `~/` and a relative path both start at your home directory. Defaults to the mirrored path. |
-| `link` | `"hard"`, `"symbolic"` | How an `ld.alt.file` is placed. Defaults to the configured mode. |
+| `link` | `"hard"`, `"symbolic"`, `"copy"` | How an `ld.alt.file` is placed. Defaults to the configured mode. A destination under `/` is always a copy. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the destination already holds something else. Defaults to the configured policy. |
 | `mode` | three or four octal digits, as a string | The permissions of the generated file, `"600"` for one holding a secret. Defaults to what your umask gives. Only for generated content: an `ld.alt.file` is the repository's own copy and keeps its own mode. |
 | `on_change` | a command line | Runs through `sh -c` after the file is created or replaced, and only then — an unchanged file runs nothing. Wins over an `on_change` rule matching the same path. |
@@ -672,7 +834,7 @@ bytes, so one file can be assembled from fragments that are each versioned on
 their own:
 
 ```lua
--- .zshrc.luadot/luadot.lua
+-- home/.zshrc.luadot/luadot.lua
 local parts = {}
 for _, name in ipairs(ld.alt.glob("conf.d/*.zsh")) do
   parts[#parts + 1] = ld.alt.read(name)

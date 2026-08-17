@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod crypt;
 pub mod files;
 pub mod git;
 pub mod lua;

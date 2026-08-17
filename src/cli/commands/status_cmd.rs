@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Args;
 
+use crate::crypt;
 use crate::files::{self, Entry, FileStatus};
 use crate::lua;
 use crate::output::{self, Tone};
@@ -29,7 +30,11 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
 
     let files: Vec<PathBuf> = files::collect_entries("status", &root)?
         .into_iter()
-        .filter(|entry| !config.is_ignored(utils::relative(&repo, &entry.target())))
+        .filter(|entry| {
+            let target = entry.target();
+            let relative = utils::relative(&repo, &target);
+            utils::is_managed(relative) && !config.is_ignored(&crypt::logical(relative))
+        })
         .filter_map(|entry| match entry {
             Entry::File(file) => Some(file),
             Entry::Template(_) | Entry::Standalone(_) => None,
@@ -44,11 +49,28 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
     let mut missing = 0u32;
     let mut unlinked = 0u32;
     let mut differs = 0u32;
+    let mut unreadable = 0u32;
+    let identity = config
+        .crypt_identity()
+        .map(|path| utils::expand(&home, path));
     for file in &files {
         let relative = utils::relative(&repo, file);
-        let dest = utils::system_path(&home, &repo, file)?;
-        let status = files::file_status(config.link_mode(relative), file, &dest)
-            .with_context(|| format!("status: failed to inspect {}", dest.display()))?;
+        let split = crypt::split(relative);
+        let logical = split
+            .as_ref()
+            .map(|(stripped, _)| stripped.as_path())
+            .unwrap_or(relative);
+        let dest = utils::system_path(&home, &repo, &repo.join(logical))?;
+        let status = match split {
+            Some((_, backend)) => {
+                crypt::status("status", backend, identity.as_deref(), file, &dest)
+            }
+            None => match utils::is_root(relative) {
+                true => files::inspect_system(file, &dest, config.mode(relative)),
+                false => files::file_status(config.link_mode(relative), file, &dest),
+            },
+        }
+        .with_context(|| format!("status: failed to inspect {}", dest.display()))?;
         match status {
             FileStatus::Synced => {
                 synced += 1;
@@ -57,15 +79,18 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
             FileStatus::Missing => missing += 1,
             FileStatus::Unlinked => unlinked += 1,
             FileStatus::Differs => differs += 1,
+            FileStatus::Unreadable => unreadable += 1,
         }
         let (tone, label) = display(status);
         output::entry(tone, label, relative.display());
     }
 
-    output::note(format!(
-        "{} managed file(s) ({synced} synced, {missing} missing, {unlinked} unlinked, {differs} differs)",
-        files.len()
-    ));
+    let mut counts =
+        format!("{synced} synced, {missing} missing, {unlinked} unlinked, {differs} differs");
+    if unreadable > 0 {
+        counts.push_str(&format!(", {unreadable} unreadable"));
+    }
+    output::note(format!("{} managed file(s) ({counts})", files.len()));
 
     Ok(())
 }
@@ -89,6 +114,7 @@ mod tests {
             FileStatus::Missing,
             FileStatus::Unlinked,
             FileStatus::Differs,
+            FileStatus::Unreadable,
         ] {
             let (_, label) = display(status);
             assert!(!label.is_empty());
@@ -98,7 +124,7 @@ mod tests {
     #[test]
     fn labels_fit_the_printed_column() {
         for (_, text, _) in STATUS_LABELS {
-            assert!(text.len() < 9);
+            assert!(text.len() < 11);
         }
     }
 }
