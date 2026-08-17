@@ -6,6 +6,7 @@ use mlua::{AppDataRefMut, Lua};
 use regex::Regex;
 
 use super::constants::{CLASS_QUESTION, GIT_DIR, MATCH};
+use crate::crypt::Backend;
 use crate::files::{ConflictPolicy, LinkMode};
 
 #[derive(Debug, Clone)]
@@ -19,6 +20,9 @@ pub struct Config {
     backup_dir: Option<PathBuf>,
     backup_keep: Option<u32>,
     repo_dir: Option<PathBuf>,
+    crypt_backend: Backend,
+    crypt_recipients: Vec<String>,
+    crypt_identity: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -33,6 +37,9 @@ impl Default for Config {
             backup_dir: None,
             backup_keep: None,
             repo_dir: None,
+            crypt_backend: Backend::default(),
+            crypt_recipients: Vec::new(),
+            crypt_identity: None,
         }
     }
 }
@@ -124,6 +131,30 @@ impl Config {
 
     pub fn repo_dir(&self) -> Option<&Path> {
         self.repo_dir.as_deref()
+    }
+
+    pub fn set_crypt_backend(&mut self, backend: Backend) {
+        self.crypt_backend = backend;
+    }
+
+    pub fn crypt_backend(&self) -> Backend {
+        self.crypt_backend
+    }
+
+    pub fn set_crypt_recipients(&mut self, recipients: Vec<String>) {
+        self.crypt_recipients = recipients;
+    }
+
+    pub fn crypt_recipients(&self) -> &[String] {
+        &self.crypt_recipients
+    }
+
+    pub fn set_crypt_identity(&mut self, identity: PathBuf) {
+        self.crypt_identity = Some(identity);
+    }
+
+    pub fn crypt_identity(&self) -> Option<&Path> {
+        self.crypt_identity.as_deref()
     }
 
     pub fn link(&self) -> LinkMode {

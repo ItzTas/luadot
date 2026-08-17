@@ -98,7 +98,7 @@ fn keys<T>(entries: &[(&str, T)]) -> String {
 mod tests {
     use super::*;
 
-    use super::super::constants::{CONFLICT_POLICIES, LINK_MODES};
+    use super::super::constants::{CONFLICT_POLICIES, CRYPT_BACKENDS, LINK_MODES};
 
     const ENTRIES: [(&str, u8); 2] = [("one", 1), ("two", 2)];
 
@@ -113,6 +113,13 @@ mod tests {
     fn conflict_policies_round_trip_through_their_name() {
         for (name, policy) in CONFLICT_POLICIES {
             assert_eq!(policy.name(), name);
+        }
+    }
+
+    #[test]
+    fn crypt_backends_round_trip_through_their_name() {
+        for (name, backend) in CRYPT_BACKENDS {
+            assert_eq!(backend.name(), name);
         }
     }
 

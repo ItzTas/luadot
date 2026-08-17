@@ -1,3 +1,4 @@
+use crate::crypt::Backend;
 use crate::files::{ConflictPolicy, LinkMode};
 
 pub const API: &str = "ld";
@@ -17,3 +18,5 @@ pub const CONFLICT_POLICIES: [(&str, ConflictPolicy); 3] = [
     ("skip", ConflictPolicy::Skip),
     ("error", ConflictPolicy::Error),
 ];
+
+pub const CRYPT_BACKENDS: [(&str, Backend); 2] = [("age", Backend::Age), ("gpg", Backend::Gpg)];
