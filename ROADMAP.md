@@ -59,11 +59,6 @@ still missing:
   else: no age limit, and no way to prune by hand short of removing the
   directories. A `restore --prune` and an `ld.opt.backup_age` are the obvious
   answers; neither is settled, and a count may well be enough.
-- **Files outside the home directory.** A template writing to `/etc`, or a
-  repository living outside `~`, has no mirrored path to be saved under, so the
-  files are counted and reported instead of backed up. A `root/` prefix inside
-  the backup would cover them, at the price of a `restore` that writes outside
-  the home directory.
 
 ## Encrypted files
 
