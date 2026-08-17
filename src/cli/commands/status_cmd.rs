@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Args;
 
+use crate::crypt;
 use crate::files::{self, Entry, FileStatus};
 use crate::lua;
 use crate::output::{self, Tone};
@@ -32,7 +33,7 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
         .filter(|entry| {
             let target = entry.target();
             let relative = utils::relative(&repo, &target);
-            utils::is_managed(relative) && !config.is_ignored(relative)
+            utils::is_managed(relative) && !config.is_ignored(&crypt::logical(relative))
         })
         .filter_map(|entry| match entry {
             Entry::File(file) => Some(file),
@@ -49,12 +50,25 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
     let mut unlinked = 0u32;
     let mut differs = 0u32;
     let mut unreadable = 0u32;
+    let identity = config
+        .crypt_identity()
+        .map(|path| utils::expand(&home, path));
     for file in &files {
         let relative = utils::relative(&repo, file);
-        let dest = utils::system_path(&home, &repo, file)?;
-        let status = match utils::is_root(relative) {
-            true => files::inspect_system(file, &dest, config.mode(relative)),
-            false => files::file_status(config.link_mode(relative), file, &dest),
+        let split = crypt::split(relative);
+        let logical = split
+            .as_ref()
+            .map(|(stripped, _)| stripped.as_path())
+            .unwrap_or(relative);
+        let dest = utils::system_path(&home, &repo, &repo.join(logical))?;
+        let status = match split {
+            Some((_, backend)) => {
+                crypt::status("status", backend, identity.as_deref(), file, &dest)
+            }
+            None => match utils::is_root(relative) {
+                true => files::inspect_system(file, &dest, config.mode(relative)),
+                false => files::file_status(config.link_mode(relative), file, &dest),
+            },
         }
         .with_context(|| format!("status: failed to inspect {}", dest.display()))?;
         match status {

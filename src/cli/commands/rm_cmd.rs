@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::Args;
 
+use crate::crypt;
 use crate::files;
 use crate::lua;
 use crate::output;
@@ -49,6 +50,10 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         return foresee(&home, &repo, &files);
     }
 
+    let identity = config
+        .crypt_identity()
+        .map(|path| utils::expand(&home, path));
+
     if !args.yes && !confirmed(&repo, &files)? {
         output::warn("aborted");
         return Ok(());
@@ -67,8 +72,13 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
     let mut restored = 0u32;
     let mut untouched = 0u32;
     for file in &files {
-        let dest = utils::system_path(&home, &repo, file)?;
-        match detach(file, &dest, &mut backup)? {
+        let split = crypt::split(utils::relative(&repo, file));
+        let dest = detach_target(&home, &repo, file, &split)?;
+        let detached = match &split {
+            Some((_, backend)) => detach_encrypted(*backend, identity.as_deref(), file, &dest)?,
+            None => detach(file, &dest, &mut backup)?,
+        };
+        match detached {
             Detached::Restored => restored += 1,
             Detached::Untouched => untouched += 1,
         }
@@ -97,8 +107,16 @@ fn foresee(home: &Path, repo: &Path, files: &[PathBuf]) -> Result<()> {
     let mut restored = 0u32;
     let mut untouched = 0u32;
     for file in files {
-        let dest = utils::system_path(home, repo, file)?;
-        match decide(file, &dest)?.detached() {
+        let split = crypt::split(utils::relative(repo, file));
+        let dest = detach_target(home, repo, file, &split)?;
+        let detached = match &split {
+            Some(_) => match metadata(&dest)?.is_some() {
+                true => Detached::Untouched,
+                false => Detached::Restored,
+            },
+            None => decide(file, &dest)?.detached(),
+        };
+        match detached {
             Detached::Restored => restored += 1,
             Detached::Untouched => untouched += 1,
         }
@@ -148,6 +166,34 @@ fn plan(home: &Path, repo: &Path, args: &[String]) -> Result<Vec<PathBuf>> {
     files.sort();
     files.dedup();
     Ok(files)
+}
+
+fn detach_target(
+    home: &Path,
+    repo: &Path,
+    file: &Path,
+    split: &Option<(PathBuf, crypt::Backend)>,
+) -> Result<PathBuf> {
+    match split {
+        Some((stripped, _)) => utils::system_path(home, repo, &repo.join(stripped)),
+        None => utils::system_path(home, repo, file),
+    }
+}
+
+fn detach_encrypted(
+    backend: crypt::Backend,
+    identity: Option<&Path>,
+    source: &Path,
+    dest: &Path,
+) -> Result<Detached> {
+    if metadata(dest)?.is_some() {
+        return Ok(Detached::Untouched);
+    }
+
+    let contents = crypt::decrypt("rm", backend, identity, source)
+        .with_context(|| format!("rm: failed to decrypt {}", source.display()))?;
+    crypt::place("rm", files::ConflictPolicy::Overwrite, &contents, dest)?;
+    Ok(Detached::Restored)
 }
 
 fn detach(source: &Path, dest: &Path, backup: &mut Option<Backup>) -> Result<Detached> {

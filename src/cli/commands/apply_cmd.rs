@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args;
 
+use crate::crypt;
 use crate::files::{self, Entry, SyncOutcome};
 use crate::lua::{self, Config};
 use crate::output;
@@ -43,7 +44,7 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         .filter(|entry| {
             let target = entry.target();
             let relative = utils::relative(&repo, &target);
-            utils::is_managed(relative) && !config.is_ignored(relative)
+            utils::is_managed(relative) && !config.is_ignored(&crypt::logical(relative))
         })
         .filter_map(|entry| match entry {
             Entry::File(file) => Some(file),
@@ -75,11 +76,18 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     let mut skipped = 0u32;
     for file in &files {
         let relative = utils::relative(&repo, file);
-        let dest = utils::system_path(&home, &repo, file)?;
 
-        let outcome = match utils::is_root(relative) {
-            true => place_root(&config, relative, file, &dest, &mut run)?,
-            false => place_home(&config, relative, file, &dest, &mut run)?,
+        let outcome = match crypt::split(relative) {
+            Some((stripped, backend)) => {
+                place_encrypted(&config, backend, &stripped, file, &home, &repo, &mut run)?
+            }
+            None => {
+                let dest = utils::system_path(&home, &repo, file)?;
+                match utils::is_root(relative) {
+                    true => place_root(&config, relative, file, &dest, &mut run)?,
+                    false => place_home(&config, relative, file, &dest, &mut run)?,
+                }
+            }
         };
 
         match outcome {
@@ -136,6 +144,54 @@ fn place_home(
         .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
 
     run.hooks.record(outcome, config.on_change(relative));
+
+    Ok(outcome)
+}
+
+fn place_encrypted(
+    config: &Config,
+    backend: crypt::Backend,
+    stripped: &Path,
+    file: &Path,
+    home: &Path,
+    repo: &Path,
+    run: &mut Run,
+) -> Result<SyncOutcome> {
+    if utils::is_root(stripped) {
+        bail!(
+            "apply: {}: encrypted system files are not supported",
+            stripped.display()
+        );
+    }
+
+    let dest = utils::system_path(home, repo, &repo.join(stripped))?;
+    let policy = config.conflict_policy(stripped);
+    let identity = config
+        .crypt_identity()
+        .map(|path| utils::expand(home, path));
+
+    let contents = crypt::decrypt("apply", backend, identity.as_deref(), file)
+        .with_context(|| format!("apply: failed to decrypt {}", file.display()))?;
+    let status = crypt::plain_status("apply", &contents, &dest)
+        .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
+    let predicted = files::predict(policy, status, &dest)
+        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+    if run.dry_run {
+        utils::preview(predicted, stripped.display());
+        run.hooks.record(predicted, config.on_change(stripped));
+        return Ok(predicted);
+    }
+
+    if predicted == SyncOutcome::Replaced
+        && let Some(backup) = run.backup.as_mut()
+    {
+        backup.save(&dest)?;
+    }
+    let outcome = crypt::place("apply", policy, &contents, &dest)
+        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+    run.hooks.record(outcome, config.on_change(stripped));
 
     Ok(outcome)
 }
