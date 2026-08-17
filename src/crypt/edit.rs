@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 use std::os::unix::fs::DirBuilderExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
@@ -62,7 +62,11 @@ mod tests {
     fn a_workspace_is_private_to_the_user() {
         let workspace = Workspace::create("edit").unwrap();
 
-        let mode = std::fs::metadata(&workspace.dir).unwrap().permissions().mode() & 0o777;
+        let mode = std::fs::metadata(&workspace.dir)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
         assert_eq!(mode, 0o700);
     }
 
