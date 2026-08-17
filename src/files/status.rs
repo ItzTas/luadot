@@ -11,6 +11,7 @@ pub enum FileStatus {
     Missing,
     Unlinked,
     Differs,
+    Unreadable,
 }
 
 pub fn file_status(mode: LinkMode, source: &Path, dest: &Path) -> Result<FileStatus> {

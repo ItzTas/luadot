@@ -520,3 +520,92 @@ fn alt_builds_a_file_out_of_fragments_and_runs_the_command_that_follows_it() {
         .stdout(predicate::str::contains("1 unchanged"));
     assert!(!restarted.exists());
 }
+
+#[test]
+fn add_then_apply_manage_a_system_file_end_to_end() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let system = root.path().join("etc/app.conf");
+    std::fs::create_dir_all(&repo).unwrap();
+    write(&system, "conf\n");
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args(["add", system.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let managed = repo.join("root").join(system.strip_prefix("/").unwrap());
+    assert_eq!(read(&managed), "conf\n");
+
+    std::fs::remove_file(&system).unwrap();
+    luadot(&home).arg("apply").assert().success();
+    assert_eq!(read(&system), "conf\n");
+
+    luadot(&home)
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 managed file(s) (1 synced"));
+
+    luadot(&home)
+        .args(["rm", "--yes", system.to_str().unwrap()])
+        .assert()
+        .success();
+    assert!(!managed.exists());
+    assert_eq!(read(&system), "conf\n");
+}
+
+#[test]
+fn a_mode_rule_lands_on_a_system_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let system = root.path().join("etc/app.conf");
+    let managed = repo.join("root").join(system.strip_prefix("/").unwrap());
+    write(&managed, "conf\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.rules({ match = "root/**", mode = "0640" })"#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+
+    assert_eq!(read(&system), "conf\n");
+    assert_eq!(
+        std::fs::metadata(&system).unwrap().permissions().mode() & 0o7777,
+        0o640
+    );
+
+    luadot(&home)
+        .arg("apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 unchanged"));
+}
+
+#[test]
+fn a_replaced_system_file_is_backed_up_and_restored() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let system = root.path().join("etc/app.conf");
+    let managed = repo.join("root").join(system.strip_prefix("/").unwrap());
+    write(&managed, "managed\n");
+    write(&system, "handwritten\n");
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+    assert_eq!(read(&system), "managed\n");
+
+    let saved = only_dir(&home.join(".local/share/luadot/backups"));
+    let entry = saved.join("root").join(system.strip_prefix("/").unwrap());
+    assert_eq!(read(&entry), "handwritten\n");
+
+    luadot(&home).args(["restore", "--yes"]).assert().success();
+    assert_eq!(read(&system), "handwritten\n");
+}

@@ -9,6 +9,7 @@ pub fn predict(policy: ConflictPolicy, status: FileStatus, dest: &Path) -> Resul
         FileStatus::Missing => Ok(SyncOutcome::Created),
         FileStatus::Synced => Ok(SyncOutcome::AlreadySynced),
         FileStatus::Unlinked | FileStatus::Differs => diverged(policy, dest),
+        FileStatus::Unreadable => bail!("files: {} cannot be read", dest.display()),
     }
 }
 
@@ -68,6 +69,15 @@ mod tests {
                 SyncOutcome::Skipped
             );
         }
+    }
+
+    #[test]
+    fn an_unreadable_destination_refuses_a_prediction() {
+        let err = predict(ConflictPolicy::Overwrite, FileStatus::Unreadable, dest())
+            .unwrap_err()
+            .to_string();
+
+        assert_eq!(err, "files: /home/u/.bashrc cannot be read");
     }
 
     #[test]

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
-use crate::files::{self, LinkMode};
+use crate::files;
 use crate::lua::{self, Config};
 use crate::utils;
 
@@ -21,8 +21,7 @@ pub fn add_cmd(args: AddArgs) -> Result<()> {
     let home = utils::home_dir()?;
 
     for (source, dest) in plan(&home, &repo, &args.paths, &config)? {
-        let relative = utils::relative(&repo, &dest);
-        link_into_repo(config.link_mode(relative), &source, &dest)?;
+        link_into_repo(&config, &repo, &source, &dest)?;
     }
     Ok(())
 }
@@ -125,12 +124,17 @@ fn check_conflicts(pairs: &[(PathBuf, PathBuf)]) -> Result<()> {
     Ok(())
 }
 
-fn link_into_repo(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
+fn link_into_repo(config: &Config, repo: &Path, source: &Path, dest: &Path) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("add: failed to create {}", parent.display()))?;
     }
-    files::link(mode, source, dest)
+
+    let relative = utils::relative(repo, dest);
+    if utils::is_root(relative) {
+        return files::import_system(source, dest);
+    }
+    files::link(config.link_mode(relative), source, dest)
 }
 
 #[cfg(test)]
@@ -301,24 +305,51 @@ mod tests {
 
     #[test]
     fn link_into_repo_hard_links_source_into_dest() {
+        use std::os::unix::fs::MetadataExt;
+
         let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
         let source = dir.path().join("source.txt");
-        let dest = dir.path().join("dest.txt");
+        let dest = repo.join("home/dest.txt");
         std::fs::write(&source, "hello").unwrap();
 
-        link_into_repo(LinkMode::Hard, &source, &dest).unwrap();
+        link_into_repo(&Config::default(), &repo, &source, &dest).unwrap();
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
+        assert_eq!(
+            std::fs::metadata(&source).unwrap().ino(),
+            std::fs::metadata(&dest).unwrap().ino()
+        );
+    }
+
+    #[test]
+    fn link_into_repo_copies_a_system_file() {
+        use std::os::unix::fs::MetadataExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        let source = dir.path().join("pacman.conf");
+        let dest = repo.join("root/etc/pacman.conf");
+        std::fs::write(&source, "conf").unwrap();
+
+        link_into_repo(&Config::default(), &repo, &source, &dest).unwrap();
+
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "conf");
+        assert_ne!(
+            std::fs::metadata(&source).unwrap().ino(),
+            std::fs::metadata(&dest).unwrap().ino()
+        );
     }
 
     #[test]
     fn link_into_repo_creates_missing_parent_directories() {
         let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
         let source = dir.path().join("source.txt");
-        let dest = dir.path().join("nested").join("deep").join("dest.txt");
+        let dest = repo.join("home/nested/deep/dest.txt");
         std::fs::write(&source, "hello").unwrap();
 
-        link_into_repo(LinkMode::Hard, &source, &dest).unwrap();
+        link_into_repo(&Config::default(), &repo, &source, &dest).unwrap();
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
     }

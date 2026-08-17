@@ -9,6 +9,8 @@ use crate::output;
 use crate::state::{self, Classes};
 use crate::utils::{self, Backup, Hooks};
 
+use super::super::constants::SYSTEM_TEXT_MODE;
+
 #[derive(Debug, Args)]
 pub struct AltArgs {
     #[arg(value_name = "PATH")]
@@ -141,6 +143,10 @@ fn outputs(home: &Path, repo: &Path, entry: &Entry, classes: &Classes) -> Result
 fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result<SyncOutcome> {
     let relative = utils::managed_relative(home, output.dest())
         .with_context(|| format!("alt: failed to place {}", output.dest().display()))?;
+    if utils::is_root(&relative) {
+        return place_root(config, &relative, output, run);
+    }
+
     let relative = relative.as_path();
     let policy = output
         .conflict()
@@ -175,6 +181,58 @@ fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result
         Content::Text(text) => files::write_file(policy, output.dest(), text, output.mode()),
     }
     .with_context(|| format!("alt: failed to place {}", output.dest().display()))?;
+
+    run.hooks.record(outcome, on_change);
+
+    Ok(outcome)
+}
+
+fn place_root(
+    config: &Config,
+    relative: &Path,
+    output: &Output,
+    run: &mut Run,
+) -> Result<SyncOutcome> {
+    let dest = output.dest();
+    let policy = output
+        .conflict()
+        .unwrap_or_else(|| config.conflict_policy(relative));
+
+    let staged;
+    let (source, mode) = match output.content() {
+        Content::File(source) => (source.as_path(), config.mode(relative)),
+        Content::Text(text) => {
+            staged = files::stage_text(text)
+                .with_context(|| format!("alt: failed to place {}", dest.display()))?;
+            let mode = output
+                .mode()
+                .or_else(|| config.mode(relative))
+                .unwrap_or(SYSTEM_TEXT_MODE);
+            (staged.path(), Some(mode))
+        }
+    };
+
+    let status = files::escalated_status(source, dest, mode)
+        .with_context(|| format!("alt: failed to inspect {}", dest.display()))?;
+    let predicted = files::predict(policy, status, dest)
+        .with_context(|| format!("alt: failed to place {}", dest.display()))?;
+
+    let on_change = output.on_change().or_else(|| config.on_change(relative));
+
+    if run.dry_run {
+        utils::preview(predicted, relative.display());
+        run.hooks.record(predicted, on_change);
+        return Ok(predicted);
+    }
+
+    if predicted == SyncOutcome::Replaced
+        && let Some(backup) = run.backup.as_mut()
+    {
+        backup.save(dest)?;
+    }
+
+    let outcome = files::sync_system(policy, source, dest, mode, config.owner(relative))
+        .with_context(|| format!("alt: failed to place {}", dest.display()))?;
 
     run.hooks.record(outcome, on_change);
 

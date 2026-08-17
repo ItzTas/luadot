@@ -193,6 +193,13 @@ impl Plan {
 }
 
 fn restore(source: &Path, dest: &Path) -> Result<()> {
+    match restore_plain(source, dest) {
+        Err(err) if files::permission_denied(&err) => files::escalate_entry("rm", source, dest),
+        other => other,
+    }
+}
+
+fn restore_plain(source: &Path, dest: &Path) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("rm: failed to create {}", parent.display()))?;

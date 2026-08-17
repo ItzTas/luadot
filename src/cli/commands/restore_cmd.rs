@@ -174,13 +174,20 @@ fn destination(dir: &Path, home: &Path, file: &Path) -> Result<PathBuf> {
 fn put_back(command: &str, dir: &Path, home: &Path, file: &Path) -> Result<()> {
     let dest = destination(dir, home, file)?;
 
+    match put_plain(command, file, &dest) {
+        Err(err) if files::permission_denied(&err) => files::escalate_entry(command, file, &dest),
+        other => other,
+    }
+}
+
+fn put_plain(command: &str, file: &Path, dest: &Path) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("{command}: failed to create {}", parent.display()))?;
     }
-    clear(command, &dest)?;
+    clear(command, dest)?;
 
-    utils::copy_entry(command, file, &dest)
+    utils::copy_entry(command, file, dest)
 }
 
 fn clear(command: &str, dest: &Path) -> Result<()> {

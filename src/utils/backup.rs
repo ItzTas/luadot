@@ -185,10 +185,32 @@ impl Backup {
             })?;
         }
 
-        copy_entry(&self.command, path, &target)?;
+        match copy_entry(&self.command, path, &target) {
+            Err(err) if crate::files::permission_denied(&err) => {
+                self.save_escalated(path, &target)?;
+            }
+            other => other?,
+        }
         self.saved += 1;
 
         Ok(())
+    }
+
+    fn save_escalated(&self, path: &Path, target: &Path) -> Result<()> {
+        let bytes = crate::files::escalated_read(&self.command, path)?;
+        std::fs::write(target, bytes)
+            .with_context(|| format!("{}: failed to write {}", self.command, target.display()))?;
+
+        let permissions = std::fs::metadata(path)
+            .with_context(|| format!("{}: failed to inspect {}", self.command, path.display()))?
+            .permissions();
+        std::fs::set_permissions(target, permissions).with_context(|| {
+            format!(
+                "{}: failed to set the mode of {}",
+                self.command,
+                target.display()
+            )
+        })
     }
 }
 
