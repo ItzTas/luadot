@@ -7,10 +7,11 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use anyhow::{Context, Result, bail};
 use tracing::debug;
 
-use super::constants::{MODE_BITS, SUDO};
+use super::constants::{COMMAND, MODE_BITS, SUDO};
+use super::fs::{create_parent, exists, mode_bits, regular_file, remove_existing};
 use super::link::{LinkMode, link};
 use super::status::FileStatus;
-use super::sync::{ConflictPolicy, SyncOutcome, create_parent, exists, remove_existing};
+use super::sync::{ConflictPolicy, SyncOutcome};
 
 static STAGE: AtomicU32 = AtomicU32::new(0);
 
@@ -25,7 +26,7 @@ struct Owner<'a> {
 }
 
 pub fn inspect_system(source: &Path, dest: &Path, mode: Option<u32>) -> Result<FileStatus> {
-    if !exists(dest)? {
+    if !exists(COMMAND, dest)? {
         return Ok(FileStatus::Missing);
     }
 
@@ -249,13 +250,10 @@ fn import_escalated(source: &Path, dest: &Path) -> Result<()> {
 }
 
 fn holds_copy(source: &Path, dest: &Path, mode: Option<u32>) -> Result<bool> {
-    let Ok(meta) = std::fs::symlink_metadata(dest) else {
+    let Some(meta) = regular_file(dest) else {
         return Ok(false);
     };
-    if !meta.file_type().is_file() {
-        return Ok(false);
-    }
-    if meta.permissions().mode() & MODE_BITS != effective_mode(source, mode)? {
+    if mode_bits(&meta) != effective_mode(source, mode)? {
         return Ok(false);
     }
 
@@ -289,9 +287,9 @@ fn place_system(source: &Path, dest: &Path, mode: Option<u32>, owner: Option<&st
 }
 
 fn place_plain(source: &Path, dest: &Path, mode: Option<u32>, owner: Option<&Owner>) -> Result<()> {
-    create_parent(dest)?;
-    if exists(dest)? {
-        remove_existing(dest)?;
+    create_parent(COMMAND, dest)?;
+    if exists(COMMAND, dest)? {
+        remove_existing(COMMAND, dest)?;
     }
     link(LinkMode::Copy, source, dest)?;
 

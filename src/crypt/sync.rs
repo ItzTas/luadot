@@ -1,14 +1,14 @@
-use std::fs::{Metadata, OpenOptions, Permissions};
-use std::io::Write;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 
 use super::backend::Backend;
-use super::constants::{MODE_BITS, SECRET_MODE};
+use super::constants::SECRET_MODE;
 use super::run;
-use crate::files::{ConflictPolicy, FileStatus, SyncOutcome};
+use crate::files::{
+    ConflictPolicy, FileStatus, SyncOutcome, create_parent, exists, mode_bits, refused,
+    regular_file, remove_existing, write_mode,
+};
 
 pub fn status(
     command: &str,
@@ -56,10 +56,8 @@ pub fn place(
         return Ok(SyncOutcome::AlreadySynced);
     }
 
-    match policy {
-        ConflictPolicy::Skip => return Ok(SyncOutcome::Skipped),
-        ConflictPolicy::Error => bail!("{command}: {} already exists", dest.display()),
-        ConflictPolicy::Overwrite => {}
+    if let Some(outcome) = refused(command, policy, dest)? {
+        return Ok(outcome);
     }
 
     remove_existing(command, dest)?;
@@ -69,74 +67,29 @@ pub fn place(
 }
 
 fn holds(dest: &Path, expected: &[u8]) -> bool {
-    let Ok(meta) = std::fs::symlink_metadata(dest) else {
+    let Some(meta) = regular_file(dest) else {
         return false;
     };
-    if !meta.file_type().is_file() || bits(&meta) != SECRET_MODE {
+    if mode_bits(&meta) != SECRET_MODE {
         return false;
     }
 
     matches!(std::fs::read(dest), Ok(found) if found == expected)
 }
 
-fn bits(meta: &Metadata) -> u32 {
-    meta.permissions().mode() & MODE_BITS
-}
-
-fn exists(command: &str, path: &Path) -> Result<bool> {
-    match std::fs::symlink_metadata(path) {
-        Ok(_) => Ok(true),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(err) => {
-            Err(err).with_context(|| format!("{command}: failed to inspect {}", path.display()))
-        }
-    }
-}
-
-fn create_parent(command: &str, path: &Path) -> Result<()> {
-    let Some(parent) = path.parent() else {
-        return Ok(());
-    };
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("{command}: failed to create {}", parent.display()))
-}
-
-fn remove_existing(command: &str, path: &Path) -> Result<()> {
-    let meta = std::fs::symlink_metadata(path)
-        .with_context(|| format!("{command}: failed to inspect {}", path.display()))?;
-    if meta.file_type().is_dir() {
-        bail!(
-            "{command}: refusing to replace directory {} with a file",
-            path.display()
-        );
-    }
-    std::fs::remove_file(path)
-        .with_context(|| format!("{command}: failed to remove {}", path.display()))
-}
-
 fn write(command: &str, dest: &Path, contents: &[u8]) -> Result<()> {
-    let failed = || format!("{command}: failed to write {}", dest.display());
-
-    OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(SECRET_MODE)
-        .open(dest)
-        .with_context(failed)?
-        .write_all(contents)
-        .with_context(failed)?;
-
-    std::fs::set_permissions(dest, Permissions::from_mode(SECRET_MODE))
-        .with_context(|| format!("{command}: failed to set the mode of {}", dest.display()))
+    write_mode(command, dest, contents, SECRET_MODE)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt;
+
     use super::*;
 
     fn mode_of(path: &Path) -> u32 {
-        bits(&std::fs::metadata(path).unwrap())
+        mode_bits(&std::fs::metadata(path).unwrap())
     }
 
     #[test]

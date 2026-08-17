@@ -3,6 +3,8 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use tracing::debug;
 
+use super::constants::COMMAND;
+use super::fs::{create_parent, exists, regular_file, remove_existing};
 use super::{LinkMode, link};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -52,7 +54,7 @@ fn sync(policy: ConflictPolicy, mode: LinkMode, source: &Path, dest: &Path) -> R
         bail!("files: {} is not a file", source.display());
     }
 
-    if !exists(dest)? {
+    if !exists(COMMAND, dest)? {
         place(mode, source, dest)?;
         return Ok(SyncOutcome::Created);
     }
@@ -61,42 +63,30 @@ fn sync(policy: ConflictPolicy, mode: LinkMode, source: &Path, dest: &Path) -> R
         return Ok(SyncOutcome::AlreadySynced);
     }
 
-    match policy {
-        ConflictPolicy::Skip => return Ok(SyncOutcome::Skipped),
-        ConflictPolicy::Error => bail!("files: {} already exists", dest.display()),
-        ConflictPolicy::Overwrite => {}
+    if let Some(outcome) = refused(COMMAND, policy, dest)? {
+        return Ok(outcome);
     }
 
-    remove_existing(dest)?;
+    remove_existing(COMMAND, dest)?;
     place(mode, source, dest)?;
 
     Ok(SyncOutcome::Replaced)
 }
 
-pub(super) fn exists(path: &Path) -> Result<bool> {
-    match std::fs::symlink_metadata(path) {
-        Ok(_) => Ok(true),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(err) => {
-            Err(err).with_context(|| format!("files: failed to inspect {}", path.display()))
-        }
+pub fn refused(command: &str, policy: ConflictPolicy, dest: &Path) -> Result<Option<SyncOutcome>> {
+    match policy {
+        ConflictPolicy::Skip => Ok(Some(SyncOutcome::Skipped)),
+        ConflictPolicy::Error => bail!("{command}: {} already exists", dest.display()),
+        ConflictPolicy::Overwrite => Ok(None),
     }
 }
 
 fn place(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
-    create_parent(dest)?;
+    create_parent(COMMAND, dest)?;
     match mode {
         LinkMode::Hard => hard_or_copy(source, dest),
         LinkMode::Symbolic | LinkMode::Copy => link(mode, source, dest),
     }
-}
-
-pub(super) fn create_parent(path: &Path) -> Result<()> {
-    let Some(parent) = path.parent() else {
-        return Ok(());
-    };
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("files: failed to create {}", parent.display()))
 }
 
 fn hard_or_copy(source: &Path, dest: &Path) -> Result<()> {
@@ -132,13 +122,7 @@ pub(super) fn already_synced(mode: LinkMode, source: &Path, dest: &Path) -> Resu
 }
 
 fn copied(source: &Path, dest: &Path) -> Result<bool> {
-    let Ok(meta) = std::fs::symlink_metadata(dest) else {
-        return Ok(false);
-    };
-    if !meta.file_type().is_file() {
-        return Ok(false);
-    }
-    if same_file(source, dest) {
+    if regular_file(dest).is_none() || same_file(source, dest) {
         return Ok(false);
     }
 
@@ -169,19 +153,6 @@ fn same_file(source: &Path, dest: &Path) -> bool {
         return false;
     };
     a.dev() == b.dev() && a.ino() == b.ino()
-}
-
-pub(super) fn remove_existing(path: &Path) -> Result<()> {
-    let meta = std::fs::symlink_metadata(path)
-        .with_context(|| format!("files: failed to inspect {}", path.display()))?;
-    if meta.file_type().is_dir() {
-        bail!(
-            "files: refusing to replace directory {} with a file",
-            path.display()
-        );
-    }
-    std::fs::remove_file(path)
-        .with_context(|| format!("files: failed to remove {}", path.display()))
 }
 
 #[cfg(test)]

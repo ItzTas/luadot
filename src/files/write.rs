@@ -1,16 +1,14 @@
-use std::fs::{Metadata, OpenOptions, Permissions};
-use std::io::Write;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
-use super::constants::MODE_BITS;
+use super::constants::COMMAND;
+use super::fs::{create_parent, exists, mode_bits, regular_file, remove_existing, write_mode};
 use super::status::FileStatus;
-use super::sync::{ConflictPolicy, SyncOutcome, create_parent, exists, remove_existing};
+use super::sync::{ConflictPolicy, SyncOutcome, refused};
 
 pub fn text_status(dest: &Path, contents: &str, mode: Option<u32>) -> Result<FileStatus> {
-    if !exists(dest)? {
+    if !exists(COMMAND, dest)? {
         return Ok(FileStatus::Missing);
     }
 
@@ -27,8 +25,8 @@ pub fn write_file(
     contents: &str,
     mode: Option<u32>,
 ) -> Result<SyncOutcome> {
-    if !exists(dest)? {
-        create_parent(dest)?;
+    if !exists(COMMAND, dest)? {
+        create_parent(COMMAND, dest)?;
         write(dest, contents, mode)?;
         return Ok(SyncOutcome::Created);
     }
@@ -37,60 +35,41 @@ pub fn write_file(
         return Ok(SyncOutcome::AlreadySynced);
     }
 
-    match policy {
-        ConflictPolicy::Skip => return Ok(SyncOutcome::Skipped),
-        ConflictPolicy::Error => bail!("files: {} already exists", dest.display()),
-        ConflictPolicy::Overwrite => {}
+    if let Some(outcome) = refused(COMMAND, policy, dest)? {
+        return Ok(outcome);
     }
 
-    remove_existing(dest)?;
+    remove_existing(COMMAND, dest)?;
     write(dest, contents, mode)?;
 
     Ok(SyncOutcome::Replaced)
 }
 
 fn holds(path: &Path, contents: &str, mode: Option<u32>) -> Result<bool> {
-    let Ok(meta) = std::fs::symlink_metadata(path) else {
+    let Some(meta) = regular_file(path) else {
         return Ok(false);
     };
-    if !meta.file_type().is_file() {
-        return Ok(false);
-    }
-    if mode.is_some_and(|mode| bits(&meta) != mode) {
+    if mode.is_some_and(|mode| mode_bits(&meta) != mode) {
         return Ok(false);
     }
 
     Ok(matches!(std::fs::read(path), Ok(found) if found == contents.as_bytes()))
 }
 
-fn bits(meta: &Metadata) -> u32 {
-    meta.permissions().mode() & MODE_BITS
-}
-
 fn write(dest: &Path, contents: &str, mode: Option<u32>) -> Result<()> {
     let Some(mode) = mode else {
         return std::fs::write(dest, contents)
-            .with_context(|| format!("files: failed to write {}", dest.display()));
+            .with_context(|| format!("{COMMAND}: failed to write {}", dest.display()));
     };
 
-    let failed = || format!("files: failed to write {}", dest.display());
-
-    OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(mode)
-        .open(dest)
-        .with_context(failed)?
-        .write_all(contents.as_bytes())
-        .with_context(failed)?;
-
-    std::fs::set_permissions(dest, Permissions::from_mode(mode))
-        .with_context(|| format!("files: failed to set the mode of {}", dest.display()))
+    write_mode(COMMAND, dest, contents.as_bytes(), mode)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt;
+
     use super::*;
 
     #[test]
@@ -184,7 +163,7 @@ mod tests {
         let outcome = write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o600)).unwrap();
 
         assert_eq!(outcome, SyncOutcome::Created);
-        assert_eq!(bits(&std::fs::metadata(&dest).unwrap()), 0o600);
+        assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o600);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "secret");
     }
 
@@ -198,7 +177,7 @@ mod tests {
         let outcome = write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o600)).unwrap();
 
         assert_eq!(outcome, SyncOutcome::Replaced);
-        assert_eq!(bits(&std::fs::metadata(&dest).unwrap()), 0o600);
+        assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o600);
     }
 
     #[test]
@@ -221,7 +200,7 @@ mod tests {
         let outcome = write_file(ConflictPolicy::Skip, &dest, "secret", Some(0o600)).unwrap();
 
         assert_eq!(outcome, SyncOutcome::Skipped);
-        assert_eq!(bits(&std::fs::metadata(&dest).unwrap()), 0o644);
+        assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o644);
     }
 
     #[test]
