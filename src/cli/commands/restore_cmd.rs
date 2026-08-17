@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
+use crate::backup;
 use crate::files;
 use crate::lua;
 use crate::output::{self, Tone};
@@ -38,8 +39,8 @@ pub struct RestoreArgs {
 }
 
 pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
-    let root = utils::backups_root(lua::load_config()?.backup_dir())?;
-    let taken = utils::taken("restore", &root)?;
+    let root = backup::backups_root(lua::load_config()?.backup_dir())?;
+    let taken = backup::taken("restore", &root)?;
     if taken.is_empty() {
         output::note("no backup taken yet");
         return Ok(());
@@ -79,7 +80,7 @@ pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
 }
 
 fn list(taken: &[(u64, PathBuf)]) -> Result<()> {
-    let rows = rows(taken, utils::now()?)?;
+    let rows = rows(taken, backup::now()?)?;
     let width = rows
         .iter()
         .map(|(_, ago, _)| ago.chars().count())
@@ -127,7 +128,7 @@ fn foresee(dir: &Path, home: &Path, saved: &[PathBuf], stamp: u64) -> Result<()>
 
 fn confirmed(dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<bool> {
     output::line(preview(dir, saved));
-    utils::confirm(
+    output::confirm(
         "restore",
         &format!("Put {} file(s) of backup {stamp} back?", saved.len()),
         YES_FLAGS,
@@ -187,7 +188,7 @@ fn put_plain(command: &str, file: &Path, dest: &Path) -> Result<()> {
     }
     clear(command, dest)?;
 
-    utils::copy_entry(command, file, dest)
+    backup::copy_entry(command, file, dest)
 }
 
 fn clear(command: &str, dest: &Path) -> Result<()> {

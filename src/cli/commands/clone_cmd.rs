@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::Args;
 
-use crate::{git, lua, state, utils};
+use crate::{git, lua, output, state, utils};
 
 use super::super::constants::DEFAULT_REPO_DIR;
 
@@ -47,7 +47,7 @@ fn offer_bootstrap(repo: &Path) -> Result<()> {
     }
 
     let question = format!("clone: found {}. Run it now?", path.display());
-    if !utils::offer("clone", &question)? {
+    if !output::offer("clone", &question)? {
         return Ok(());
     }
 

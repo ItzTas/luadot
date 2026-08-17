@@ -3,11 +3,13 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
+use crate::backup::Backup;
 use crate::files::{self, Entry, SyncOutcome};
+use crate::hook::Hooks;
 use crate::lua::{self, Config, Content, Output};
 use crate::output;
 use crate::state::{self, Classes};
-use crate::utils::{self, Backup, Hooks};
+use crate::utils;
 
 use super::super::constants::SYSTEM_TEXT_MODE;
 
@@ -165,7 +167,7 @@ fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result
     let on_change = output.on_change().or_else(|| config.on_change(relative));
 
     if run.dry_run {
-        utils::preview(predicted, relative.display());
+        output::preview(predicted, relative.display());
         run.hooks.record(predicted, on_change);
         return Ok(predicted);
     }
@@ -220,7 +222,7 @@ fn place_root(
     let on_change = output.on_change().or_else(|| config.on_change(relative));
 
     if run.dry_run {
-        utils::preview(predicted, relative.display());
+        output::preview(predicted, relative.display());
         run.hooks.record(predicted, on_change);
         return Ok(predicted);
     }

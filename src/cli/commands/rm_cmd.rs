@@ -4,11 +4,12 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::Args;
 
+use crate::backup::Backup;
 use crate::crypt;
 use crate::files;
 use crate::lua;
 use crate::output;
-use crate::utils::{self, Backup};
+use crate::utils;
 
 use super::super::constants::{PREVIEW_LIMIT, YES_FLAGS};
 
@@ -136,7 +137,7 @@ fn confirmed(repo: &Path, files: &[PathBuf]) -> Result<bool> {
     }
 
     output::line(preview(repo, files, PREVIEW_LIMIT));
-    utils::confirm(
+    output::confirm(
         "rm",
         &format!("Stop managing {} file(s)?", files.len()),
         YES_FLAGS,

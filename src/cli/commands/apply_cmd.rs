@@ -3,11 +3,13 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
+use crate::backup::Backup;
 use crate::crypt;
 use crate::files::{self, Entry, SyncOutcome};
+use crate::hook::Hooks;
 use crate::lua::{self, Config};
 use crate::output;
-use crate::utils::{self, Backup, Hooks};
+use crate::utils;
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
@@ -130,7 +132,7 @@ fn place_home(
         .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
 
     if run.dry_run {
-        utils::preview(predicted, relative.display());
+        output::preview(predicted, relative.display());
         run.hooks.record(predicted, config.on_change(relative));
         return Ok(predicted);
     }
@@ -178,7 +180,7 @@ fn place_encrypted(
         .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
 
     if run.dry_run {
-        utils::preview(predicted, stripped.display());
+        output::preview(predicted, stripped.display());
         run.hooks.record(predicted, config.on_change(stripped));
         return Ok(predicted);
     }
@@ -212,7 +214,7 @@ fn place_root(
         .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
 
     if run.dry_run {
-        utils::preview(predicted, relative.display());
+        output::preview(predicted, relative.display());
         run.hooks.record(predicted, config.on_change(relative));
         return Ok(predicted);
     }

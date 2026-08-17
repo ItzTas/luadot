@@ -1,7 +1,8 @@
 use std::fmt::Display;
 
+use super::print::entry;
+use super::tone::Tone;
 use crate::files::SyncOutcome;
-use crate::output::{self, Tone};
 
 const LABELS: [(SyncOutcome, &str, Tone); 4] = [
     (SyncOutcome::Created, "create", Tone::Good),
@@ -16,7 +17,7 @@ pub fn preview(outcome: SyncOutcome, path: impl Display) {
         return;
     }
 
-    output::entry(tone, label, path);
+    entry(tone, label, path);
 }
 
 fn display(outcome: SyncOutcome) -> (Tone, &'static str) {
