@@ -50,6 +50,8 @@ pub struct Rule {
     conflict: Option<ConflictPolicy>,
     on_change: Option<String>,
     ignore: Option<bool>,
+    mode: Option<u32>,
+    owner: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,6 +175,14 @@ impl Config {
             .next_back()
     }
 
+    pub fn mode(&self, relative: &Path) -> Option<u32> {
+        self.matching(relative).filter_map(Rule::mode).next_back()
+    }
+
+    pub fn owner<'a>(&'a self, relative: &'a Path) -> Option<&'a str> {
+        self.matching(relative).filter_map(Rule::owner).next_back()
+    }
+
     fn matching<'a>(&'a self, relative: &'a Path) -> impl DoubleEndedIterator<Item = &'a Rule> {
         self.rules
             .iter()
@@ -206,6 +216,8 @@ impl Rule {
             conflict,
             on_change: None,
             ignore: None,
+            mode: None,
+            owner: None,
         }
     }
 
@@ -216,6 +228,16 @@ impl Rule {
 
     pub fn with_ignore(mut self, ignore: Option<bool>) -> Self {
         self.ignore = ignore;
+        self
+    }
+
+    pub fn with_mode(mut self, mode: Option<u32>) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    pub fn with_owner(mut self, owner: Option<String>) -> Self {
+        self.owner = owner;
         self
     }
 
@@ -237,6 +259,14 @@ impl Rule {
 
     pub fn ignore(&self) -> Option<bool> {
         self.ignore
+    }
+
+    pub fn mode(&self) -> Option<u32> {
+        self.mode
+    }
+
+    pub fn owner(&self) -> Option<&str> {
+        self.owner.as_deref()
     }
 }
 
@@ -298,6 +328,8 @@ mod tests {
         assert_eq!(config.link_mode(path), LinkMode::default());
         assert_eq!(config.conflict_policy(path), ConflictPolicy::default());
         assert!(!config.is_ignored(path));
+        assert_eq!(config.mode(path), None);
+        assert_eq!(config.owner(path), None);
     }
 
     #[test]

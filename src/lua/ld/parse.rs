@@ -41,6 +41,38 @@ pub fn regex(raw: &str) -> mlua::Result<Matcher> {
         .map_err(|err| external(format!("invalid regex `{raw}`: {err}")))
 }
 
+pub fn mode_bits(raw: &str, what: &str) -> mlua::Result<u32> {
+    let octal =
+        (3..=4).contains(&raw.len()) && raw.bytes().all(|digit| (b'0'..b'8').contains(&digit));
+    if !octal {
+        return Err(external(format!(
+            "{what} needs a `mode` of three or four octal digits, got `{raw}`"
+        )));
+    }
+
+    Ok(raw
+        .bytes()
+        .fold(0, |bits, digit| bits * 8 + u32::from(digit - b'0')))
+}
+
+pub fn owner_name(raw: &str, what: &str) -> mlua::Result<String> {
+    let mut parts = raw.split(':');
+    let user = parts.next().unwrap_or_default();
+    let group = parts.next();
+
+    let broken = parts.next().is_some()
+        || user.is_empty()
+        || group.is_some_and(str::is_empty)
+        || raw.contains(char::is_whitespace);
+    if broken {
+        return Err(external(format!(
+            "{what} needs an `owner` like \"root\" or \"root:root\", got `{raw}`"
+        )));
+    }
+
+    Ok(raw.to_string())
+}
+
 pub fn lookup<T: Copy>(entries: &[(&str, T)], name: &str, field: &str) -> mlua::Result<T> {
     entries
         .iter()
@@ -95,6 +127,39 @@ mod tests {
 
         assert!(err.contains("unknown number `three`"));
         assert!(err.contains("available: one, two"));
+    }
+
+    #[test]
+    fn mode_bits_reads_three_or_four_octal_digits() {
+        assert_eq!(mode_bits("600", "a rule").unwrap(), 0o600);
+        assert_eq!(mode_bits("0644", "a rule").unwrap(), 0o644);
+        assert_eq!(mode_bits("4755", "a rule").unwrap(), 0o4755);
+    }
+
+    #[test]
+    fn mode_bits_rejects_anything_else() {
+        for raw in ["60", "60000", "6o0", "800", "+60"] {
+            let err = mode_bits(raw, "a rule").unwrap_err().to_string();
+
+            assert!(err.contains("three or four octal digits"), "{raw}");
+            assert!(err.contains(raw), "{raw}");
+        }
+    }
+
+    #[test]
+    fn owner_name_takes_a_user_with_an_optional_group() {
+        assert_eq!(owner_name("root", "a rule").unwrap(), "root");
+        assert_eq!(owner_name("root:wheel", "a rule").unwrap(), "root:wheel");
+        assert_eq!(owner_name("0:0", "a rule").unwrap(), "0:0");
+    }
+
+    #[test]
+    fn owner_name_rejects_a_broken_name() {
+        for raw in ["", ":", "root:", ":wheel", "a:b:c", "ro ot"] {
+            let err = owner_name(raw, "a rule").unwrap_err().to_string();
+
+            assert!(err.contains("needs an `owner`"), "{raw}");
+        }
     }
 
     #[test]
