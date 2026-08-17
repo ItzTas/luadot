@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
 use mlua::{AnyUserData, Function, Lua, Value};
@@ -35,6 +36,16 @@ fn missing(name: &str, caller: &str, dir: &Path) -> String {
     }
 
     format!("{call} found no file `{name}` in {}", dir.display())
+}
+
+pub fn failed(caller: &str, action: &str, subject: impl Display, err: impl Display) -> mlua::Error {
+    external(format!(
+        "`{API}.{NAMESPACE}.{caller}` failed to {action} {subject}: {err}"
+    ))
+}
+
+pub fn read(caller: &str, path: &Path) -> mlua::Result<String> {
+    std::fs::read_to_string(path).map_err(|err| failed(caller, "read", path.display(), err))
 }
 
 pub fn handle(data: &AnyUserData) -> mlua::Result<PathBuf> {

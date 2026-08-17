@@ -6,7 +6,7 @@ use super::super::constants::API;
 use super::super::parse::external;
 use super::super::surface::{self, Surface};
 use super::constants::{NAMESPACE, RENDER};
-use super::file::resolve;
+use super::file::{failed, read, resolve};
 use crate::lua::runtime::environment;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
@@ -21,24 +21,14 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 }
 
 fn render(lua: &Lua, path: &Path, vars: Option<Table>) -> mlua::Result<String> {
-    let source = std::fs::read_to_string(path).map_err(|err| {
-        external(format!(
-            "`{API}.{NAMESPACE}.{RENDER}` failed to read {}: {err}",
-            path.display()
-        ))
-    })?;
+    let source = read(RENDER, path)?;
 
     let rendered: Value = lua
         .load(source)
         .set_name(path.display().to_string())
         .set_environment(environment(lua, vars)?)
         .eval()
-        .map_err(|err| {
-            external(format!(
-                "`{API}.{NAMESPACE}.{RENDER}` failed to run {}: {err}",
-                path.display()
-            ))
-        })?;
+        .map_err(|err| failed(RENDER, "run", path.display(), err))?;
 
     match rendered {
         Value::String(text) => Ok(text.to_str()?.to_string()),
