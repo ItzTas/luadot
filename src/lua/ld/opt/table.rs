@@ -2,26 +2,11 @@ use mlua::{Lua, Table, Value};
 
 use super::super::constants::API;
 use super::super::parse::{external, lookup};
-use super::super::table::{Builder, build};
-use super::constants::{
-    BACKUP, BACKUP_DIR, BACKUP_KEEP, CONFLICT, LINK, NAMESPACE, PKG_WARN, REPO_DIR, SETTERS,
-};
-use super::{backup, backup_dir, backup_keep, conflict, link, pkg_warn, repo_dir};
-
-pub type Setter = fn(&Lua, Value) -> mlua::Result<()>;
+use super::super::table::setters;
+use super::constants::{NAMESPACE, SETTERS};
 
 pub fn table(lua: &Lua) -> mlua::Result<Table> {
-    let functions: [(&str, Builder); 7] = [
-        (BACKUP, backup::function),
-        (BACKUP_DIR, backup_dir::function),
-        (BACKUP_KEEP, backup_keep::function),
-        (CONFLICT, conflict::function),
-        (LINK, link::function),
-        (PKG_WARN, pkg_warn::function),
-        (REPO_DIR, repo_dir::function),
-    ];
-
-    let opt = build(lua, &functions)?;
+    let opt = setters(lua, &SETTERS)?;
     let meta = lua.create_table()?;
     meta.set(
         "__call",

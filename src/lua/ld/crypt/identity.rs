@@ -1,31 +1,17 @@
-use std::path::PathBuf;
+use mlua::{Lua, Value};
 
-use mlua::{Function, Lua, Value};
-
-use super::super::constants::API;
-use super::super::parse::external;
 use super::super::surface::{self, Surface};
-use super::super::value::text;
+use super::super::value::path;
 use super::constants::{IDENTITY, NAMESPACE};
 use crate::lua::Config;
-
-pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, value: Value| set(lua, value))
-}
 
 pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     if surface::inert(lua, &format!("{NAMESPACE}.{IDENTITY}"), Surface::Config) {
         return Ok(());
     }
 
-    let raw = text(NAMESPACE, &value, IDENTITY)?;
-    if raw.trim().is_empty() {
-        return Err(external(format!(
-            "`{API}.{NAMESPACE}.{IDENTITY}` takes a path, got an empty string"
-        )));
-    }
-
-    Config::building(lua)?.set_crypt_identity(PathBuf::from(raw));
+    let identity = path(NAMESPACE, &value, IDENTITY, "a path")?;
+    Config::building(lua)?.set_crypt_identity(identity);
     Ok(())
 }
 

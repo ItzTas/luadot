@@ -1,23 +1,23 @@
-use mlua::{Function, Lua, Value};
+use mlua::{Lua, Value};
 
 use super::super::constants::CONFLICT_POLICIES;
-use super::super::parse::lookup;
 use super::super::surface::{self, Surface};
-use super::super::value::text;
+use super::super::value::choice;
 use super::constants::{CONFLICT, NAMESPACE};
 use crate::lua::Config;
-
-pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, value: Value| set(lua, value))
-}
 
 pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     if surface::inert(lua, &format!("{NAMESPACE}.{CONFLICT}"), Surface::Config) {
         return Ok(());
     }
 
-    let name = text(NAMESPACE, &value, CONFLICT)?;
-    let policy = lookup(&CONFLICT_POLICIES, &name, "conflict policy")?;
+    let policy = choice(
+        NAMESPACE,
+        &value,
+        CONFLICT,
+        &CONFLICT_POLICIES,
+        "conflict policy",
+    )?;
     Config::building(lua)?.set_conflict(policy);
     Ok(())
 }

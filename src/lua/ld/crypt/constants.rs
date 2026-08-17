@@ -1,4 +1,4 @@
-use super::table::Setter;
+use super::super::table::Setter;
 use super::{backend, identity, recipients};
 
 pub const NAMESPACE: &str = "crypt";

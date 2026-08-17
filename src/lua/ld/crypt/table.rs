@@ -2,20 +2,11 @@ use mlua::{Lua, Table, Value};
 
 use super::super::constants::API;
 use super::super::parse::{external, lookup};
-use super::super::table::{Builder, build};
-use super::constants::{BACKEND, IDENTITY, NAMESPACE, RECIPIENTS, SETTERS};
-use super::{backend, identity, recipients};
-
-pub type Setter = fn(&Lua, Value) -> mlua::Result<()>;
+use super::super::table::setters;
+use super::constants::{NAMESPACE, SETTERS};
 
 pub fn table(lua: &Lua) -> mlua::Result<Table> {
-    let functions: [(&str, Builder); 3] = [
-        (BACKEND, backend::function),
-        (IDENTITY, identity::function),
-        (RECIPIENTS, recipients::function),
-    ];
-
-    let crypt = build(lua, &functions)?;
+    let crypt = setters(lua, &SETTERS)?;
     let meta = lua.create_table()?;
     meta.set(
         "__call",

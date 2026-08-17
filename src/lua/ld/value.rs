@@ -1,10 +1,33 @@
+use std::path::PathBuf;
+
 use mlua::Value;
 
 use super::constants::API;
-use super::parse::external;
+use super::parse::{external, lookup};
 
 pub fn expected(namespace: &str, option: &str, kind: &str) -> mlua::Error {
     external(format!("`{API}.{namespace}.{option}` takes {kind}"))
+}
+
+pub fn path(namespace: &str, value: &Value, option: &str, kind: &str) -> mlua::Result<PathBuf> {
+    let raw = text(namespace, value, option)?;
+    if raw.trim().is_empty() {
+        return Err(external(format!(
+            "`{API}.{namespace}.{option}` takes {kind}, got an empty string"
+        )));
+    }
+
+    Ok(PathBuf::from(raw))
+}
+
+pub fn choice<T: Copy>(
+    namespace: &str,
+    value: &Value,
+    option: &str,
+    entries: &[(&str, T)],
+    field: &str,
+) -> mlua::Result<T> {
+    lookup(entries, &text(namespace, value, option)?, field)
 }
 
 pub fn text(namespace: &str, value: &Value, option: &str) -> mlua::Result<String> {
