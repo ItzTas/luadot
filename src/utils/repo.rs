@@ -144,8 +144,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
-        let tracked = repo.join(".bashrc");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let tracked = repo.join("home/.bashrc");
         std::fs::write(&tracked, "data").unwrap();
 
         let arg = home.join(".bashrc").to_string_lossy().into_owned();
@@ -174,8 +174,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
-        let tracked = repo.join(".bashrc");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let tracked = repo.join("home/.bashrc");
         std::os::unix::fs::symlink(home.join(".bashrc"), &tracked).unwrap();
 
         let arg = home.join(".bashrc").to_string_lossy().into_owned();

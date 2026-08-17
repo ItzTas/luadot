@@ -162,15 +162,13 @@ fn chosen<'a>(taken: &'a [(u64, PathBuf)], name: Option<&String>) -> Result<(u64
 }
 
 fn destination(dir: &Path, home: &Path, file: &Path) -> Result<PathBuf> {
-    let relative = file.strip_prefix(dir).with_context(|| {
+    utils::system_path(home, dir, file).with_context(|| {
         format!(
-            "restore: {} is not inside the backup {}",
+            "restore: {} cannot be placed back from the backup {}",
             file.display(),
             dir.display()
         )
-    })?;
-
-    Ok(home.join(relative))
+    })
 }
 
 fn put_back(command: &str, dir: &Path, home: &Path, file: &Path) -> Result<()> {
@@ -279,7 +277,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let home = root.path().join("home");
-        let saved = dir.join(".config/nvim/init.lua");
+        let saved = dir.join("home/.config/nvim/init.lua");
         std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
         std::fs::write(&saved, "backed up").unwrap();
 
@@ -297,9 +295,9 @@ mod tests {
         let dir = root.path().join("backup");
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let saved = dir.join(".zshrc");
+        let saved = dir.join("home/.zshrc");
         let managed = repo.join(".zshrc");
-        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
         std::fs::create_dir_all(&home).unwrap();
         std::fs::create_dir_all(&repo).unwrap();
         std::fs::write(&saved, "handwritten").unwrap();
@@ -320,8 +318,8 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let home = root.path().join("home");
-        let saved = dir.join(".zshrc");
-        std::fs::create_dir_all(&dir).unwrap();
+        let saved = dir.join("home/.zshrc");
+        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
         std::fs::create_dir_all(home.join(".zshrc")).unwrap();
         std::fs::write(&saved, "handwritten").unwrap();
 

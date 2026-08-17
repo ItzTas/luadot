@@ -350,7 +350,10 @@ mod tests {
             Detached::Restored
         );
 
-        assert_eq!(std::fs::read_link(saved.join(".zshrc")).unwrap(), source);
+        assert_eq!(
+            std::fs::read_link(saved.join("home/.zshrc")).unwrap(),
+            source
+        );
         assert_eq!(backup.unwrap().saved(), 1);
     }
 
@@ -455,7 +458,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        let nvim = repo.join(".config").join("nvim");
+        let nvim = repo.join("home/.config/nvim");
         std::fs::create_dir_all(nvim.join("lua")).unwrap();
         write(&nvim.join("init.lua"), "init");
         write(&nvim.join("lua").join("plugins.lua"), "plugins");
@@ -478,12 +481,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
-        write(&repo.join(".bashrc"), "data");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        write(&repo.join("home/.bashrc"), "data");
 
         let arg = home.join(".bashrc").to_string_lossy().into_owned();
         let files = plan(&home, &repo, &[arg.clone(), arg]).unwrap();
 
-        assert_eq!(files, vec![repo.join(".bashrc")]);
+        assert_eq!(files, vec![repo.join("home/.bashrc")]);
     }
 }

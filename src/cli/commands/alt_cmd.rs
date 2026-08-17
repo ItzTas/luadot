@@ -42,7 +42,11 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
 
     let templates: Vec<Entry> = files::collect_entries("alt", &root)?
         .into_iter()
-        .filter(|entry| !config.is_ignored(utils::relative(&repo, &entry.target())))
+        .filter(|entry| {
+            let target = entry.target();
+            let relative = utils::relative(&repo, &target);
+            utils::is_managed(relative) && !config.is_ignored(relative)
+        })
         .filter(|entry| match entry {
             Entry::Template(_) | Entry::Standalone(_) => true,
             Entry::File(_) => false,
@@ -135,7 +139,9 @@ fn outputs(home: &Path, repo: &Path, entry: &Entry, classes: &Classes) -> Result
 }
 
 fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result<SyncOutcome> {
-    let relative = utils::relative(home, output.dest());
+    let relative = utils::managed_relative(home, output.dest())
+        .with_context(|| format!("alt: failed to place {}", output.dest().display()))?;
+    let relative = relative.as_path();
     let policy = output
         .conflict()
         .unwrap_or_else(|| config.conflict_policy(relative));
@@ -208,7 +214,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         write(&dir.join("laptop.zsh"), "laptop");
         write(
             &dir.join("luadot.lua"),
@@ -237,7 +243,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".config/nvim/init.lua.luadot");
+        let dir = repo.join("home/.config/nvim/init.lua.luadot");
         write(
             &dir.join("luadot.lua"),
             r#"return "vim.g.mapleader = ' '\n""#,
@@ -277,7 +283,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         write(&dir.join("laptop.zsh"), "laptop");
         write(
             &dir.join("luadot.lua"),
@@ -305,7 +311,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         write(
             &dir.join("luadot.lua"),
             r#"return { dest = "~/.config/zsh/.zshrc", content = "generated\n" }"#,
@@ -333,7 +339,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
         write(&home.join(".zshrc"), "handwritten\n");
 
@@ -360,7 +366,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
 
         let mut run = Run {
@@ -387,7 +393,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
         write(&home.join(".zshrc"), "handwritten\n");
 
@@ -418,7 +424,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
         write(&home.join(".zshrc"), "handwritten\n");
 
@@ -443,7 +449,7 @@ mod tests {
             "generated\n"
         );
         assert_eq!(
-            std::fs::read_to_string(saved.join(".zshrc")).unwrap(),
+            std::fs::read_to_string(saved.join("home/.zshrc")).unwrap(),
             "handwritten\n"
         );
     }
@@ -453,7 +459,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
 
         let arg = home.join(".zshrc").to_string_lossy().into_owned();
@@ -480,7 +486,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let file = repo.join(".zprofile.luadot");
+        let file = repo.join("home/.zprofile.luadot");
         write(&file, "export HOST=<%= 1 + 1 %>\n");
 
         let outcomes = resolve(
@@ -505,7 +511,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let file = repo.join(".zprofile.luadot");
+        let file = repo.join("home/.zprofile.luadot");
         write(&file, "generated\n");
         write(&home.join(".zprofile"), "handwritten\n");
 
@@ -532,7 +538,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let file = repo.join(".zprofile.luadot");
+        let file = repo.join("home/.zprofile.luadot");
         write(&file, "generated\n");
         write(&home.join(".zprofile"), "handwritten\n");
 
@@ -557,7 +563,7 @@ mod tests {
             "generated\n"
         );
         assert_eq!(
-            std::fs::read_to_string(saved.join(".zprofile")).unwrap(),
+            std::fs::read_to_string(saved.join("home/.zprofile")).unwrap(),
             "handwritten\n"
         );
     }
@@ -567,7 +573,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let file = repo.join(".zprofile.luadot");
+        let file = repo.join("home/.zprofile.luadot");
         write(&file, "generated\n");
 
         let mut run = Run {
@@ -594,7 +600,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let file = repo.join(".zprofile.luadot");
+        let file = repo.join("home/.zprofile.luadot");
         write(&file, "generated\n");
 
         let arg = home.join(".zprofile").to_string_lossy().into_owned();
@@ -625,7 +631,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".netrc.luadot");
+        let dir = repo.join("home/.netrc.luadot");
         write(
             &dir.join("luadot.lua"),
             r#"return { content = "machine example\n", mode = "600" }"#,
@@ -644,7 +650,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".netrc.luadot");
+        let dir = repo.join("home/.netrc.luadot");
         write(
             &dir.join("luadot.lua"),
             r#"return { content = "machine example\n", mode = "600" }"#,
@@ -689,7 +695,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".config/mako/config.luadot");
+        let dir = repo.join("home/.config/mako/config.luadot");
         let restarted = root.path().join("restarted");
         write(
             &dir.join("luadot.lua"),
@@ -717,12 +723,12 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".config/mako/config.luadot");
+        let dir = repo.join("home/.config/mako/config.luadot");
         let restarted = root.path().join("restarted");
         write(&dir.join("luadot.lua"), r#"return "font=monospace\n""#);
 
         let config = lua::from_source(&format!(
-            r#"ld.rules({{ {{ match = ".config/mako/**", on_change = "printf ok > {}" }} }})"#,
+            r#"ld.rules({{ {{ match = "home/.config/mako/**", on_change = "printf ok > {}" }} }})"#,
             restarted.display()
         ))
         .unwrap();
@@ -738,7 +744,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".config/mako/config.luadot");
+        let dir = repo.join("home/.config/mako/config.luadot");
         let declared = root.path().join("declared");
         let ruled = root.path().join("ruled");
         write(
@@ -750,7 +756,7 @@ mod tests {
         );
 
         let config = lua::from_source(&format!(
-            r#"ld.rules({{ {{ match = ".config/mako/**", on_change = "printf ok > {}" }} }})"#,
+            r#"ld.rules({{ {{ match = "home/.config/mako/**", on_change = "printf ok > {}" }} }})"#,
             ruled.display()
         ))
         .unwrap();
@@ -766,7 +772,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         write(
             &dir.join("luadot.lua"),
             r#"return { content = "generated\n", on_change = "exit 4" }"#,
@@ -794,7 +800,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
+        let dir = repo.join("home/.zshrc.luadot");
         let restarted = root.path().join("restarted");
         write(
             &dir.join("luadot.lua"),

@@ -42,7 +42,9 @@ pub fn from_source(dir: &Path, source: &str) -> Result<Vec<Output>> {
 #[cfg(test)]
 pub fn from_classes(dir: &Path, source: &str, classes: &Classes) -> Result<Vec<Output>> {
     let root = dir.parent().unwrap_or(dir);
-    let dest = destination("test", root, root, dir)?;
+    let Some(dest) = template_target(dir) else {
+        bail!("test: {} is not a template directory", dir.display());
+    };
 
     run(
         "test",
@@ -319,7 +321,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = template_dir(&repo, ".zshrc.luadot");
+        let dir = template_dir(&repo, "home/.zshrc.luadot");
         write(&dir, "laptop.zsh", "laptop");
         write(&dir, TEMPLATE_FILE, r#"return ld.alt.file("laptop.zsh")"#);
 

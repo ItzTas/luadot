@@ -152,10 +152,11 @@ mod tests {
         std::fs::write(&kept, "a").unwrap();
         std::fs::write(&ignored, "b").unwrap();
 
-        let config = lua::from_source(r#"ld.rules({ match = "*.swp", ignore = true })"#).unwrap();
+        let config =
+            lua::from_source(r#"ld.rules({ match = "home/*.swp", ignore = true })"#).unwrap();
         let pairs = plan(&home, &repo, &[arg(&kept), arg(&ignored)], &config).unwrap();
 
-        assert_eq!(pairs, vec![(kept, repo.join(".vimrc"))]);
+        assert_eq!(pairs, vec![(kept, repo.join("home/.vimrc"))]);
     }
 
     #[test]
@@ -169,7 +170,25 @@ mod tests {
 
         let pairs = plan(&home, &repo, &[arg(&source)], &Config::default()).unwrap();
 
-        assert_eq!(pairs, vec![(source, repo.join(".bashrc"))]);
+        assert_eq!(pairs, vec![(source, repo.join("home/.bashrc"))]);
+    }
+
+    #[test]
+    fn plan_maps_a_system_file_under_the_root_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let source = dir.path().join("etc/pacman.conf");
+        std::fs::create_dir_all(source.parent().unwrap()).unwrap();
+        std::fs::write(&source, "x").unwrap();
+
+        let pairs = plan(&home, &repo, &[arg(&source)], &Config::default()).unwrap();
+
+        let relative = source.strip_prefix("/").unwrap();
+        assert_eq!(
+            pairs,
+            vec![(source.clone(), repo.join("root").join(relative))]
+        );
     }
 
     #[test]
@@ -185,7 +204,10 @@ mod tests {
 
         let pairs = plan(&home, &repo, &[arg(&a), arg(&b)], &Config::default()).unwrap();
 
-        assert_eq!(pairs, vec![(a, repo.join(".a")), (b, repo.join(".b"))]);
+        assert_eq!(
+            pairs,
+            vec![(a, repo.join("home/.a")), (b, repo.join("home/.b"))]
+        );
     }
 
     #[test]
@@ -205,14 +227,8 @@ mod tests {
         assert_eq!(
             pairs,
             vec![
-                (init, repo.join(".config").join("nvim").join("init.lua")),
-                (
-                    plugins,
-                    repo.join(".config")
-                        .join("nvim")
-                        .join("lua")
-                        .join("plugins.lua"),
-                ),
+                (init, repo.join("home/.config/nvim/init.lua")),
+                (plugins, repo.join("home/.config/nvim/lua/plugins.lua")),
             ]
         );
     }
@@ -230,7 +246,7 @@ mod tests {
 
         let pairs = plan(&home, &repo, &[arg(&cfg)], &Config::default()).unwrap();
 
-        assert_eq!(pairs, vec![(real, repo.join(".config").join("real"))]);
+        assert_eq!(pairs, vec![(real, repo.join("home/.config/real"))]);
     }
 
     #[test]
@@ -252,8 +268,8 @@ mod tests {
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
         std::fs::create_dir_all(&home).unwrap();
-        std::fs::create_dir_all(&repo).unwrap();
-        std::fs::write(repo.join(".bashrc"), "old").unwrap();
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        std::fs::write(repo.join("home/.bashrc"), "old").unwrap();
         let source = home.join(".bashrc");
         std::fs::write(&source, "new").unwrap();
 

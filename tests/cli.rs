@@ -161,7 +161,7 @@ fn add_then_apply_manage_a_file_end_to_end() {
         .assert()
         .success();
     assert_eq!(
-        std::fs::read_to_string(repo.join(".vimrc")).unwrap(),
+        std::fs::read_to_string(repo.join("home/.vimrc")).unwrap(),
         "set number\n"
     );
 
@@ -184,7 +184,7 @@ fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_i
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join("home/.bashrc"), "managed\n");
     write(&home.join(".bashrc"), "handwritten\n");
     write(
         &home.join(".config/luadot/config.lua"),
@@ -195,7 +195,7 @@ fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_i
     luadot(&home).arg("apply").assert().success();
 
     let saved = only_dir(&home.join("saved"));
-    assert_eq!(read(&saved.join(".bashrc")), "handwritten\n");
+    assert_eq!(read(&saved.join("home/.bashrc")), "handwritten\n");
     assert_eq!(read(&home.join(".bashrc")), "managed\n");
     assert!(!home.join(".local/share/luadot/backups").exists());
 
@@ -214,7 +214,7 @@ fn two_runs_in_a_row_keep_their_own_backup() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join("home/.bashrc"), "managed\n");
     write(&home.join(".bashrc"), "first\n");
     write_state(&home, &repo);
 
@@ -225,7 +225,7 @@ fn two_runs_in_a_row_keep_their_own_backup() {
 
     let mut saved: Vec<String> = std::fs::read_dir(home.join(".local/share/luadot/backups"))
         .unwrap()
-        .map(|entry| read(&entry.unwrap().path().join(".bashrc")))
+        .map(|entry| read(&entry.unwrap().path().join("home/.bashrc")))
         .collect();
     saved.sort();
 
@@ -237,7 +237,7 @@ fn the_configuration_points_luadot_at_its_own_repository() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("dotfiles");
-    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join("home/.bashrc"), "managed\n");
     write(
         &home.join(".config/luadot/config.lua"),
         &format!("ld.opt.repo_dir({:?})", repo.display()),
@@ -265,7 +265,7 @@ fn a_limit_drops_the_oldest_backups() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join("home/.bashrc"), "managed\n");
     write(
         &home.join(".config/luadot/config.lua"),
         "ld.opt.backup_keep(2)",
@@ -280,7 +280,7 @@ fn a_limit_drops_the_oldest_backups() {
 
     let mut saved: Vec<String> = std::fs::read_dir(home.join(".local/share/luadot/backups"))
         .unwrap()
-        .map(|entry| read(&entry.unwrap().path().join(".bashrc")))
+        .map(|entry| read(&entry.unwrap().path().join("home/.bashrc")))
         .collect();
     saved.sort();
 
@@ -292,7 +292,7 @@ fn rm_backs_up_what_it_takes_out_of_the_repository() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = home.join(".local/share/luadot/repo");
-    write(&repo.join(".vimrc"), "set number\n");
+    write(&repo.join("home/.vimrc"), "set number\n");
     write_state(&home, &repo);
 
     luadot(&home)
@@ -300,12 +300,12 @@ fn rm_backs_up_what_it_takes_out_of_the_repository() {
         .assert()
         .success();
 
-    assert!(!repo.join(".vimrc").exists());
+    assert!(!repo.join("home/.vimrc").exists());
     assert_eq!(read(&home.join(".vimrc")), "set number\n");
 
     let saved = only_dir(&home.join(".local/share/luadot/backups"));
     assert_eq!(
-        read(&saved.join(".local/share/luadot/repo/.vimrc")),
+        read(&saved.join("home/.local/share/luadot/repo/home/.vimrc")),
         "set number\n"
     );
 }
@@ -315,7 +315,7 @@ fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join("home/.bashrc"), "managed\n");
     write(
         &home.join(".config/luadot/config.lua"),
         r#"ld.opt.link("symbolic")"#,
@@ -327,7 +327,10 @@ fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
     let placed = home.join(".bashrc");
     let kind = std::fs::symlink_metadata(&placed).unwrap().file_type();
     assert!(kind.is_symlink());
-    assert_eq!(std::fs::read_link(&placed).unwrap(), repo.join(".bashrc"));
+    assert_eq!(
+        std::fs::read_link(&placed).unwrap(),
+        repo.join("home/.bashrc")
+    );
 }
 
 #[test]
@@ -336,15 +339,15 @@ fn alt_resolves_both_template_forms_and_the_other_commands_walk_past_them() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     write(
-        &repo.join(".zshrc.luadot/luadot.lua"),
+        &repo.join("home/.zshrc.luadot/luadot.lua"),
         r#"return ld.alt.expand("zshrc.tmpl.zsh", { editor = "nvim" })"#,
     );
     write(
-        &repo.join(".zshrc.luadot/zshrc.tmpl.zsh"),
+        &repo.join("home/.zshrc.luadot/zshrc.tmpl.zsh"),
         "export EDITOR=<%= editor %>\n",
     );
     write(
-        &repo.join(".zprofile.luadot"),
+        &repo.join("home/.zprofile.luadot"),
         "<% for _, dir in ipairs({ \"a\", \"b\" }) do -%>\npath+=(<%= dir %>)\n<% end -%>\n",
     );
     write_state(&home, &repo);
@@ -403,10 +406,10 @@ fn new_creates_both_template_forms_and_alt_resolves_them() {
         .success();
 
     assert_eq!(
-        read(&repo.join(".config/nvim/init.lua.luadot/luadot.lua")),
+        read(&repo.join("home/.config/nvim/init.lua.luadot/luadot.lua")),
         "return \"\"\n"
     );
-    assert_eq!(read(&repo.join(".zprofile.luadot")), "");
+    assert_eq!(read(&repo.join("home/.zprofile.luadot")), "");
 
     luadot(&home)
         .arg("new")
@@ -433,13 +436,16 @@ fn a_rule_runs_its_command_once_for_every_file_apply_touched() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     let reloaded = root.path().join("reloaded");
-    write(&repo.join(".config/mako/config"), "font=monospace\n");
-    write(&repo.join(".config/mako/colors"), "background=#000000\n");
-    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join("home/.config/mako/config"), "font=monospace\n");
+    write(
+        &repo.join("home/.config/mako/colors"),
+        "background=#000000\n",
+    );
+    write(&repo.join("home/.bashrc"), "managed\n");
     write(
         &home.join(".config/luadot/config.lua"),
         &format!(
-            r#"ld.rules({{ {{ match = ".config/mako/**", on_change = "printf x >> {}" }} }})"#,
+            r#"ld.rules({{ {{ match = "home/.config/mako/**", on_change = "printf x >> {}" }} }})"#,
             reloaded.display()
         ),
     );
@@ -465,15 +471,15 @@ fn alt_builds_a_file_out_of_fragments_and_runs_the_command_that_follows_it() {
     let repo = root.path().join("repo");
     let restarted = root.path().join("restarted");
     write(
-        &repo.join(".zshrc.luadot/conf.d/20-path.zsh"),
+        &repo.join("home/.zshrc.luadot/conf.d/20-path.zsh"),
         "path+=(b)\n",
     );
     write(
-        &repo.join(".zshrc.luadot/conf.d/10-env.zsh"),
+        &repo.join("home/.zshrc.luadot/conf.d/10-env.zsh"),
         "export A=1\n",
     );
     write(
-        &repo.join(".zshrc.luadot/luadot.lua"),
+        &repo.join("home/.zshrc.luadot/luadot.lua"),
         &format!(
             r#"
             local parts = {{}}

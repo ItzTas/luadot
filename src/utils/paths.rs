@@ -3,7 +3,7 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use etcetera::base_strategy::{BaseStrategy, Xdg};
 
-use super::constants::APP_DIR;
+use super::constants::{APP_DIR, HOME_PREFIX, ROOT_PREFIX};
 
 pub fn data_dir() -> Result<PathBuf> {
     Ok(app_dir(&base()?.data_dir()))
@@ -36,17 +36,20 @@ pub fn expand(home: &Path, path: &Path) -> PathBuf {
     home.join(path)
 }
 
-pub fn repo_path(home: &Path, repo: &Path, outside: &Path) -> Result<PathBuf> {
+pub fn managed_relative(home: &Path, outside: &Path) -> Result<PathBuf> {
     let normalized = normalize(outside);
-    let Ok(relative) = normalized.strip_prefix(home) else {
-        bail!(
-            "{} is not inside your home directory {}",
-            normalized.display(),
-            home.display()
-        );
-    };
+    if let Ok(relative) = normalized.strip_prefix(home) {
+        return Ok(Path::new(HOME_PREFIX).join(relative));
+    }
 
-    Ok(repo.join(relative))
+    let Ok(relative) = normalized.strip_prefix("/") else {
+        bail!("{} is not an absolute path", normalized.display());
+    };
+    Ok(Path::new(ROOT_PREFIX).join(relative))
+}
+
+pub fn repo_path(home: &Path, repo: &Path, outside: &Path) -> Result<PathBuf> {
+    Ok(repo.join(managed_relative(home, outside)?))
 }
 
 pub fn system_path(home: &Path, repo: &Path, inside: &Path) -> Result<PathBuf> {
@@ -58,7 +61,29 @@ pub fn system_path(home: &Path, repo: &Path, inside: &Path) -> Result<PathBuf> {
         );
     };
 
-    Ok(home.join(relative))
+    target(home, relative)
+}
+
+fn target(home: &Path, relative: &Path) -> Result<PathBuf> {
+    if let Ok(rest) = relative.strip_prefix(HOME_PREFIX) {
+        return Ok(home.join(rest));
+    }
+    if let Ok(rest) = relative.strip_prefix(ROOT_PREFIX) {
+        return Ok(Path::new("/").join(rest));
+    }
+
+    bail!(
+        "{} is outside {HOME_PREFIX}/ and {ROOT_PREFIX}/",
+        relative.display()
+    )
+}
+
+pub fn is_managed(relative: &Path) -> bool {
+    relative.starts_with(HOME_PREFIX) || relative.starts_with(ROOT_PREFIX)
+}
+
+pub fn is_root(relative: &Path) -> bool {
+    relative.starts_with(ROOT_PREFIX)
 }
 
 pub fn relative<'a>(repo: &Path, file: &'a Path) -> &'a Path {
@@ -136,48 +161,99 @@ mod tests {
     }
 
     #[test]
-    fn repo_path_mirrors_home_layout() {
+    fn repo_path_mirrors_home_under_the_home_prefix() {
         let dest = repo_path(
             Path::new("/home/u"),
             Path::new("/repo"),
             Path::new("/home/u/.config/nvim/init.lua"),
         )
         .unwrap();
-        assert_eq!(dest, PathBuf::from("/repo/.config/nvim/init.lua"));
+        assert_eq!(dest, PathBuf::from("/repo/home/.config/nvim/init.lua"));
     }
 
     #[test]
-    fn repo_path_rejects_paths_outside_home() {
-        assert!(
-            repo_path(
-                Path::new("/home/u"),
-                Path::new("/repo"),
-                Path::new("/etc/passwd")
-            )
-            .is_err()
-        );
+    fn repo_path_mirrors_the_rest_of_the_system_under_the_root_prefix() {
+        let dest = repo_path(
+            Path::new("/home/u"),
+            Path::new("/repo"),
+            Path::new("/etc/pacman.conf"),
+        )
+        .unwrap();
+        assert_eq!(dest, PathBuf::from("/repo/root/etc/pacman.conf"));
     }
 
     #[test]
-    fn repo_path_rejects_dotdot_escape() {
+    fn repo_path_resolves_dotdot_before_choosing_a_prefix() {
+        let dest = repo_path(
+            Path::new("/home/u"),
+            Path::new("/repo"),
+            Path::new("/home/u/../../etc/passwd"),
+        )
+        .unwrap();
+        assert_eq!(dest, PathBuf::from("/repo/root/etc/passwd"));
+    }
+
+    #[test]
+    fn repo_path_rejects_a_relative_path() {
         let err = repo_path(
             Path::new("/home/u"),
             Path::new("/repo"),
-            Path::new("/home/u/../etc/passwd"),
+            Path::new("../outside"),
         )
         .unwrap_err();
-        assert!(err.to_string().contains("not inside your home directory"));
+        assert!(err.to_string().contains("is not an absolute path"));
     }
 
     #[test]
     fn system_path_inverts_repo_path() {
-        let dest = system_path(
+        let home = Path::new("/home/u");
+        let repo = Path::new("/repo");
+
+        assert_eq!(
+            system_path(home, repo, Path::new("/repo/home/.config/nvim/init.lua")).unwrap(),
+            PathBuf::from("/home/u/.config/nvim/init.lua")
+        );
+        assert_eq!(
+            system_path(home, repo, Path::new("/repo/root/etc/pacman.conf")).unwrap(),
+            PathBuf::from("/etc/pacman.conf")
+        );
+    }
+
+    #[test]
+    fn system_path_rejects_a_file_outside_the_prefixes() {
+        let err = system_path(
             Path::new("/home/u"),
             Path::new("/repo"),
-            Path::new("/repo/.config/nvim/init.lua"),
+            Path::new("/repo/README.md"),
         )
-        .unwrap();
-        assert_eq!(dest, PathBuf::from("/home/u/.config/nvim/init.lua"));
+        .unwrap_err();
+        assert!(err.to_string().contains("is outside home/ and root/"));
+    }
+
+    #[test]
+    fn managed_relative_names_the_prefixed_path() {
+        let home = Path::new("/home/u");
+
+        assert_eq!(
+            managed_relative(home, Path::new("/home/u/.vimrc")).unwrap(),
+            PathBuf::from("home/.vimrc")
+        );
+        assert_eq!(
+            managed_relative(home, Path::new("/etc/hosts")).unwrap(),
+            PathBuf::from("root/etc/hosts")
+        );
+    }
+
+    #[test]
+    fn the_prefixes_are_told_apart_by_component() {
+        assert!(is_managed(Path::new("home/.vimrc")));
+        assert!(is_managed(Path::new("root/etc/hosts")));
+        assert!(!is_managed(Path::new("README.md")));
+        assert!(!is_managed(Path::new("homework/.vimrc")));
+
+        assert!(is_root(Path::new("root/etc/hosts")));
+        assert!(!is_root(Path::new("home/.vimrc")));
+        assert!(!is_root(Path::new("rooted/file")));
     }
 
     #[test]

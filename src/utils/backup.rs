@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 
 use super::constants::BACKUPS_DIR;
-use super::paths::{data_dir, expand, home_dir};
+use super::paths::{data_dir, expand, home_dir, managed_relative};
 use crate::output;
 
 #[derive(Debug)]
@@ -14,7 +14,6 @@ pub struct Backup {
     root: PathBuf,
     dir: PathBuf,
     saved: u32,
-    outside: u32,
     keep: Option<u32>,
 }
 
@@ -136,7 +135,6 @@ impl Backup {
             root: dir.parent().unwrap_or(&dir).to_path_buf(),
             dir,
             saved: 0,
-            outside: 0,
             keep: None,
         }
     }
@@ -174,22 +172,11 @@ impl Backup {
                 self.dir.display()
             ));
         }
-
-        if self.outside > 0 {
-            output::warn(format!(
-                "{}: {} file(s) outside {} were not backed up",
-                self.command,
-                self.outside,
-                self.home.display()
-            ));
-        }
     }
 
     pub fn save(&mut self, path: &Path) -> Result<()> {
-        let Ok(relative) = path.strip_prefix(&self.home) else {
-            self.outside += 1;
-            return Ok(());
-        };
+        let relative = managed_relative(&self.home, path)
+            .with_context(|| format!("{}: failed to back up {}", self.command, path.display()))?;
 
         let target = self.dir.join(relative);
         if let Some(parent) = target.parent() {
@@ -210,7 +197,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_saved_file_keeps_its_path_below_the_home_directory() {
+    fn a_saved_file_keeps_its_path_under_the_home_prefix() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let dir = root.path().join("backup");
@@ -223,7 +210,7 @@ mod tests {
 
         assert_eq!(backup.saved(), 1);
         assert_eq!(
-            std::fs::read_to_string(dir.join(".config/nvim/init.lua")).unwrap(),
+            std::fs::read_to_string(dir.join("home/.config/nvim/init.lua")).unwrap(),
             "system"
         );
     }
@@ -241,11 +228,11 @@ mod tests {
 
         Backup::at("apply", &home, dir.clone()).save(&file).unwrap();
 
-        assert_eq!(std::fs::read_link(dir.join(".zshrc")).unwrap(), target);
+        assert_eq!(std::fs::read_link(dir.join("home/.zshrc")).unwrap(), target);
     }
 
     #[test]
-    fn a_file_outside_the_home_directory_is_left_out() {
+    fn a_file_outside_the_home_directory_lands_under_the_root_prefix() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let dir = root.path().join("backup");
@@ -256,8 +243,9 @@ mod tests {
         let mut backup = Backup::at("alt", &home, dir.clone());
         backup.save(&file).unwrap();
 
-        assert_eq!(backup.saved(), 0);
-        assert!(!dir.exists());
+        assert_eq!(backup.saved(), 1);
+        let saved = dir.join(managed_relative(&home, &file).unwrap());
+        assert_eq!(std::fs::read_to_string(saved).unwrap(), "system");
     }
 
     #[test]

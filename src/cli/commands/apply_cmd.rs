@@ -33,7 +33,11 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
 
     let files: Vec<PathBuf> = files::collect_entries("apply", &root)?
         .into_iter()
-        .filter(|entry| !config.is_ignored(utils::relative(&repo, &entry.target())))
+        .filter(|entry| {
+            let target = entry.target();
+            let relative = utils::relative(&repo, &target);
+            utils::is_managed(relative) && !config.is_ignored(relative)
+        })
         .filter_map(|entry| match entry {
             Entry::File(file) => Some(file),
             Entry::Template(_) | Entry::Standalone(_) => None,
