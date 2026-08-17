@@ -4,11 +4,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::Args;
 
+use crate::backup::Backup;
 use crate::crypt;
 use crate::files;
-use crate::lua;
 use crate::output;
-use crate::utils::{self, Backup};
+use crate::utils::{self, Workspace};
 
 use super::super::constants::{PREVIEW_LIMIT, YES_FLAGS};
 
@@ -36,9 +36,7 @@ enum Plan {
 }
 
 pub fn rm_cmd(args: RmArgs) -> Result<()> {
-    let config = lua::load_config()?;
-    let repo = utils::require_repo("rm", config.repo_dir())?;
-    let home = utils::home_dir()?;
+    let Workspace { config, home, repo } = utils::workspace("rm")?;
 
     let files = plan(&home, &repo, &args.paths)?;
     if files.is_empty() {
@@ -136,7 +134,7 @@ fn confirmed(repo: &Path, files: &[PathBuf]) -> Result<bool> {
     }
 
     output::line(preview(repo, files, PREVIEW_LIMIT));
-    utils::confirm(
+    output::confirm(
         "rm",
         &format!("Stop managing {} file(s)?", files.len()),
         YES_FLAGS,

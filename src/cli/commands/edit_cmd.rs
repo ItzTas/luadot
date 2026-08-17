@@ -5,9 +5,9 @@ use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::crypt;
-use crate::lua::{self, Config};
+use crate::lua::Config;
 use crate::output;
-use crate::utils;
+use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct EditArgs {
@@ -16,9 +16,7 @@ pub struct EditArgs {
 }
 
 pub fn edit_cmd(args: EditArgs) -> Result<()> {
-    let config = lua::load_config()?;
-    let repo = utils::require_repo("edit", config.repo_dir())?;
-    let home = utils::home_dir()?;
+    let Workspace { config, home, repo } = utils::workspace("edit")?;
     let in_repo = utils::managed_path("edit", &home, &repo, &args.path)?;
 
     let Some((stripped, backend)) = crypt::split(utils::relative(&repo, &in_repo)) else {

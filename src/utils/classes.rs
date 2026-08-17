@@ -1,7 +1,7 @@
 use anyhow::Result;
 
-use super::prompt::choose;
 use crate::lua::Class;
+use crate::output::choose;
 use crate::state::{self, State};
 
 pub fn ask(command: &str, class: &Class, current: Option<&str>) -> Result<String> {

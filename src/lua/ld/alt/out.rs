@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use mlua::{Function, Lua, Table, Value};
 
-use super::super::constants::{API, CONFLICT_POLICIES, LINK_MODES};
-use super::super::parse::{external, lookup, mode_bits};
+use super::super::constants::API;
+use super::super::parse::{conflict_policy, external, link_mode, mode_bits};
 use super::super::surface::{self, Surface};
 use super::constants::{FILE, NAMESPACE, OUT};
 use super::file::handle;
@@ -51,11 +51,8 @@ fn from_table(lua: &Lua, entry: &Table) -> mlua::Result<Output> {
     Ok(Output::new(
         destination(lua, dest.as_deref())?,
         content,
-        link.map(|name| lookup(&LINK_MODES, &name, "link mode"))
-            .transpose()?,
-        conflict
-            .map(|name| lookup(&CONFLICT_POLICIES, &name, "conflict policy"))
-            .transpose()?,
+        link_mode(link)?,
+        conflict_policy(conflict)?,
     )
     .with_mode(mode)
     .with_on_change(on_change))

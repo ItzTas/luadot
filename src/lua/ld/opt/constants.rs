@@ -1,4 +1,4 @@
-use super::table::Setter;
+use super::super::table::Setter;
 use super::{backup, backup_dir, backup_keep, conflict, link, pkg_warn, repo_dir};
 
 pub const NAMESPACE: &str = "opt";

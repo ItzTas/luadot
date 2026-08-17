@@ -5,9 +5,9 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::files::{self, Entry, FileStatus, Mirror, Side};
-use crate::lua::{self, Config};
+use crate::lua::Config;
 use crate::output::{self, Tone};
-use crate::utils;
+use crate::utils::{self, Workspace};
 
 use super::super::constants::DIFF_ARGUMENTS;
 
@@ -24,24 +24,12 @@ enum System {
 }
 
 pub fn diff_cmd(args: DiffArgs) -> Result<()> {
-    let config = lua::load_config()?;
-    let repo = utils::require_repo("diff", config.repo_dir())?;
+    let Workspace { config, home, repo } = utils::workspace("diff")?;
 
-    let home = utils::home_dir()?;
+    let root = utils::managed_root("diff", &home, &repo, args.path.as_deref())?;
 
-    let root = match args.path.as_deref() {
-        Some(path) => utils::managed_path("diff", &home, &repo, path)?,
-        None => repo.clone(),
-    };
-
-    let entries: Vec<Entry> = files::collect_entries("diff", &root)?
-        .into_iter()
-        .filter(|entry| {
-            let target = entry.target();
-            let relative = utils::relative(&repo, &target);
-            utils::is_managed(relative) && !config.is_ignored(relative)
-        })
-        .collect();
+    let entries =
+        utils::managed_entries("diff", &repo, &root, |relative| config.is_ignored(relative))?;
 
     let templates = entries
         .iter()

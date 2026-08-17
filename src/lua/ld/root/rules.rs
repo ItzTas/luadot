@@ -1,7 +1,7 @@
 use mlua::{Function, Lua, Table};
 
-use super::super::constants::{API, CONFLICT_POLICIES, LINK_MODES};
-use super::super::parse::{external, lookup, matcher, mode_bits, owner_name};
+use super::super::constants::API;
+use super::super::parse::{conflict_policy, external, link_mode, matcher, mode_bits, owner_name};
 use super::super::surface::{self, Surface};
 use super::constants::RULES;
 use crate::lua::{Config, Rule};
@@ -50,19 +50,14 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
     let owner: Option<String> = entry.get("owner")?;
     let encrypt: Option<bool> = entry.get("encrypt")?;
 
-    Ok(Rule::new(
-        pattern,
-        link.map(|name| lookup(&LINK_MODES, &name, "link mode"))
-            .transpose()?,
-        conflict
-            .map(|name| lookup(&CONFLICT_POLICIES, &name, "conflict policy"))
-            .transpose()?,
+    Ok(
+        Rule::new(pattern, link_mode(link)?, conflict_policy(conflict)?)
+            .with_on_change(on_change)
+            .with_ignore(ignore)
+            .with_mode(mode.map(|raw| mode_bits(&raw, "a rule")).transpose()?)
+            .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?)
+            .with_encrypt(encrypt),
     )
-    .with_on_change(on_change)
-    .with_ignore(ignore)
-    .with_mode(mode.map(|raw| mode_bits(&raw, "a rule")).transpose()?)
-    .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?)
-    .with_encrypt(encrypt))
 }
 
 #[cfg(test)]

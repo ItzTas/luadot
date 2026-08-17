@@ -1,4 +1,5 @@
 mod constants;
+mod fs;
 mod link;
 mod mirror;
 mod predict;
@@ -9,11 +10,14 @@ mod template;
 mod walk;
 mod write;
 
+pub use fs::{
+    create_parent, exists, link_target, mode_bits, regular_file, remove_existing, write_mode,
+};
 pub use link::{LinkMode, link};
 pub use mirror::{Mirror, Side};
 pub use predict::predict;
 pub use status::{FileStatus, file_status};
-pub use sync::{ConflictPolicy, SyncOutcome, sync_file};
+pub use sync::{ConflictPolicy, SyncOutcome, refused, sync_file};
 pub use system::{
     Staged, effective_mode, escalate_entry, escalated_read, escalated_status, import_system,
     inspect_system, permission_denied, read_contents, stage_text, sync_system,

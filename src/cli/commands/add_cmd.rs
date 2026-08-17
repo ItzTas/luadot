@@ -7,8 +7,8 @@ use clap::Args;
 use crate::crypt;
 use crate::files;
 use crate::git;
-use crate::lua::{self, Config};
-use crate::utils;
+use crate::lua::Config;
+use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct AddArgs {
@@ -17,10 +17,7 @@ pub struct AddArgs {
 }
 
 pub fn add_cmd(args: AddArgs) -> Result<()> {
-    let config = lua::load_config()?;
-    let repo = utils::require_repo("add", config.repo_dir())?;
-
-    let home = utils::home_dir()?;
+    let Workspace { config, home, repo } = utils::workspace("add")?;
 
     for (source, dest) in plan(&home, &repo, &args.paths, &config)? {
         link_into_repo(&config, &repo, &source, &dest)?;
@@ -188,6 +185,7 @@ fn link_into_repo(config: &Config, repo: &Path, source: &Path, dest: &Path) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lua;
 
     fn arg(path: &Path) -> String {
         path.to_string_lossy().into_owned()

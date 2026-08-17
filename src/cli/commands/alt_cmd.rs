@@ -7,7 +7,7 @@ use crate::files::{self, Entry, SyncOutcome};
 use crate::lua::{self, Config, Content, Output};
 use crate::output;
 use crate::state::{self, Classes};
-use crate::utils::{self, Backup, Hooks};
+use crate::utils::{self, Run, Workspace};
 
 use super::super::constants::SYSTEM_TEXT_MODE;
 
@@ -23,18 +23,9 @@ pub struct AltArgs {
     pub dry_run: bool,
 }
 
-#[derive(Debug, Default)]
-struct Run {
-    dry_run: bool,
-    backup: Option<Backup>,
-    hooks: Hooks,
-}
-
 pub fn alt_cmd(args: AltArgs) -> Result<()> {
-    let config = lua::load_config()?;
-    let repo = utils::require_repo("alt", config.repo_dir())?;
+    let Workspace { config, home, repo } = utils::workspace("alt")?;
 
-    let home = utils::home_dir()?;
     let classes = state::load()?.classes().clone();
 
     let root = match args.path.as_deref() {
@@ -42,36 +33,20 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         None => repo.clone(),
     };
 
-    let templates: Vec<Entry> = files::collect_entries("alt", &root)?
-        .into_iter()
-        .filter(|entry| {
-            let target = entry.target();
-            let relative = utils::relative(&repo, &target);
-            utils::is_managed(relative) && !config.is_ignored(relative)
-        })
-        .filter(|entry| match entry {
-            Entry::Template(_) | Entry::Standalone(_) => true,
-            Entry::File(_) => false,
-        })
-        .collect();
+    let templates: Vec<Entry> =
+        utils::managed_entries("alt", &repo, &root, |relative| config.is_ignored(relative))?
+            .into_iter()
+            .filter(|entry| match entry {
+                Entry::Template(_) | Entry::Standalone(_) => true,
+                Entry::File(_) => false,
+            })
+            .collect();
     if templates.is_empty() {
         output::note("no template to resolve");
         return Ok(());
     }
 
-    let mut run = Run {
-        dry_run: args.dry_run,
-        backup: match args.dry_run || !config.backup() {
-            true => None,
-            false => Some(Backup::open(
-                "alt",
-                &home,
-                config.backup_dir(),
-                config.backup_keep(),
-            )?),
-        },
-        hooks: Hooks::new(args.dry_run),
-    };
+    let mut run = Run::open("alt", args.dry_run, &home, &config)?;
 
     let mut outcomes: Vec<SyncOutcome> = Vec::new();
     for entry in &templates {
@@ -91,10 +66,7 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         count(&outcomes, SyncOutcome::AlreadySynced),
         count(&outcomes, SyncOutcome::Skipped),
     ));
-    if let Some(backup) = run.backup.as_ref() {
-        backup.finish()?;
-    }
-    run.hooks.finish("alt")?;
+    run.finish("alt")?;
 
     Ok(())
 }
@@ -164,27 +136,13 @@ fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result
 
     let on_change = output.on_change().or_else(|| config.on_change(relative));
 
-    if run.dry_run {
-        utils::preview(predicted, relative.display());
-        run.hooks.record(predicted, on_change);
-        return Ok(predicted);
-    }
-
-    if predicted == SyncOutcome::Replaced
-        && let Some(backup) = run.backup.as_mut()
-    {
-        backup.save(output.dest())?;
-    }
-
-    let outcome = match output.content() {
-        Content::File(source) => files::sync_file(policy, mode, source, output.dest()),
-        Content::Text(text) => files::write_file(policy, output.dest(), text, output.mode()),
-    }
-    .with_context(|| format!("alt: failed to place {}", output.dest().display()))?;
-
-    run.hooks.record(outcome, on_change);
-
-    Ok(outcome)
+    run.settle(predicted, relative, output.dest(), on_change, || {
+        match output.content() {
+            Content::File(source) => files::sync_file(policy, mode, source, output.dest()),
+            Content::Text(text) => files::write_file(policy, output.dest(), text, output.mode()),
+        }
+        .with_context(|| format!("alt: failed to place {}", output.dest().display()))
+    })
 }
 
 fn place_root(
@@ -219,24 +177,10 @@ fn place_root(
 
     let on_change = output.on_change().or_else(|| config.on_change(relative));
 
-    if run.dry_run {
-        utils::preview(predicted, relative.display());
-        run.hooks.record(predicted, on_change);
-        return Ok(predicted);
-    }
-
-    if predicted == SyncOutcome::Replaced
-        && let Some(backup) = run.backup.as_mut()
-    {
-        backup.save(dest)?;
-    }
-
-    let outcome = files::sync_system(policy, source, dest, mode, config.owner(relative))
-        .with_context(|| format!("alt: failed to place {}", dest.display()))?;
-
-    run.hooks.record(outcome, on_change);
-
-    Ok(outcome)
+    run.settle(predicted, relative, dest, on_change, || {
+        files::sync_system(policy, source, dest, mode, config.owner(relative))
+            .with_context(|| format!("alt: failed to place {}", dest.display()))
+    })
 }
 
 fn count(outcomes: &[SyncOutcome], kind: SyncOutcome) -> usize {
@@ -246,6 +190,7 @@ fn count(outcomes: &[SyncOutcome], kind: SyncOutcome) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backup::Backup;
 
     fn write(path: &Path, contents: &str) {
         if let Some(parent) = path.parent() {
@@ -427,11 +372,7 @@ mod tests {
         let dir = repo.join("home/.zshrc.luadot");
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
 
-        let mut run = Run {
-            dry_run: true,
-            backup: None,
-            hooks: Hooks::new(true),
-        };
+        let mut run = Run::new(true, None);
         let outcomes = resolve(
             &Config::default(),
             &home,
@@ -455,11 +396,7 @@ mod tests {
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
         write(&home.join(".zshrc"), "handwritten\n");
 
-        let mut run = Run {
-            dry_run: true,
-            backup: None,
-            hooks: Hooks::new(true),
-        };
+        let mut run = Run::new(true, None);
         let outcomes = resolve(
             &Config::default(),
             &home,
@@ -487,11 +424,7 @@ mod tests {
         write(&home.join(".zshrc"), "handwritten\n");
 
         let saved = root.path().join("backup");
-        let mut run = Run {
-            dry_run: false,
-            backup: Some(Backup::at("alt", &home, saved.clone())),
-            hooks: Hooks::default(),
-        };
+        let mut run = Run::new(false, Some(Backup::at("alt", &home, saved.clone())));
         resolve(
             &Config::default(),
             &home,
@@ -601,11 +534,7 @@ mod tests {
         write(&home.join(".zprofile"), "handwritten\n");
 
         let saved = root.path().join("backup");
-        let mut run = Run {
-            dry_run: false,
-            backup: Some(Backup::at("alt", &home, saved.clone())),
-            hooks: Hooks::default(),
-        };
+        let mut run = Run::new(false, Some(Backup::at("alt", &home, saved.clone())));
         resolve(
             &Config::default(),
             &home,
@@ -634,11 +563,7 @@ mod tests {
         let file = repo.join("home/.zprofile.luadot");
         write(&file, "generated\n");
 
-        let mut run = Run {
-            dry_run: true,
-            backup: None,
-            hooks: Hooks::new(true),
-        };
+        let mut run = Run::new(true, None);
         let outcomes = resolve(
             &Config::default(),
             &home,
@@ -743,7 +668,7 @@ mod tests {
             run,
         )
         .unwrap();
-        run.hooks.finish("alt").unwrap();
+        run.finish("alt").unwrap();
 
         outcomes
     }
@@ -847,7 +772,7 @@ mod tests {
         )
         .unwrap();
 
-        let err = run.hooks.finish("alt").unwrap_err().to_string();
+        let err = run.finish("alt").unwrap_err().to_string();
 
         assert_eq!(err, "alt: `exit 4` exited with status 4");
         assert!(home.join(".zshrc").exists());
@@ -868,11 +793,7 @@ mod tests {
             ),
         );
 
-        let mut run = Run {
-            dry_run: true,
-            backup: None,
-            hooks: Hooks::new(true),
-        };
+        let mut run = Run::new(true, None);
         let outcomes = resolved_with(&Config::default(), &home, &repo, &dir, &mut run);
 
         assert_eq!(outcomes, vec![SyncOutcome::Created]);

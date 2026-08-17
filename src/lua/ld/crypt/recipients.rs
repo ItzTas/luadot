@@ -1,20 +1,16 @@
-use mlua::{Function, Lua, Value};
+use mlua::{Lua, Value};
 
 use super::super::surface::{self, Surface};
+use super::super::value::keys;
 use super::constants::{NAMESPACE, RECIPIENTS};
-use super::value::keys;
 use crate::lua::Config;
-
-pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, value: Value| set(lua, value))
-}
 
 pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     if surface::inert(lua, &format!("{NAMESPACE}.{RECIPIENTS}"), Surface::Config) {
         return Ok(());
     }
 
-    let recipients = keys(&value, RECIPIENTS)?;
+    let recipients = keys(NAMESPACE, &value, RECIPIENTS)?;
     Config::building(lua)?.set_crypt_recipients(recipients);
     Ok(())
 }

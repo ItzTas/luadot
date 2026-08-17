@@ -2,7 +2,8 @@ use glob::Pattern;
 use mlua::Table;
 use regex::Regex;
 
-use super::constants::{MATCH, REGEX};
+use super::constants::{CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX};
+use crate::files::{ConflictPolicy, LinkMode};
 use crate::lua::Matcher;
 
 pub fn external(message: impl Into<String>) -> mlua::Error {
@@ -84,6 +85,16 @@ pub fn lookup<T: Copy>(entries: &[(&str, T)], name: &str, field: &str) -> mlua::
                 keys(entries)
             ))
         })
+}
+
+pub fn link_mode(name: Option<String>) -> mlua::Result<Option<LinkMode>> {
+    name.map(|name| lookup(&LINK_MODES, &name, "link mode"))
+        .transpose()
+}
+
+pub fn conflict_policy(name: Option<String>) -> mlua::Result<Option<ConflictPolicy>> {
+    name.map(|name| lookup(&CONFLICT_POLICIES, &name, "conflict policy"))
+        .transpose()
 }
 
 fn keys<T>(entries: &[(&str, T)]) -> String {

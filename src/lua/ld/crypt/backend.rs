@@ -1,23 +1,17 @@
-use mlua::{Function, Lua, Value};
+use mlua::{Lua, Value};
 
 use super::super::constants::CRYPT_BACKENDS;
-use super::super::parse::lookup;
 use super::super::surface::{self, Surface};
+use super::super::value::choice;
 use super::constants::{BACKEND, NAMESPACE};
-use super::value::text;
 use crate::lua::Config;
-
-pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, value: Value| set(lua, value))
-}
 
 pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     if surface::inert(lua, &format!("{NAMESPACE}.{BACKEND}"), Surface::Config) {
         return Ok(());
     }
 
-    let name = text(&value, BACKEND)?;
-    let backend = lookup(&CRYPT_BACKENDS, &name, "crypt backend")?;
+    let backend = choice(NAMESPACE, &value, BACKEND, &CRYPT_BACKENDS, "crypt backend")?;
     Config::building(lua)?.set_crypt_backend(backend);
     Ok(())
 }

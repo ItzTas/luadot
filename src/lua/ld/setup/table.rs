@@ -2,13 +2,11 @@ use mlua::{Function, Lua, Table};
 
 use super::super::class;
 use super::super::constants::API;
-use super::super::parse::chain;
 use super::super::path::Paths;
 use super::super::repo::require;
 use super::super::surface;
 use super::constants::{ALL, LIST, NAMESPACE};
-use super::{all, list};
-use crate::lua::setup;
+use super::{all, list, scripts};
 
 pub fn table(lua: &Lua, paths: &Paths) -> mlua::Result<Table> {
     let setup = lua.create_table()?;
@@ -31,14 +29,7 @@ fn run(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
 
         let repo = require(paths.repo(), &command)?;
         let classes = class::current(lua);
-        setup::run_one(
-            &command,
-            paths.home(),
-            paths.config(),
-            repo,
-            &name,
-            &classes,
-        )
-        .map_err(chain)
+
+        scripts::run(&paths, &command, repo, &name, &classes)
     })
 }

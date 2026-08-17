@@ -1,12 +1,8 @@
-use std::path::Path;
-
 use mlua::{Function, Lua};
 
-use super::super::constants::API;
-use super::super::parse::external;
 use super::super::surface::{self, Surface};
 use super::constants::{NAMESPACE, READ};
-use super::file::resolve;
+use super::file::{read, resolve};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, name: String| {
@@ -15,16 +11,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         }
 
         let path = resolve(lua, &name, READ)?;
-        read(&path).map(Some)
-    })
-}
-
-fn read(path: &Path) -> mlua::Result<String> {
-    std::fs::read_to_string(path).map_err(|err| {
-        external(format!(
-            "`{API}.{NAMESPACE}.{READ}` failed to read {}: {err}",
-            path.display()
-        ))
+        read(READ, &path).map(Some)
     })
 }
 

@@ -15,9 +15,12 @@ Keep this file short. One line per rule.
 | `src/lib.rs` | only the module declarations, one `pub mod` per line |
 | `src/cli/` | argument parsing and dispatch: the clap `Cli`/`Cmd` in `types.rs`, the match in `run.rs` |
 | `src/cli/commands/` | one `<name>_cmd.rs` per command, nothing else |
+| `src/backup/` | backup runs: `Backup` and the backup directory store |
 | `src/files/` | link and sync primitives |
 | `src/git/` | git operations |
+| `src/hook/` | the commands a rule runs after a file changes |
 | `src/lua/` | configuration loading and the Lua runtime |
+| `src/output/` | everything written to or read from the terminal: printing, previews, prompts |
 | `src/state/` | persisted state: `State` and its store |
 | `src/utils/` | shared helpers used across modules |
 | `benches/` | one criterion bench per area, fixtures in `benches/support/` |

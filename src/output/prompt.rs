@@ -2,7 +2,7 @@ use std::io::IsTerminal;
 
 use anyhow::{Context, Result, bail};
 
-use crate::output;
+use super::print::{line, prompt, warn};
 
 pub fn confirm(command: &str, question: &str, skip: &str) -> Result<bool> {
     if !std::io::stdin().is_terminal() {
@@ -32,13 +32,13 @@ pub fn choose(
         bail!("{command}: cannot ask for `{name}` without a terminal; pass {skip}");
     }
 
-    output::line(question);
+    line(question);
     for (index, choice) in choices.iter().enumerate() {
-        output::line(format!("  {}) {choice}", index + 1));
+        line(format!("  {}) {choice}", index + 1));
     }
 
     loop {
-        output::prompt(format!("{}:", label(name, choices, default)))
+        prompt(format!("{}:", label(name, choices, default)))
             .with_context(|| format!("{command}: failed to write the question"))?;
 
         let answer = read_line(command, name)?;
@@ -46,7 +46,7 @@ pub fn choose(
             return Ok(value);
         }
 
-        output::warn(format!("`{}` is not one of the answers", answer.trim()));
+        warn(format!("`{}` is not one of the answers", answer.trim()));
     }
 }
 
@@ -90,7 +90,7 @@ fn pick(answer: &str, choices: &[String], default: Option<&str>) -> Option<Strin
 }
 
 fn ask(command: &str, question: &str) -> Result<bool> {
-    output::prompt(format!("{question} [y/N]"))
+    prompt(format!("{question} [y/N]"))
         .with_context(|| format!("{command}: failed to write the question"))?;
 
     let mut answer = String::new();

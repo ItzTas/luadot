@@ -2,11 +2,9 @@ use std::path::Path;
 
 use mlua::{Function, Lua, Table};
 
-use super::super::constants::API;
-use super::super::parse::external;
 use super::super::surface::{self, Surface};
 use super::constants::{EXPAND, NAMESPACE};
-use super::file::resolve;
+use super::file::{failed, read, resolve};
 use crate::lua::embed;
 use crate::lua::runtime::environment;
 
@@ -22,19 +20,10 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 }
 
 fn expand(lua: &Lua, path: &Path, vars: Option<Table>) -> mlua::Result<String> {
-    let source = std::fs::read_to_string(path).map_err(|err| {
-        external(format!(
-            "`{API}.{NAMESPACE}.{EXPAND}` failed to read {}: {err}",
-            path.display()
-        ))
-    })?;
+    let source = read(EXPAND, path)?;
 
-    let chunk = embed::compile(&source).map_err(|err| {
-        external(format!(
-            "`{API}.{NAMESPACE}.{EXPAND}` failed to compile {}: {err:#}",
-            path.display()
-        ))
-    })?;
+    let chunk = embed::compile(&source)
+        .map_err(|err| failed(EXPAND, "compile", path.display(), format!("{err:#}")))?;
 
     embed::run(
         lua,
@@ -42,12 +31,7 @@ fn expand(lua: &Lua, path: &Path, vars: Option<Table>) -> mlua::Result<String> {
         &path.display().to_string(),
         environment(lua, vars)?,
     )
-    .map_err(|err| {
-        external(format!(
-            "`{API}.{NAMESPACE}.{EXPAND}` failed to run {}: {err}",
-            path.display()
-        ))
-    })
+    .map_err(|err| failed(EXPAND, "run", path.display(), err))
 }
 
 #[cfg(test)]

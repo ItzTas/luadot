@@ -1,31 +1,17 @@
-use std::path::PathBuf;
+use mlua::{Lua, Value};
 
-use mlua::{Function, Lua, Value};
-
-use super::super::constants::API;
-use super::super::parse::external;
 use super::super::surface::{self, Surface};
+use super::super::value::path;
 use super::constants::{NAMESPACE, REPO_DIR};
-use super::value::text;
 use crate::lua::Config;
-
-pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, value: Value| set(lua, value))
-}
 
 pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     if surface::inert(lua, &format!("{NAMESPACE}.{REPO_DIR}"), Surface::Config) {
         return Ok(());
     }
 
-    let raw = text(&value, REPO_DIR)?;
-    if raw.trim().is_empty() {
-        return Err(external(format!(
-            "`{API}.{NAMESPACE}.{REPO_DIR}` takes a directory, got an empty string"
-        )));
-    }
-
-    Config::building(lua)?.set_repo_dir(PathBuf::from(raw));
+    let dir = path(NAMESPACE, &value, REPO_DIR, "a directory")?;
+    Config::building(lua)?.set_repo_dir(dir);
     Ok(())
 }
 

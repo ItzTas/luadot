@@ -3,7 +3,9 @@ use std::path::Path;
 use anyhow::Result;
 
 use super::LinkMode;
-use super::sync::{already_synced, exists, same_contents};
+use super::constants::COMMAND;
+use super::fs::exists;
+use super::sync::{already_synced, same_contents};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileStatus {
@@ -15,7 +17,7 @@ pub enum FileStatus {
 }
 
 pub fn file_status(mode: LinkMode, source: &Path, dest: &Path) -> Result<FileStatus> {
-    if !exists(dest)? {
+    if !exists(COMMAND, dest)? {
         return Ok(FileStatus::Missing);
     }
 

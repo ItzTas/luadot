@@ -1,44 +1,10 @@
-use mlua::{Lua, Table, Value};
+use mlua::{Lua, Table};
 
-use super::super::constants::API;
-use super::super::parse::{external, lookup};
-use super::super::table::{Builder, build};
-use super::constants::{
-    BACKUP, BACKUP_DIR, BACKUP_KEEP, CONFLICT, LINK, NAMESPACE, PKG_WARN, REPO_DIR, SETTERS,
-};
-use super::{backup, backup_dir, backup_keep, conflict, link, pkg_warn, repo_dir};
-
-pub type Setter = fn(&Lua, Value) -> mlua::Result<()>;
+use super::super::table::options;
+use super::constants::{NAMESPACE, SETTERS};
 
 pub fn table(lua: &Lua) -> mlua::Result<Table> {
-    let functions: [(&str, Builder); 7] = [
-        (BACKUP, backup::function),
-        (BACKUP_DIR, backup_dir::function),
-        (BACKUP_KEEP, backup_keep::function),
-        (CONFLICT, conflict::function),
-        (LINK, link::function),
-        (PKG_WARN, pkg_warn::function),
-        (REPO_DIR, repo_dir::function),
-    ];
-
-    let opt = build(lua, &functions)?;
-    let meta = lua.create_table()?;
-    meta.set(
-        "__call",
-        lua.create_function(|lua, (_, options): (Table, Table)| apply(lua, &options))?,
-    )?;
-    opt.set_metatable(Some(meta))?;
-
-    Ok(opt)
-}
-
-fn apply(lua: &Lua, options: &Table) -> mlua::Result<()> {
-    for pair in options.clone().pairs::<String, Value>() {
-        let (name, value) =
-            pair.map_err(|_| external(format!("`{API}.{NAMESPACE}` takes a table of options")))?;
-        lookup(&SETTERS, &name, "option")?(lua, value)?;
-    }
-    Ok(())
+    options(lua, NAMESPACE, &SETTERS, "option")
 }
 
 #[cfg(test)]

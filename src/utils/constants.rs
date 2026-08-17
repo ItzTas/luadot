@@ -5,5 +5,3 @@ pub const HOME_PREFIX: &str = "home";
 pub const ROOT_PREFIX: &str = "root";
 
 pub const DEFAULT_EDITOR: &str = "vi";
-
-pub const BACKUPS_DIR: &str = "backups";
