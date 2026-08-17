@@ -73,11 +73,15 @@ mod tests {
 
     #[test]
     fn an_unreadable_destination_refuses_a_prediction() {
-        let err = predict(ConflictPolicy::Overwrite, FileStatus::Unreadable, dest())
-            .unwrap_err()
-            .to_string();
+        let err = predict(
+            ConflictPolicy::Overwrite,
+            FileStatus::Unreadable,
+            Path::new("/etc/sudoers"),
+        )
+        .unwrap_err()
+        .to_string();
 
-        assert_eq!(err, "files: /home/u/.bashrc cannot be read");
+        assert_eq!(err, "files: /etc/sudoers cannot be read");
     }
 
     #[test]
