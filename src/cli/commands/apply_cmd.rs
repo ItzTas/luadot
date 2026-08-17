@@ -3,13 +3,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
-use crate::backup::Backup;
 use crate::crypt;
 use crate::files::{self, Entry, SyncOutcome};
-use crate::hook::Hooks;
 use crate::lua::{self, Config};
 use crate::output;
-use crate::utils;
+use crate::utils::{self, Run};
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
@@ -21,13 +19,6 @@ pub struct ApplyArgs {
         help = "Report what would change, touching nothing and taking no backup"
     )]
     pub dry_run: bool,
-}
-
-#[derive(Debug, Default)]
-struct Run {
-    dry_run: bool,
-    backup: Option<Backup>,
-    hooks: Hooks,
 }
 
 pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
@@ -58,19 +49,7 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         return Ok(());
     }
 
-    let mut run = Run {
-        dry_run: args.dry_run,
-        backup: match args.dry_run || !config.backup() {
-            true => None,
-            false => Some(Backup::open(
-                "apply",
-                &home,
-                config.backup_dir(),
-                config.backup_keep(),
-            )?),
-        },
-        hooks: Hooks::new(args.dry_run),
-    };
+    let mut run = Run::open("apply", args.dry_run, &home, &config)?;
 
     let mut created = 0u32;
     let mut replaced = 0u32;
@@ -108,10 +87,7 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         },
         files.len()
     ));
-    if let Some(backup) = run.backup.as_ref() {
-        backup.finish()?;
-    }
-    run.hooks.finish("apply")?;
+    run.finish("apply")?;
 
     Ok(())
 }
@@ -131,23 +107,16 @@ fn place_home(
     let predicted = files::predict(policy, status, dest)
         .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
 
-    if run.dry_run {
-        output::preview(predicted, relative.display());
-        run.hooks.record(predicted, config.on_change(relative));
-        return Ok(predicted);
-    }
-
-    if predicted == SyncOutcome::Replaced
-        && let Some(backup) = run.backup.as_mut()
-    {
-        backup.save(dest)?;
-    }
-    let outcome = files::sync_file(policy, mode, file, dest)
-        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
-
-    run.hooks.record(outcome, config.on_change(relative));
-
-    Ok(outcome)
+    run.settle(
+        predicted,
+        relative,
+        dest,
+        config.on_change(relative),
+        || {
+            files::sync_file(policy, mode, file, dest)
+                .with_context(|| format!("apply: failed to apply {}", dest.display()))
+        },
+    )
 }
 
 fn place_encrypted(
@@ -179,23 +148,16 @@ fn place_encrypted(
     let predicted = files::predict(policy, status, &dest)
         .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
 
-    if run.dry_run {
-        output::preview(predicted, stripped.display());
-        run.hooks.record(predicted, config.on_change(stripped));
-        return Ok(predicted);
-    }
-
-    if predicted == SyncOutcome::Replaced
-        && let Some(backup) = run.backup.as_mut()
-    {
-        backup.save(&dest)?;
-    }
-    let outcome = crypt::place("apply", policy, &contents, &dest)
-        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
-
-    run.hooks.record(outcome, config.on_change(stripped));
-
-    Ok(outcome)
+    run.settle(
+        predicted,
+        stripped,
+        &dest,
+        config.on_change(stripped),
+        || {
+            crypt::place("apply", policy, &contents, &dest)
+                .with_context(|| format!("apply: failed to apply {}", dest.display()))
+        },
+    )
 }
 
 fn place_root(
@@ -213,21 +175,14 @@ fn place_root(
     let predicted = files::predict(policy, status, dest)
         .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
 
-    if run.dry_run {
-        output::preview(predicted, relative.display());
-        run.hooks.record(predicted, config.on_change(relative));
-        return Ok(predicted);
-    }
-
-    if predicted == SyncOutcome::Replaced
-        && let Some(backup) = run.backup.as_mut()
-    {
-        backup.save(dest)?;
-    }
-    let outcome = files::sync_system(policy, file, dest, mode, config.owner(relative))
-        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
-
-    run.hooks.record(outcome, config.on_change(relative));
-
-    Ok(outcome)
+    run.settle(
+        predicted,
+        relative,
+        dest,
+        config.on_change(relative),
+        || {
+            files::sync_system(policy, file, dest, mode, config.owner(relative))
+                .with_context(|| format!("apply: failed to apply {}", dest.display()))
+        },
+    )
 }

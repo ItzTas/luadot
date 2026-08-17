@@ -3,6 +3,7 @@ mod constants;
 mod editor;
 mod paths;
 mod repo;
+mod run;
 
 pub use classes::{ask, ask_missing};
 pub use editor::{launch, open};
@@ -11,3 +12,4 @@ pub use paths::{
     repo_path, system_path,
 };
 pub use repo::{managed_path, require_repo};
+pub use run::Run;
