@@ -1,29 +1,10 @@
-use mlua::{Lua, Table, Value};
+use mlua::{Lua, Table};
 
-use super::super::constants::API;
-use super::super::parse::{external, lookup};
-use super::super::table::setters;
+use super::super::table::options;
 use super::constants::{NAMESPACE, SETTERS};
 
 pub fn table(lua: &Lua) -> mlua::Result<Table> {
-    let crypt = setters(lua, &SETTERS)?;
-    let meta = lua.create_table()?;
-    meta.set(
-        "__call",
-        lua.create_function(|lua, (_, options): (Table, Table)| apply(lua, &options))?,
-    )?;
-    crypt.set_metatable(Some(meta))?;
-
-    Ok(crypt)
-}
-
-fn apply(lua: &Lua, options: &Table) -> mlua::Result<()> {
-    for pair in options.clone().pairs::<String, Value>() {
-        let (name, value) =
-            pair.map_err(|_| external(format!("`{API}.{NAMESPACE}` takes a table of options")))?;
-        lookup(&SETTERS, &name, "crypt option")?(lua, value)?;
-    }
-    Ok(())
+    options(lua, NAMESPACE, &SETTERS, "crypt option")
 }
 
 #[cfg(test)]
