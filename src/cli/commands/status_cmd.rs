@@ -5,9 +5,8 @@ use clap::Args;
 
 use crate::crypt;
 use crate::files::{self, Entry, FileStatus};
-use crate::lua;
 use crate::output::{self, Tone};
-use crate::utils;
+use crate::utils::{self, Workspace};
 
 use super::super::constants::STATUS_LABELS;
 
@@ -18,28 +17,19 @@ pub struct StatusArgs {
 }
 
 pub fn status_cmd(args: StatusArgs) -> Result<()> {
-    let config = lua::load_config()?;
-    let repo = utils::require_repo("status", config.repo_dir())?;
+    let Workspace { config, home, repo } = utils::workspace("status")?;
 
-    let home = utils::home_dir()?;
+    let root = utils::managed_root("status", &home, &repo, args.path.as_deref())?;
 
-    let root = match args.path.as_deref() {
-        Some(path) => utils::managed_path("status", &home, &repo, path)?,
-        None => repo.clone(),
-    };
-
-    let files: Vec<PathBuf> = files::collect_entries("status", &root)?
-        .into_iter()
-        .filter(|entry| {
-            let target = entry.target();
-            let relative = utils::relative(&repo, &target);
-            utils::is_managed(relative) && !config.is_ignored(&crypt::logical(relative))
-        })
-        .filter_map(|entry| match entry {
-            Entry::File(file) => Some(file),
-            Entry::Template(_) | Entry::Standalone(_) => None,
-        })
-        .collect();
+    let files: Vec<PathBuf> = utils::managed_entries("status", &repo, &root, |relative| {
+        config.is_ignored(&crypt::logical(relative))
+    })?
+    .into_iter()
+    .filter_map(|entry| match entry {
+        Entry::File(file) => Some(file),
+        Entry::Template(_) | Entry::Standalone(_) => None,
+    })
+    .collect();
     if files.is_empty() {
         output::note("nothing is managed");
         return Ok(());

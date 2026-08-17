@@ -7,7 +7,7 @@ use crate::files::{self, Entry, SyncOutcome};
 use crate::lua::{self, Config, Content, Output};
 use crate::output;
 use crate::state::{self, Classes};
-use crate::utils::{self, Run};
+use crate::utils::{self, Run, Workspace};
 
 use super::super::constants::SYSTEM_TEXT_MODE;
 
@@ -24,10 +24,8 @@ pub struct AltArgs {
 }
 
 pub fn alt_cmd(args: AltArgs) -> Result<()> {
-    let config = lua::load_config()?;
-    let repo = utils::require_repo("alt", config.repo_dir())?;
+    let Workspace { config, home, repo } = utils::workspace("alt")?;
 
-    let home = utils::home_dir()?;
     let classes = state::load()?.classes().clone();
 
     let root = match args.path.as_deref() {
@@ -35,18 +33,14 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         None => repo.clone(),
     };
 
-    let templates: Vec<Entry> = files::collect_entries("alt", &root)?
-        .into_iter()
-        .filter(|entry| {
-            let target = entry.target();
-            let relative = utils::relative(&repo, &target);
-            utils::is_managed(relative) && !config.is_ignored(relative)
-        })
-        .filter(|entry| match entry {
-            Entry::Template(_) | Entry::Standalone(_) => true,
-            Entry::File(_) => false,
-        })
-        .collect();
+    let templates: Vec<Entry> =
+        utils::managed_entries("alt", &repo, &root, |relative| config.is_ignored(relative))?
+            .into_iter()
+            .filter(|entry| match entry {
+                Entry::Template(_) | Entry::Standalone(_) => true,
+                Entry::File(_) => false,
+            })
+            .collect();
     if templates.is_empty() {
         output::note("no template to resolve");
         return Ok(());

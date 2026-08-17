@@ -4,6 +4,7 @@ mod editor;
 mod paths;
 mod repo;
 mod run;
+mod workspace;
 
 pub use classes::{ask, ask_missing};
 pub use editor::{launch, open};
@@ -13,3 +14,4 @@ pub use paths::{
 };
 pub use repo::{managed_path, require_repo};
 pub use run::Run;
+pub use workspace::{Workspace, managed_entries, managed_root, workspace};

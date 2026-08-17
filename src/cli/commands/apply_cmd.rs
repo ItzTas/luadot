@@ -5,9 +5,9 @@ use clap::Args;
 
 use crate::crypt;
 use crate::files::{self, Entry, SyncOutcome};
-use crate::lua::{self, Config};
+use crate::lua::Config;
 use crate::output;
-use crate::utils::{self, Run};
+use crate::utils::{self, Run, Workspace};
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
@@ -22,28 +22,19 @@ pub struct ApplyArgs {
 }
 
 pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
-    let config = lua::load_config()?;
-    let repo = utils::require_repo("apply", config.repo_dir())?;
+    let Workspace { config, home, repo } = utils::workspace("apply")?;
 
-    let home = utils::home_dir()?;
+    let root = utils::managed_root("apply", &home, &repo, args.path.as_deref())?;
 
-    let root = match args.path.as_deref() {
-        Some(path) => utils::managed_path("apply", &home, &repo, path)?,
-        None => repo.clone(),
-    };
-
-    let files: Vec<PathBuf> = files::collect_entries("apply", &root)?
-        .into_iter()
-        .filter(|entry| {
-            let target = entry.target();
-            let relative = utils::relative(&repo, &target);
-            utils::is_managed(relative) && !config.is_ignored(&crypt::logical(relative))
-        })
-        .filter_map(|entry| match entry {
-            Entry::File(file) => Some(file),
-            Entry::Template(_) | Entry::Standalone(_) => None,
-        })
-        .collect();
+    let files: Vec<PathBuf> = utils::managed_entries("apply", &repo, &root, |relative| {
+        config.is_ignored(&crypt::logical(relative))
+    })?
+    .into_iter()
+    .filter_map(|entry| match entry {
+        Entry::File(file) => Some(file),
+        Entry::Template(_) | Entry::Standalone(_) => None,
+    })
+    .collect();
     if files.is_empty() {
         output::note("nothing to apply");
         return Ok(());

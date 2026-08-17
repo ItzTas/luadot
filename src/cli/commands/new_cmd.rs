@@ -5,9 +5,9 @@ use clap::Args;
 
 use super::super::constants::TEMPLATE_SKELETON;
 use crate::files;
-use crate::lua::{self, TEMPLATE_FILE};
+use crate::lua::TEMPLATE_FILE;
 use crate::output;
-use crate::utils;
+use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct NewArgs {
@@ -22,10 +22,8 @@ pub struct NewArgs {
 }
 
 pub fn new_cmd(args: NewArgs) -> Result<()> {
-    let config = lua::load_config()?;
-    let repo = utils::require_repo("new", config.repo_dir())?;
+    let Workspace { home, repo, .. } = utils::workspace("new")?;
 
-    let home = utils::home_dir()?;
     let template = destination(&home, &repo, &args.path)?;
 
     create(&template, args.file)?;
