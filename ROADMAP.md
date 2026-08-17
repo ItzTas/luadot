@@ -62,80 +62,21 @@ still missing:
 
 ## Encrypted files
 
-Some dotfiles hold secrets — SSH private keys, API tokens, `~/.netrc`, mail
-credentials — and today they can only be ignored, which leaves them outside the
-repository and outside `apply`. Managers like chezmoi and yadm solve this by
-encrypting the files chosen by the user, so the repository can stay public while
-the plaintext only ever exists in the home directory.
+Encrypted files exist: an `encrypt` rule makes `add` store ciphertext under a
+`.age`/`.gpg` extension, `apply`, `status`, `edit` and `rm` decrypt through the
+`age` or `gpg` binary, configured by `ld.crypt.backend`, `ld.crypt.recipients`
+and `ld.crypt.identity`. What was left out of that first pass:
 
-### Prior art
-
-- **chezmoi** encrypts file by file. The backend is `age` or `gpg`, chosen in
-  its configuration; each encrypted file is stored with an `encrypted_` prefix
-  in its name and decrypted on apply.
-- **yadm** keeps a list of patterns in `~/.config/yadm/encrypt`, and
-  `yadm encrypt` bundles everything matching it into a single encrypted archive
-  committed to the repository; `yadm decrypt` restores them. It also documents
-  `transcrypt` as an alternative, which encrypts per file through git filters.
-
-Per-file encryption is the better fit here: it keeps `git diff` meaningful at
-the file level, allows partial decryption, and avoids the "re-encrypt
-everything" step yadm's archive needs on every change.
-
-### Proposed configuration
-
-Encryption is a per-file property, so it belongs with the existing per-file
-properties — `link` and `conflict` — and follows the same defaults-plus-rules
-model:
-
-```lua
-ld.crypt.backend("age")
-ld.crypt.recipients({ "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p" })
-
-ld.rules({
-  { match = ".ssh/id_*", encrypt = true },
-  { match = ".config/*/secrets.toml", encrypt = true },
-})
-```
-
-| Call | Arguments | Effect |
-| --- | --- | --- |
-| `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. |
-| `ld.crypt.recipients(keys)` | a key or a list of them | Public keys or key ids the files are encrypted to. |
-| `ld.crypt.identity(path)` | a path | Private key used to decrypt; defaults to the backend's own default location. |
-| `ld.crypt(options)` | a table of options | Sets several options at once; only the keys it carries. |
-
-The last-rule-wins and accumulate semantics stay exactly as they are today, and
-`encrypt` defaults to `false`, so nothing changes for a configuration that
-never mentions it.
-
-### Behavior
-
-- `add` on a file matching an encrypt rule encrypts it into the repository
-  instead of copying it, and never writes the plaintext there.
-- `apply` decrypts to the home directory. Linking is bypassed for these files —
-  a hard link or symlink to ciphertext would be useless — so they are always
-  written as a plain copy, whatever `link` says.
-- `edit` decrypts to a temporary file, opens the editor, then re-encrypts and
-  removes the temporary file, so the plaintext never lands in the repository.
-- Conflict policies apply as usual, comparing the decrypted content against
-  what is on the system.
-- The stored file keeps its path and gains an extension (`.age`, `.gpg`), so
-  the mapping to the home directory stays obvious and the repository shows at a
-  glance what is encrypted.
-
-### Open questions
-
-- Whether to shell out to the `age`/`gpg` binaries or link a Rust
-  implementation. Shelling out ships nothing extra and matches what the user
-  already has configured; a library removes the dependency on an external tool
-  and gives better errors. Any crate considered has to be checked for current
-  maintenance before it is added.
-- What to do when decryption fails during `apply` — skip the file with a
-  warning, or abort the whole run.
-- Whether a passphrase-only mode (no key pair) is worth supporting for people
-  who do not keep a key on the machine.
-- Whether re-encrypting everything after a recipient list change deserves its
-  own command.
-- Temporary plaintext during `edit` should live somewhere that is not
-  world-readable, and be removed even when the editor exits badly.
+- **Files under `root/`.** Their apply path runs through `sudo` and staged
+  writes; encrypting them means deciding where the plaintext may flow during
+  escalation, so `add` and `apply` refuse the combination for now.
+- **A passphrase-only mode.** Both backends run non-interactively against a
+  key; someone who keeps no key on the machine has no way in.
+- **Re-encrypting after a recipient change.** New recipients only reach a file
+  when its content changes through `edit`; a command re-encrypting everything
+  in place is still missing.
+- **A Rust implementation as a fallback.** Everything shells out to the
+  `age`/`gpg` binaries; a machine without them cannot decrypt. Any crate
+  considered has to be checked for current maintenance before it is added.
+- **Skipping over a failed decryption.** `apply` aborts with the backend's
+  error; whether a warn-and-continue mode is worth having is unsettled.
