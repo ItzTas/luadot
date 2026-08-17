@@ -14,4 +14,4 @@ pub use paths::{
 };
 pub use repo::{managed_path, require_repo};
 pub use run::Run;
-pub use workspace::{Workspace, managed_entries, managed_root, workspace};
+pub use workspace::{Workspace, managed_entries, managed_files, managed_root, workspace};

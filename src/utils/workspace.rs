@@ -34,6 +34,21 @@ pub fn managed_root(
     managed_path(command, home, repo, path)
 }
 
+pub fn managed_files(
+    command: &str,
+    repo: &Path,
+    root: &Path,
+    ignored: impl Fn(&Path) -> bool,
+) -> Result<Vec<PathBuf>> {
+    Ok(managed_entries(command, repo, root, ignored)?
+        .into_iter()
+        .filter_map(|entry| match entry {
+            Entry::File(file) => Some(file),
+            Entry::Template(_) | Entry::Standalone(_) => None,
+        })
+        .collect())
+}
+
 pub fn managed_entries(
     command: &str,
     repo: &Path,

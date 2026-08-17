@@ -1,10 +1,8 @@
-use std::path::PathBuf;
-
 use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::crypt;
-use crate::files::{self, Entry, FileStatus};
+use crate::files::{self, FileStatus};
 use crate::output::{self, Tone};
 use crate::utils::{self, Workspace};
 
@@ -21,15 +19,9 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
 
     let root = utils::managed_root("status", &home, &repo, args.path.as_deref())?;
 
-    let files: Vec<PathBuf> = utils::managed_entries("status", &repo, &root, |relative| {
+    let files = utils::managed_files("status", &repo, &root, |relative| {
         config.is_ignored(&crypt::logical(relative))
-    })?
-    .into_iter()
-    .filter_map(|entry| match entry {
-        Entry::File(file) => Some(file),
-        Entry::Template(_) | Entry::Standalone(_) => None,
-    })
-    .collect();
+    })?;
     if files.is_empty() {
         output::note("nothing is managed");
         return Ok(());

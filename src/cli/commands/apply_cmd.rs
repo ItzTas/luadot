@@ -1,10 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::crypt;
-use crate::files::{self, Entry, SyncOutcome};
+use crate::files::{self, SyncOutcome};
 use crate::lua::Config;
 use crate::output;
 use crate::utils::{self, Run, Workspace};
@@ -26,15 +26,9 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
 
     let root = utils::managed_root("apply", &home, &repo, args.path.as_deref())?;
 
-    let files: Vec<PathBuf> = utils::managed_entries("apply", &repo, &root, |relative| {
+    let files = utils::managed_files("apply", &repo, &root, |relative| {
         config.is_ignored(&crypt::logical(relative))
-    })?
-    .into_iter()
-    .filter_map(|entry| match entry {
-        Entry::File(file) => Some(file),
-        Entry::Template(_) | Entry::Standalone(_) => None,
-    })
-    .collect();
+    })?;
     if files.is_empty() {
         output::note("nothing to apply");
         return Ok(());
