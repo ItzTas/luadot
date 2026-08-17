@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use super::LinkMode;
-use super::sync::{already_synced, exists};
+use super::sync::{already_synced, exists, same_contents};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileStatus {
@@ -27,13 +27,6 @@ pub fn file_status(mode: LinkMode, source: &Path, dest: &Path) -> Result<FileSta
     }
 
     Ok(FileStatus::Differs)
-}
-
-fn same_contents(source: &Path, dest: &Path) -> Result<bool> {
-    let expected = std::fs::read(source)
-        .with_context(|| format!("files: failed to read {}", source.display()))?;
-
-    Ok(matches!(std::fs::read(dest), Ok(found) if found == expected))
 }
 
 #[cfg(test)]
@@ -108,6 +101,40 @@ mod tests {
         assert_eq!(
             file_status(LinkMode::Hard, &source, &dest).unwrap(),
             FileStatus::Differs
+        );
+    }
+
+    #[test]
+    fn copy_mode_reports_synced_by_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        let dest = dir.path().join("dest");
+        write(&source, "data");
+        write(&dest, "data");
+
+        assert_eq!(
+            file_status(LinkMode::Copy, &source, &dest).unwrap(),
+            FileStatus::Synced
+        );
+
+        write(&dest, "other");
+        assert_eq!(
+            file_status(LinkMode::Copy, &source, &dest).unwrap(),
+            FileStatus::Differs
+        );
+    }
+
+    #[test]
+    fn copy_mode_reports_a_hard_link_as_unlinked() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        let dest = dir.path().join("dest");
+        write(&source, "data");
+        std::fs::hard_link(&source, &dest).unwrap();
+
+        assert_eq!(
+            file_status(LinkMode::Copy, &source, &dest).unwrap(),
+            FileStatus::Unlinked
         );
     }
 
