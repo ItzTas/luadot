@@ -8,47 +8,32 @@ item can change before it lands.
 Templates exist: a `*.luadot/` directory with a `luadot.lua` inside, resolved by
 `luadot alt`. What was left out of that first pass:
 
-- **`status` for what a template produces.** Templates only run under `alt`, so
-  `status` says nothing about the files they generate. Reporting them means
-  either running the templates outside `alt` or recording the last resolution.
+- **`status` and `diff` for what a template produces.** Templates only run under
+  `alt`, so both say nothing about the files they generate and skip them.
+  Reporting them means either running the templates outside `alt`, or recording
+  the last resolution, or rendering into the temporary copy `diff` already
+  builds.
 - **`add`, `rm` and `edit` on a template.** They all work on plain managed
   files; a template directory is reached by path only through `alt`.
 
 ## Diff
 
-`status` says a managed file `differs`, and stops there. Knowing *what* differs
-means running a diff by hand against the repository path, which is the one step
-between noticing a divergence and deciding whether to `apply` over it or bring
-the change back in with `add`. A `luadot diff [path...]` closes that loop.
+`luadot diff` exists: it stages both sides of every file that is not synced into
+a private temporary mirror and hands the two directories to `git diff
+--no-index`. What was left out of that first pass:
 
-- No path diffs every managed file that is not synced; a path narrows it to that
-  file or to everything under that directory.
-- The repository is the left side and the system the right side, so the output
-  reads as what `apply` would overwrite.
-- Files reported `unlinked` have identical content and produce no diff; only
-  `differs` and `missing` have anything to show.
-
-### Open questions
-
-- Whether to shell out to `git diff --no-index` — the repository is a git
-  repository already, so the user's pager, colors and `diff.*` settings come for
-  free — or to compute the diff in process with a crate, which works without git
-  and gives control over the output. Any crate has to be checked for current
-  maintenance before it is added.
-- Binary files, which have no useful textual diff and should be reported as
-  "binary files differ" plus their sizes.
-- Templates, whose repository side does not exist until `alt` runs them, so a
-  diff means rendering into a temporary file first.
-- Encrypted files, once they exist, have to be decrypted before comparison and
-  must never leave plaintext behind.
-- Whether a `--stat` summary is worth having, and whether this belongs as
-  `status --diff` instead of its own command.
+- **A `--stat` summary**, and whether the same thing belongs on `status` as
+  `status --diff`.
+- **Diffing without git**, computing the hunks in process instead of shelling
+  out. It would work on a machine without git and give control over the output,
+  at the cost of the user's pager, colors and `diff.*` settings. Any crate
+  considered has to be checked for current maintenance before it is added.
 
 ## Backups and restore
 
 `apply`, `alt` and `rm` save every file they destroy, into
-`~/.local/share/luadot/backups/<unix-millisecond>/`, mirroring the path below
-the home directory; `ld.opt.backup(false)` turns it off,
+`~/.local/share/luadot/backups/<unix-millisecond>/`, under the same `home/` and
+`root/` layout the repository uses; `ld.opt.backup(false)` turns it off,
 `ld.opt.backup_dir(path)` moves the directory elsewhere,
 `ld.opt.backup_keep(n)` keeps only the `n` most recent, and `restore` puts a
 backup back. `add` takes none because it writes over nothing: it refuses a
@@ -120,6 +105,8 @@ never mentions it.
   removes the temporary file, so the plaintext never lands in the repository.
 - Conflict policies apply as usual, comparing the decrypted content against
   what is on the system.
+- `diff` compares the decrypted content, staged into the same private mirror it
+  already builds, so no plaintext outlives the command.
 - The stored file keeps its path and gains an extension (`.age`, `.gpg`), so
   the mapping to the home directory stays obvious and the repository shows at a
   glance what is encrypted.

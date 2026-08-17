@@ -138,6 +138,18 @@ pub fn escalated_read(command: &str, path: &Path) -> Result<Vec<u8>> {
     Ok(output.stdout)
 }
 
+pub fn read_contents(command: &str, path: &Path) -> Result<Vec<u8>> {
+    match std::fs::read(path) {
+        Ok(contents) => Ok(contents),
+        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+            escalated_read(command, path)
+        }
+        Err(err) => {
+            Err(err).with_context(|| format!("{command}: failed to read {}", path.display()))
+        }
+    }
+}
+
 pub fn permission_denied(err: &anyhow::Error) -> bool {
     err.downcast_ref::<std::io::Error>()
         .is_some_and(|io| io.kind() == std::io::ErrorKind::PermissionDenied)
@@ -254,7 +266,7 @@ fn holds_copy(source: &Path, dest: &Path, mode: Option<u32>) -> Result<bool> {
     Ok(found == expected)
 }
 
-fn effective_mode(source: &Path, mode: Option<u32>) -> Result<u32> {
+pub fn effective_mode(source: &Path, mode: Option<u32>) -> Result<u32> {
     if let Some(mode) = mode {
         return Ok(mode);
     }
@@ -518,6 +530,18 @@ mod tests {
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "conf");
         assert_eq!(bits(&dest), 0o640);
+    }
+
+    #[test]
+    fn read_contents_returns_what_the_file_holds() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("app.conf");
+        write(&path, "conf\n");
+
+        assert_eq!(read_contents("diff", &path).unwrap(), b"conf\n");
+
+        let err = read_contents("diff", &dir.path().join("gone")).unwrap_err();
+        assert!(err.to_string().contains("diff: failed to read"));
     }
 
     #[test]

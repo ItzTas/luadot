@@ -522,6 +522,33 @@ fn alt_builds_a_file_out_of_fragments_and_runs_the_command_that_follows_it() {
 }
 
 #[test]
+fn add_leaves_out_what_the_repository_gitignores() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    gix::init(&repo).unwrap();
+    write(&repo.join(".gitignore"), "*.log\nhome/.cache/\n");
+    write(&home.join(".config/nvim/init.lua"), "vim.o.number = true\n");
+    write(&home.join(".config/nvim/lsp.log"), "noise\n");
+    write(&home.join(".cache/state"), "cached\n");
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args(["add", home.join(".config/nvim").to_str().unwrap()])
+        .assert()
+        .success();
+    assert!(repo.join("home/.config/nvim/init.lua").exists());
+    assert!(!repo.join("home/.config/nvim/lsp.log").exists());
+
+    luadot(&home)
+        .args(["add", home.join(".cache").to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(".gitignore"));
+    assert!(!repo.join("home/.cache").exists());
+}
+
+#[test]
 fn add_then_apply_manage_a_system_file_end_to_end() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -608,4 +635,91 @@ fn a_replaced_system_file_is_backed_up_and_restored() {
 
     luadot(&home).args(["restore", "--yes"]).assert().success();
     assert_eq!(read(&system), "handwritten\n");
+}
+
+#[test]
+fn diff_reports_the_drift_and_what_the_system_is_missing() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join("home/.vimrc"), "set number\n");
+    write(&repo.join("home/.zshrc"), "synced\n");
+    write(&home.join(".bashrc"), "handwritten\n");
+    write(&home.join(".zshrc"), "synced\n");
+    write_state(&home, &repo);
+
+    luadot(&home).arg("diff").assert().success().stdout(
+        predicate::str::contains("repository/home/.bashrc system/home/.bashrc")
+            .and(predicate::str::contains("-managed"))
+            .and(predicate::str::contains("+handwritten"))
+            .and(predicate::str::contains("repository/home/.vimrc"))
+            .and(predicate::str::contains("-set number"))
+            .and(predicate::str::contains(".zshrc").not())
+            .and(predicate::str::contains("2 of 3 managed file(s) differ")),
+    );
+}
+
+#[test]
+fn diff_narrows_to_the_path_it_is_given_and_leaves_nothing_behind() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join("home/.vimrc"), "set number\n");
+    write(&home.join(".bashrc"), "handwritten\n");
+    write_state(&home, &repo);
+
+    let before = mirrors();
+
+    luadot(&home)
+        .args(["diff", home.join(".bashrc").to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("+handwritten")
+                .and(predicate::str::contains(".vimrc").not())
+                .and(predicate::str::contains("1 of 1 managed file(s) differ")),
+        );
+
+    assert_eq!(mirrors(), before);
+}
+
+#[test]
+fn diff_reports_a_system_file_whose_mode_is_all_that_drifted() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let system = root.path().join("etc/app.conf");
+    let managed = repo.join("root").join(system.strip_prefix("/").unwrap());
+    write(&managed, "conf\n");
+    write(&system, "conf\n");
+    std::fs::set_permissions(&system, std::fs::Permissions::from_mode(0o600)).unwrap();
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.rules({ match = "root/**", mode = "0640" })"#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("diff").assert().success().stdout(
+        predicate::str::contains("mode")
+            .and(predicate::str::contains("0600 -> 0640"))
+            .and(predicate::str::contains("1 of 1 managed file(s) differ")),
+    );
+}
+
+fn mirrors() -> usize {
+    std::fs::read_dir(std::env::temp_dir())
+        .unwrap()
+        .filter(|entry| {
+            entry
+                .as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("luadot-diff-")
+        })
+        .count()
 }

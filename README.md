@@ -10,6 +10,7 @@ A dotfiles manager configured in Lua.
 | `luadot add <path>...` | Starts managing a file or directory, mirroring it into the repository. |
 | `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving the system copy in place. |
 | `luadot status [path]` | Lists the managed files whose system copy is not in sync. |
+| `luadot diff [path]` | Shows what the repository holds and the system does not. |
 | `luadot apply [-n] [path]` | Puts the repository's files back on the system. |
 | `luadot alt [-n] [path]` | Runs the templates and puts the files they produce on the system. |
 | `luadot new [-f] <path>` | Creates an empty template in the repository, for the file that path names. |
@@ -59,6 +60,40 @@ everything else:
 - `unreadable` — a system file luadot may not read; `status` never asks for
   privilege, `apply` does.
 
+`diff` picks up where `status` stops, and shows the content behind a `differs`:
+
+```
+$ luadot diff
+diff --git repository/home/.vimrc system/home/.vimrc
+--- repository/home/.vimrc
++++ system/home/.vimrc
+@@ -1,2 +1,2 @@
+ set number
+-set ruler
++set paste
+luadot: 1 of 12 managed file(s) differ
+```
+
+The repository is the left side and the system the right side, so what the
+diff adds is what `apply` would overwrite and what it removes is what `add`
+would bring in. A path narrows the report to that file or to everything below
+that directory. A file the system does not have shows its whole content as
+absent from the right side; one reported `unlinked` holds the same content and
+has nothing to show.
+
+The diff itself is `git diff`, run over a private copy of the two sides, so
+your pager, your colors and your `diff.*` settings are the ones that apply, and
+binary files are reported as differing instead of printed. Since git only
+records the executable bit, a system file whose content matches but whose mode
+drifted gets a line of its own:
+
+```
+mode       root/etc/sudoers.d/wheel 0644 -> 0440
+```
+
+Templates are left out, their repository side not existing until `alt` runs
+them; the summary says how many were skipped.
+
 `rm` is the inverse of `add`: it removes the file from the repository and leaves
 your home directory with a plain, unmanaged copy of it. When the system copy is
 a symlink into the repository, the content is written out before the repository
@@ -90,6 +125,24 @@ luadot add /etc/pacman.conf  -- lands in root/etc/pacman.conf
 Anything at the top level outside the two directories — the repository's own
 README, a license — is the repository's own and is never applied anywhere.
 
+### What git refuses to keep
+
+`add` reads the repository's `.gitignore` before it writes anything: a file git
+would never track has no business being mirrored there, where it would sit
+outside every commit and be gone on the next clone. A path named on the command
+line that lands on an excluded destination stops the run:
+
+```
+$ luadot add ~/.cache
+add: /home/u/.cache lands on home/.cache, which the repository's .gitignore excludes
+```
+
+Walking a directory is quieter: the excluded files are left out and the rest is
+added, so `luadot add ~/.config/nvim` brings the configuration in and leaves the
+logs behind. Nested `.gitignore` files, negated patterns, `.git/info/exclude`
+and the global excludes file all count, exactly as git reads them; a repository
+git does not track excludes nothing.
+
 ### System files
 
 Files under `root/` go through the same commands as everything else, with two
@@ -113,8 +166,8 @@ ld.rules({
 Without a `mode`, the repository file's own permission bits are applied;
 without an `owner`, the file belongs to whoever wrote it — you when no
 privilege was needed, root when sudo was. `status` reports a system file it
-cannot read as `unreadable` and moves on; `apply` reads it through `sudo cat`
-before deciding what to do.
+cannot read as `unreadable` and moves on; `apply` and `diff` read it through
+`sudo cat` before deciding what to do.
 
 ### Seeing it first
 

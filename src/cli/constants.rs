@@ -23,6 +23,8 @@ pub const TEMPLATE_SKELETON: &str = "return \"\"\n";
 
 pub const SYSTEM_TEXT_MODE: u32 = 0o644;
 
+pub const DIFF_ARGUMENTS: [&str; 4] = ["diff", "--no-index", "--no-prefix", "--"];
+
 pub const STATUS_LABELS: [(FileStatus, &str, Tone); 5] = [
     (FileStatus::Synced, "synced", Tone::Good),
     (FileStatus::Missing, "missing", Tone::Warning),

@@ -43,6 +43,7 @@ fn dispatch(cli: Cli) -> Result<()> {
         Cmd::Clone(args) => commands::clone_cmd(args),
         Cmd::Completions(args) => commands::completions_cmd(args),
         Cmd::Config(args) => commands::config_cmd(args),
+        Cmd::Diff(args) => commands::diff_cmd(args),
         Cmd::Edit(args) => commands::edit_cmd(args),
         Cmd::Exec(args) => commands::exec_cmd(args),
         Cmd::Git(args) => commands::git_cmd(args),
