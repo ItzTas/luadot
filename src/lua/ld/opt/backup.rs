@@ -1,8 +1,8 @@
 use mlua::{Function, Lua, Value};
 
 use super::super::surface::{self, Surface};
+use super::super::value::flag;
 use super::constants::{BACKUP, NAMESPACE};
-use super::value::flag;
 use crate::lua::Config;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
@@ -14,7 +14,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
         return Ok(());
     }
 
-    let enabled = flag(&value, BACKUP)?;
+    let enabled = flag(NAMESPACE, &value, BACKUP)?;
     Config::building(lua)?.set_backup(enabled);
     Ok(())
 }

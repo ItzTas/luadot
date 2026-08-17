@@ -5,8 +5,8 @@ use mlua::{Function, Lua, Value};
 use super::super::constants::API;
 use super::super::parse::external;
 use super::super::surface::{self, Surface};
+use super::super::value::text;
 use super::constants::{NAMESPACE, REPO_DIR};
-use super::value::text;
 use crate::lua::Config;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
@@ -18,7 +18,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
         return Ok(());
     }
 
-    let raw = text(&value, REPO_DIR)?;
+    let raw = text(NAMESPACE, &value, REPO_DIR)?;
     if raw.trim().is_empty() {
         return Err(external(format!(
             "`{API}.{NAMESPACE}.{REPO_DIR}` takes a directory, got an empty string"

@@ -3,8 +3,8 @@ use mlua::{Function, Lua, Value};
 use super::super::constants::LINK_MODES;
 use super::super::parse::lookup;
 use super::super::surface::{self, Surface};
+use super::super::value::text;
 use super::constants::{LINK, NAMESPACE};
-use super::value::text;
 use crate::lua::Config;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
@@ -16,7 +16,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
         return Ok(());
     }
 
-    let name = text(&value, LINK)?;
+    let name = text(NAMESPACE, &value, LINK)?;
     let mode = lookup(&LINK_MODES, &name, "link mode")?;
     Config::building(lua)?.set_link(mode);
     Ok(())

@@ -17,6 +17,7 @@ mod setup;
 mod surface;
 mod sys;
 mod table;
+mod value;
 
 pub use alt::output;
 pub use constants::API;

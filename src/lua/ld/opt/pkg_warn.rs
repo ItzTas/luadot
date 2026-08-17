@@ -1,7 +1,7 @@
 use mlua::{Function, Lua, Value};
 
-use super::constants::PKG_WARN;
-use super::value::flag;
+use super::super::value::flag;
+use super::constants::{NAMESPACE, PKG_WARN};
 use crate::lua::Config;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
@@ -9,7 +9,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 }
 
 pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
-    let enabled = flag(&value, PKG_WARN)?;
+    let enabled = flag(NAMESPACE, &value, PKG_WARN)?;
     Config::building(lua)?.set_pkg_warn(enabled);
     Ok(())
 }
