@@ -52,6 +52,7 @@ pub struct Rule {
     ignore: Option<bool>,
     mode: Option<u32>,
     owner: Option<String>,
+    encrypt: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,6 +184,13 @@ impl Config {
         self.matching(relative).filter_map(Rule::owner).next_back()
     }
 
+    pub fn encrypt(&self, relative: &Path) -> bool {
+        self.matching(relative)
+            .filter_map(Rule::encrypt)
+            .next_back()
+            .unwrap_or(false)
+    }
+
     fn matching<'a>(&'a self, relative: &'a Path) -> impl DoubleEndedIterator<Item = &'a Rule> {
         self.rules
             .iter()
@@ -218,6 +226,7 @@ impl Rule {
             ignore: None,
             mode: None,
             owner: None,
+            encrypt: None,
         }
     }
 
@@ -238,6 +247,11 @@ impl Rule {
 
     pub fn with_owner(mut self, owner: Option<String>) -> Self {
         self.owner = owner;
+        self
+    }
+
+    pub fn with_encrypt(mut self, encrypt: Option<bool>) -> Self {
+        self.encrypt = encrypt;
         self
     }
 
@@ -267,6 +281,10 @@ impl Rule {
 
     pub fn owner(&self) -> Option<&str> {
         self.owner.as_deref()
+    }
+
+    pub fn encrypt(&self) -> Option<bool> {
+        self.encrypt
     }
 }
 
@@ -330,6 +348,7 @@ mod tests {
         assert!(!config.is_ignored(path));
         assert_eq!(config.mode(path), None);
         assert_eq!(config.owner(path), None);
+        assert!(!config.encrypt(path));
     }
 
     #[test]

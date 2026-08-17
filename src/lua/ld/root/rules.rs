@@ -48,6 +48,7 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
     let ignore: Option<bool> = entry.get("ignore")?;
     let mode: Option<String> = entry.get("mode")?;
     let owner: Option<String> = entry.get("owner")?;
+    let encrypt: Option<bool> = entry.get("encrypt")?;
 
     Ok(Rule::new(
         pattern,
@@ -60,7 +61,8 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
     .with_on_change(on_change)
     .with_ignore(ignore)
     .with_mode(mode.map(|raw| mode_bits(&raw, "a rule")).transpose()?)
-    .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?))
+    .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?)
+    .with_encrypt(encrypt))
 }
 
 #[cfg(test)]
@@ -289,6 +291,38 @@ mod tests {
         let bashrc = Path::new("home/.bashrc");
         assert_eq!(config.mode(bashrc), None);
         assert_eq!(config.owner(bashrc), None);
+    }
+
+    #[test]
+    fn a_rule_marks_the_files_it_matches_as_encrypted() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = "home/.ssh/id_*", encrypt = true },
+              { match = "home/.config/*/secrets.toml", encrypt = true },
+            })
+            "#,
+        );
+
+        assert!(config.encrypt(Path::new("home/.ssh/id_ed25519")));
+        assert!(config.encrypt(Path::new("home/.config/mail/secrets.toml")));
+        assert!(!config.encrypt(Path::new("home/.ssh/config")));
+        assert!(!config.encrypt(Path::new("home/.bashrc")));
+    }
+
+    #[test]
+    fn a_later_rule_takes_a_file_back_from_the_encrypted_ones() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = "home/.ssh/**", encrypt = true },
+              { match = "home/.ssh/*.pub", encrypt = false },
+            })
+            "#,
+        );
+
+        assert!(config.encrypt(Path::new("home/.ssh/id_ed25519")));
+        assert!(!config.encrypt(Path::new("home/.ssh/id_ed25519.pub")));
     }
 
     #[test]
