@@ -4,9 +4,9 @@ use super::super::class;
 use super::super::constants::API;
 use super::super::parse::{chain, external};
 use super::super::path::Paths;
-use super::super::repo::require;
 use super::super::surface;
 use super::constants::{ALL, NAMESPACE};
+use super::scripts::{listing, run};
 use crate::lua::setup;
 
 pub fn function(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
@@ -17,21 +17,11 @@ pub fn function(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
         surface::slow(lua, &format!("{NAMESPACE}.{ALL}"));
 
         let order = order(&options)?;
-        let repo = require(paths.repo(), &command)?;
-        let dir = setup::setup_dir(&command, paths.home(), paths.config(), repo).map_err(chain)?;
-        let names = setup::list(&command, &dir).map_err(chain)?;
+        let (repo, names) = listing(&paths, &command)?;
         let classes = class::current(lua);
 
         for name in setup::ordered(&command, names, &order).map_err(chain)? {
-            setup::run_one(
-                &command,
-                paths.home(),
-                paths.config(),
-                repo,
-                &name,
-                &classes,
-            )
-            .map_err(chain)?;
+            run(&paths, &command, repo, &name, &classes)?;
         }
         Ok(())
     })
