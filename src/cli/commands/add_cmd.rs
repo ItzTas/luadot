@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
+use crate::crypt;
 use crate::files;
 use crate::git;
 use crate::lua::{self, Config};
@@ -119,8 +120,18 @@ fn pair(
     if config.is_ignored(relative) || excludes.excluded(relative, git::Kind::File)? {
         return Ok(None);
     }
+    if !config.encrypt(relative) {
+        return Ok(Some((source, dest)));
+    }
+    if utils::is_root(relative) {
+        bail!(
+            "add: {} matches an encrypt rule, and encrypted system files are not supported",
+            source.display()
+        );
+    }
 
-    Ok(Some((source, dest)))
+    let stored = crypt::stored(&dest, config.crypt_backend());
+    Ok(Some((source, stored)))
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
@@ -163,6 +174,11 @@ fn link_into_repo(config: &Config, repo: &Path, source: &Path, dest: &Path) -> R
     }
 
     let relative = utils::relative(repo, dest);
+    if let Some((stripped, backend)) = crypt::split(relative)
+        && config.encrypt(&stripped)
+    {
+        return crypt::encrypt("add", backend, config.crypt_recipients(), source, dest);
+    }
     if utils::is_root(relative) {
         return files::import_system(source, dest);
     }
@@ -298,6 +314,45 @@ mod tests {
             pairs,
             vec![(source.clone(), repo.join("root").join(relative))]
         );
+    }
+
+    #[test]
+    fn plan_stores_an_encrypted_file_under_the_backend_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&home).unwrap();
+        let source = home.join(".netrc");
+        std::fs::write(&source, "machine example").unwrap();
+
+        let config = lua::from_source(
+            r#"
+            ld.crypt.backend("gpg")
+            ld.rules({ match = "home/.netrc", encrypt = true })
+            "#,
+        )
+        .unwrap();
+        let pairs = plan(&home, &repo, &[arg(&source)], &config).unwrap();
+
+        assert_eq!(pairs, vec![(source, repo.join("home/.netrc.gpg"))]);
+    }
+
+    #[test]
+    fn plan_refuses_an_encrypted_system_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let source = dir.path().join("etc/secret.conf");
+        std::fs::create_dir_all(source.parent().unwrap()).unwrap();
+        std::fs::write(&source, "secret").unwrap();
+
+        let config =
+            lua::from_source(r#"ld.rules({ match = "root/**", encrypt = true })"#).unwrap();
+        let err = plan(&home, &repo, &[arg(&source)], &config)
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("encrypted system files are not supported"));
     }
 
     #[test]

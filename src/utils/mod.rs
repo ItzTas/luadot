@@ -10,7 +10,7 @@ mod repo;
 
 pub use backup::{Backup, backups_root, copy_entry, now, taken};
 pub use classes::{ask, ask_missing};
-pub use editor::open;
+pub use editor::{launch, open};
 pub use hook::Hooks;
 pub use paths::{
     config_dir, data_dir, expand, home_dir, is_managed, is_root, managed_relative, relative,

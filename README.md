@@ -169,6 +169,62 @@ privilege was needed, root when sudo was. `status` reports a system file it
 cannot read as `unreadable` and moves on; `apply` and `diff` read it through
 `sudo cat` before deciding what to do.
 
+### Encrypted files
+
+Some dotfiles hold secrets — SSH private keys, API tokens, `~/.netrc` — and a
+public repository is no place for their plaintext. An `encrypt` rule keeps the
+file managed anyway: the repository stores only ciphertext, and the plaintext
+only ever exists in your home directory.
+
+```lua
+ld.crypt.recipients("age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p")
+ld.crypt.identity("~/.keys/age.txt")
+
+ld.rules({
+  { match = "home/.ssh/id_*", encrypt = true },
+  { match = "home/.netrc", encrypt = true },
+})
+```
+
+Encryption runs through the `age` or `gpg` binary on your `PATH` — luadot
+ships no cryptography of its own. `age` is the default;
+`ld.crypt.backend("gpg")` switches. The stored file keeps its path and gains
+the backend's extension, so `add ~/.netrc` lands in `home/.netrc.age` and the
+repository shows at a glance what is encrypted; the extension is what marks a
+file as encrypted from then on, whatever the rules say later.
+
+- `add` encrypts the file into the repository instead of linking it, and never
+  writes the plaintext there.
+- `apply` decrypts to the home directory. Linking is bypassed — a link to
+  ciphertext would be useless — so the file is always a plain copy, written
+  with mode `600`, whatever `link` says.
+- `status` compares the decrypted content against the system copy and reports
+  the file `unreadable` when it cannot decrypt.
+- `edit` decrypts to a private temporary directory (`0700`, under
+  `$XDG_RUNTIME_DIR` when it exists), opens the editor there, re-encrypts and
+  removes the plaintext, even when the editor exits badly. An unchanged file is
+  left alone, so the ciphertext only churns when the content did change.
+- `rm` deletes the ciphertext from the repository; when the system copy is
+  missing it decrypts one last time to leave the plaintext behind.
+- Conflict policies apply as usual, comparing the decrypted content against
+  what is on the system.
+
+Encrypting is done to the `recipients` — age public keys, or key ids for gpg —
+and decrypting with age needs the `identity`, the private key file. gpg ignores
+the identity and uses its own keyring for both directions. A failed decryption
+stops `apply` with the tool's own error rather than skipping the file.
+
+Files under `root/` cannot be encrypted: their apply path runs through `sudo`
+and staged writes, which would spill plaintext through pipes owned by other
+processes.
+
+| Call | Arguments | Effect |
+| --- | --- | --- |
+| `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
+| `ld.crypt.recipients(keys)` | a key or a list of them | Public keys or key ids the files are encrypted to. |
+| `ld.crypt.identity(path)` | a path | Private key used to decrypt with age; gpg uses its keyring. `~` and a relative path resolve against your home directory. |
+| `ld.crypt(options)` | a table of options | Sets several options at once; only the keys it carries. |
+
 ### Seeing it first
 
 `-n` (or `--dry-run`) makes `apply`, `alt` and `rm` report what they would do
@@ -296,7 +352,7 @@ match linear in the length of the path.
 
 [regex]: https://docs.rs/regex/latest/regex/#syntax
 
-A rule carries six more keys, all optional next to `match` or `regex`:
+A rule carries seven more keys, all optional next to `match` or `regex`:
 
 | Key | Values | Effect |
 | --- | --- | --- |
@@ -306,6 +362,7 @@ A rule carries six more keys, all optional next to `match` or `regex`:
 | `ignore` | `true`, `false` | Whether the matching files are left unmanaged. |
 | `mode` | three or four octal digits, as a string | The permission bits a matching file under `root/` is placed with. |
 | `owner` | `"user"` or `"user:group"` | Who owns a matching file under `root/`. |
+| `encrypt` | `true`, `false` | Whether `add` stores the matching files encrypted. Only for files under `home/`. |
 
 Either syntax also matches a directory on behalf of everything under it, so
 `{ match = "home/.ssh" }` and `{ regex = "^home/\\.ssh$" }` both cover
@@ -329,7 +386,11 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
-| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, and marks them as never managed. |
+| `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
+| `ld.crypt.recipients(keys)` | a key or a list of them | Public keys or key ids encrypted files are encrypted to. |
+| `ld.crypt.identity(path)` | a path | Private key used to decrypt with age. |
+| `ld.crypt(options)` | a table of options | Sets several crypt options at once; only the keys it carries. |
+| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, and marks them as encrypted. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |
@@ -360,7 +421,7 @@ instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.crypt.backend`, `ld.crypt.recipients`, `ld.crypt.identity`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
 | `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |

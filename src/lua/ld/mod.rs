@@ -3,6 +3,7 @@ mod argv;
 mod class;
 mod cmd;
 mod constants;
+mod crypt;
 mod exec;
 mod git;
 mod install;

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 use super::paths::{expand, home_dir, repo_path};
+use crate::crypt;
 use crate::state;
 
 pub fn require_repo(command: &str, configured: Option<&Path>) -> Result<PathBuf> {
@@ -19,14 +20,17 @@ pub fn managed_path(command: &str, home: &Path, repo: &Path, arg: &str) -> Resul
         std::path::absolute(arg).with_context(|| format!("{command}: invalid path {arg}"))?;
     let managed = repo_path(home, repo, &target)?;
 
-    if std::fs::symlink_metadata(&managed).is_err() {
-        bail!(
-            "{command}: {} is not managed by the repository",
-            target.display()
-        );
+    if std::fs::symlink_metadata(&managed).is_ok() {
+        return Ok(managed);
+    }
+    if let Some(stored) = crypt::stored_variant(&managed) {
+        return Ok(stored);
     }
 
-    Ok(managed)
+    bail!(
+        "{command}: {} is not managed by the repository",
+        target.display()
+    )
 }
 
 fn resolve(
@@ -167,6 +171,35 @@ mod tests {
 
         assert!(err.contains("rm: "));
         assert!(err.contains("is not managed by the repository"));
+    }
+
+    #[test]
+    fn managed_path_finds_the_encrypted_form_of_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let stored = repo.join("home/.netrc.age");
+        std::fs::write(&stored, "cipher").unwrap();
+
+        let arg = home.join(".netrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), stored);
+    }
+
+    #[test]
+    fn managed_path_prefers_the_plain_file_over_the_encrypted_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let plain = repo.join("home/.netrc");
+        std::fs::write(&plain, "plain").unwrap();
+        std::fs::write(repo.join("home/.netrc.age"), "cipher").unwrap();
+
+        let arg = home.join(".netrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), plain);
     }
 
     #[test]

@@ -8,16 +8,20 @@ use anyhow::{Context, Result};
 use super::constants::DEFAULT_EDITOR;
 
 pub fn open(command: &str, path: &Path) -> Result<()> {
-    let editor = resolve_editor(env::var_os("VISUAL"), env::var_os("EDITOR"));
-    let status = build_command(&editor, path)
-        .status()
-        .with_context(|| format!("{command}: failed to launch editor `{editor}`"))?;
+    let status = launch(command, path)?;
 
     if !status.success() {
         std::process::exit(status.code().unwrap_or(1));
     }
 
     Ok(())
+}
+
+pub fn launch(command: &str, path: &Path) -> Result<std::process::ExitStatus> {
+    let editor = resolve_editor(env::var_os("VISUAL"), env::var_os("EDITOR"));
+    build_command(&editor, path)
+        .status()
+        .with_context(|| format!("{command}: failed to launch editor `{editor}`"))
 }
 
 fn resolve_editor(visual: Option<OsString>, editor: Option<OsString>) -> String {

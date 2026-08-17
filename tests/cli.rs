@@ -723,3 +723,214 @@ fn mirrors() -> usize {
         })
         .count()
 }
+
+const FAKE_AGE: &str = r#"#!/bin/sh
+op= out= src=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -e|--encrypt) op=encrypt ;;
+    -d|--decrypt) op=decrypt ;;
+    -r|--recipient|-i|--identity) shift ;;
+    -o|--output) out="$2"; shift ;;
+    *) src="$1" ;;
+  esac
+  shift
+done
+[ -n "$src" ] || { echo "fake age: no input" >&2; exit 1; }
+if [ "$op" = encrypt ]; then
+  { echo FAKEAGE; base64 "$src"; } > "${out:-/dev/stdout}"
+elif [ "$op" = decrypt ]; then
+  head -n 1 "$src" | grep -qx FAKEAGE || { echo "fake age: not a ciphertext" >&2; exit 1; }
+  tail -n +2 "$src" | base64 -d > "${out:-/dev/stdout}"
+else
+  echo "fake age: no mode" >&2
+  exit 1
+fi
+"#;
+
+fn executable(path: &Path, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+
+    write(path, script);
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+fn fake_age(root: &Path) -> PathBuf {
+    let bin = root.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    executable(&bin.join("age"), FAKE_AGE);
+    bin
+}
+
+fn luadot_with_tools(home: &Path, bin: &Path) -> Command {
+    let mut command = luadot(home);
+    command.env(
+        "PATH",
+        format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+    );
+    command
+}
+
+fn crypt_config(home: &Path) {
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        ld.crypt.recipients("age1example")
+        ld.crypt.identity("~/key.txt")
+        ld.rules({ match = "home/.netrc", encrypt = true })
+        "#,
+    );
+    write(&home.join("key.txt"), "AGE-SECRET-KEY-FAKE\n");
+}
+
+#[test]
+fn an_encrypt_rule_keeps_only_ciphertext_in_the_repository() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let bin = fake_age(root.path());
+    crypt_config(&home);
+    write(&home.join(".netrc"), "machine example password hunter2\n");
+    write_state(&home, &repo);
+
+    luadot_with_tools(&home, &bin)
+        .args(["add", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    let cipher = read(&repo.join("home/.netrc.age"));
+    assert!(cipher.starts_with("FAKEAGE\n"));
+    assert!(!cipher.contains("hunter2"));
+    assert!(!repo.join("home/.netrc").exists());
+
+    std::fs::remove_file(home.join(".netrc")).unwrap();
+    luadot_with_tools(&home, &bin)
+        .arg("apply")
+        .assert()
+        .success();
+    assert_eq!(
+        read(&home.join(".netrc")),
+        "machine example password hunter2\n"
+    );
+
+    use std::os::unix::fs::PermissionsExt;
+    let mode = std::fs::metadata(home.join(".netrc"))
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o7777;
+    assert_eq!(mode, 0o600);
+
+    luadot_with_tools(&home, &bin)
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 synced"));
+}
+
+#[test]
+fn edit_reencrypts_and_leaves_no_plaintext_behind() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let bin = fake_age(root.path());
+    executable(
+        &bin.join("append-editor"),
+        "#!/bin/sh\nprintf 'password hunter3\\n' >> \"$1\"\n",
+    );
+    crypt_config(&home);
+    write(&home.join(".netrc"), "machine example password hunter2\n");
+    write_state(&home, &repo);
+
+    luadot_with_tools(&home, &bin)
+        .args(["add", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    luadot_with_tools(&home, &bin)
+        .env("EDITOR", "append-editor")
+        .args(["edit", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    let entries: Vec<String> = std::fs::read_dir(repo.join("home"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(entries, [".netrc.age"]);
+    assert!(read(&repo.join("home/.netrc.age")).starts_with("FAKEAGE\n"));
+
+    std::fs::remove_file(home.join(".netrc")).unwrap();
+    luadot_with_tools(&home, &bin)
+        .arg("apply")
+        .assert()
+        .success();
+    assert_eq!(
+        read(&home.join(".netrc")),
+        "machine example password hunter2\npassword hunter3\n"
+    );
+}
+
+#[test]
+fn decrypting_with_age_asks_for_an_identity() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let bin = fake_age(root.path());
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        ld.crypt.recipients("age1example")
+        ld.rules({ match = "home/.netrc", encrypt = true })
+        "#,
+    );
+    write(&home.join(".netrc"), "machine example password hunter2\n");
+    write_state(&home, &repo);
+
+    luadot_with_tools(&home, &bin)
+        .args(["add", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    std::fs::remove_file(home.join(".netrc")).unwrap();
+    luadot_with_tools(&home, &bin)
+        .arg("apply")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "decrypting with age needs `ld.crypt.identity`",
+        ));
+}
+
+#[test]
+fn rm_restores_the_plaintext_of_an_encrypted_file() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let bin = fake_age(root.path());
+    crypt_config(&home);
+    write(&home.join(".netrc"), "machine example password hunter2\n");
+    write_state(&home, &repo);
+
+    luadot_with_tools(&home, &bin)
+        .args(["add", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success();
+    std::fs::remove_file(home.join(".netrc")).unwrap();
+
+    luadot_with_tools(&home, &bin)
+        .args(["rm", "--yes", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 restored"));
+
+    assert!(!repo.join("home/.netrc.age").exists());
+    assert_eq!(
+        read(&home.join(".netrc")),
+        "machine example password hunter2\n"
+    );
+}

@@ -6,6 +6,7 @@ use mlua::{AppDataRefMut, Lua};
 use regex::Regex;
 
 use super::constants::{CLASS_QUESTION, GIT_DIR, MATCH};
+use crate::crypt::Backend;
 use crate::files::{ConflictPolicy, LinkMode};
 
 #[derive(Debug, Clone)]
@@ -19,6 +20,9 @@ pub struct Config {
     backup_dir: Option<PathBuf>,
     backup_keep: Option<u32>,
     repo_dir: Option<PathBuf>,
+    crypt_backend: Backend,
+    crypt_recipients: Vec<String>,
+    crypt_identity: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -33,6 +37,9 @@ impl Default for Config {
             backup_dir: None,
             backup_keep: None,
             repo_dir: None,
+            crypt_backend: Backend::default(),
+            crypt_recipients: Vec::new(),
+            crypt_identity: None,
         }
     }
 }
@@ -52,6 +59,7 @@ pub struct Rule {
     ignore: Option<bool>,
     mode: Option<u32>,
     owner: Option<String>,
+    encrypt: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,6 +133,30 @@ impl Config {
         self.repo_dir.as_deref()
     }
 
+    pub fn set_crypt_backend(&mut self, backend: Backend) {
+        self.crypt_backend = backend;
+    }
+
+    pub fn crypt_backend(&self) -> Backend {
+        self.crypt_backend
+    }
+
+    pub fn set_crypt_recipients(&mut self, recipients: Vec<String>) {
+        self.crypt_recipients = recipients;
+    }
+
+    pub fn crypt_recipients(&self) -> &[String] {
+        &self.crypt_recipients
+    }
+
+    pub fn set_crypt_identity(&mut self, identity: PathBuf) {
+        self.crypt_identity = Some(identity);
+    }
+
+    pub fn crypt_identity(&self) -> Option<&Path> {
+        self.crypt_identity.as_deref()
+    }
+
     pub fn link(&self) -> LinkMode {
         self.link
     }
@@ -183,6 +215,13 @@ impl Config {
         self.matching(relative).filter_map(Rule::owner).next_back()
     }
 
+    pub fn encrypt(&self, relative: &Path) -> bool {
+        self.matching(relative)
+            .filter_map(Rule::encrypt)
+            .next_back()
+            .unwrap_or(false)
+    }
+
     fn matching<'a>(&'a self, relative: &'a Path) -> impl DoubleEndedIterator<Item = &'a Rule> {
         self.rules
             .iter()
@@ -218,6 +257,7 @@ impl Rule {
             ignore: None,
             mode: None,
             owner: None,
+            encrypt: None,
         }
     }
 
@@ -238,6 +278,11 @@ impl Rule {
 
     pub fn with_owner(mut self, owner: Option<String>) -> Self {
         self.owner = owner;
+        self
+    }
+
+    pub fn with_encrypt(mut self, encrypt: Option<bool>) -> Self {
+        self.encrypt = encrypt;
         self
     }
 
@@ -267,6 +312,10 @@ impl Rule {
 
     pub fn owner(&self) -> Option<&str> {
         self.owner.as_deref()
+    }
+
+    pub fn encrypt(&self) -> Option<bool> {
+        self.encrypt
     }
 }
 
@@ -330,6 +379,7 @@ mod tests {
         assert!(!config.is_ignored(path));
         assert_eq!(config.mode(path), None);
         assert_eq!(config.owner(path), None);
+        assert!(!config.encrypt(path));
     }
 
     #[test]

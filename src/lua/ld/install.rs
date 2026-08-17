@@ -3,17 +3,18 @@ use mlua::{Lua, Table};
 use super::constants::API;
 use super::path::Paths;
 use super::surface::Surface;
-use super::{alt, argv, class, cmd, git, opt, path, pkg, root, setup, sys};
+use super::{alt, argv, class, cmd, crypt, git, opt, path, pkg, root, setup, sys};
 use crate::lua::Config;
 use crate::state::Classes;
 
 type Namespace = fn(&Lua) -> mlua::Result<Table>;
 
 pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) -> mlua::Result<()> {
-    let namespaces: [(&str, Namespace); 6] = [
+    let namespaces: [(&str, Namespace); 7] = [
         (alt::NAMESPACE, alt::table),
         (argv::NAMESPACE, argv::table),
         (cmd::NAMESPACE, cmd::table),
+        (crypt::NAMESPACE, crypt::table),
         (opt::NAMESPACE, opt::table),
         (pkg::NAMESPACE, pkg::table),
         (sys::NAMESPACE, sys::table),
@@ -55,6 +56,10 @@ mod tests {
           assert(type(ld.opt[name]) == "function", "opt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.opt).__call) == "function", "opt is not callable")
+        for _, name in ipairs({ "backend", "recipients", "identity" }) do
+          assert(type(ld.crypt[name]) == "function", "crypt." .. name .. " is missing")
+        end
+        assert(type(getmetatable(ld.crypt).__call) == "function", "crypt is not callable")
         assert(type(ld.pkg.install) == "function", "pkg.install is missing")
         for _, name in ipairs({ "list", "all" }) do
           assert(type(ld.setup[name]) == "function", "setup." .. name .. " is missing")
@@ -140,6 +145,10 @@ mod tests {
             ld.opt({ link = "symbolic" })
             ld.opt.conflict("skip")
             ld.class({ name = "form-factor" })
+            ld.crypt.backend("gpg")
+            ld.crypt.recipients("age1example")
+            ld.crypt.identity("~/.keys/age.txt")
+            ld.crypt({ backend = "age" })
             "#,
         );
     }
