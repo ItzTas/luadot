@@ -10,7 +10,9 @@ mod template;
 mod walk;
 mod write;
 
-pub use fs::{create_parent, exists, mode_bits, regular_file, remove_existing, write_mode};
+pub use fs::{
+    create_parent, exists, link_target, mode_bits, regular_file, remove_existing, write_mode,
+};
 pub use link::{LinkMode, link};
 pub use mirror::{Mirror, Side};
 pub use predict::predict;

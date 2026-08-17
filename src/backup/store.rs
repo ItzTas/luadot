@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 
 use super::constants::BACKUPS_DIR;
+use crate::files::link_target;
 use crate::utils::{data_dir, expand, home_dir};
 
 pub fn backups_root(configured: Option<&Path>) -> Result<PathBuf> {
@@ -77,12 +78,9 @@ pub(super) fn prune(command: &str, root: &Path, keep: u32) -> Result<u32> {
 }
 
 pub fn copy_entry(command: &str, source: &Path, dest: &Path) -> Result<()> {
-    let meta = std::fs::symlink_metadata(source)
-        .with_context(|| format!("{command}: failed to inspect {}", source.display()))?;
+    let (_, target) = link_target(command, source)?;
 
-    if meta.file_type().is_symlink() {
-        let target = std::fs::read_link(source)
-            .with_context(|| format!("{command}: failed to read {}", source.display()))?;
+    if let Some(target) = target {
         return std::os::unix::fs::symlink(&target, dest).with_context(|| {
             format!(
                 "{command}: failed to link {} -> {}",

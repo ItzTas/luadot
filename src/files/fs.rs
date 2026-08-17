@@ -1,7 +1,7 @@
 use std::fs::{Metadata, OpenOptions, Permissions};
 use std::io::Write;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
@@ -36,6 +36,19 @@ pub fn remove_existing(command: &str, path: &Path) -> Result<()> {
     }
     std::fs::remove_file(path)
         .with_context(|| format!("{command}: failed to remove {}", path.display()))
+}
+
+pub fn link_target(command: &str, source: &Path) -> Result<(Metadata, Option<PathBuf>)> {
+    let meta = std::fs::symlink_metadata(source)
+        .with_context(|| format!("{command}: failed to inspect {}", source.display()))?;
+    if !meta.file_type().is_symlink() {
+        return Ok((meta, None));
+    }
+
+    let target = std::fs::read_link(source)
+        .with_context(|| format!("{command}: failed to read {}", source.display()))?;
+
+    Ok((meta, Some(target)))
 }
 
 pub fn regular_file(path: &Path) -> Option<Metadata> {

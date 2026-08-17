@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use tracing::debug;
 
 use super::constants::{COMMAND, MODE_BITS, SUDO};
-use super::fs::{create_parent, exists, mode_bits, regular_file, remove_existing};
+use super::fs::{create_parent, exists, link_target, mode_bits, regular_file, remove_existing};
 use super::link::{LinkMode, link};
 use super::status::FileStatus;
 use super::sync::{ConflictPolicy, SyncOutcome};
@@ -94,12 +94,9 @@ pub fn import_system(source: &Path, dest: &Path) -> Result<()> {
 }
 
 pub fn escalate_entry(command: &str, source: &Path, dest: &Path) -> Result<()> {
-    let meta = std::fs::symlink_metadata(source)
-        .with_context(|| format!("{command}: failed to inspect {}", source.display()))?;
+    let (meta, target) = link_target(command, source)?;
 
-    if meta.file_type().is_symlink() {
-        let target = std::fs::read_link(source)
-            .with_context(|| format!("{command}: failed to read {}", source.display()))?;
+    if let Some(target) = target {
         if let Some(parent) = dest.parent() {
             sudo(command, dest, ["install", "-d", "--"], [parent])?;
         }
@@ -111,7 +108,7 @@ pub fn escalate_entry(command: &str, source: &Path, dest: &Path) -> Result<()> {
         );
     }
 
-    let mode = meta.permissions().mode() & MODE_BITS;
+    let mode = mode_bits(&meta);
     sudo(
         command,
         dest,
