@@ -2,10 +2,27 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-use super::paths::{expand, home_dir, repo_path};
+use super::constants::DEFAULT_REPO_DIR;
+use super::paths::{data_dir, expand, home_dir, repo_path};
 use crate::crypt;
 use crate::files;
 use crate::state;
+
+pub fn destination(
+    command: &str,
+    home: &Path,
+    arg: Option<&str>,
+    configured: Option<&Path>,
+) -> Result<PathBuf> {
+    if let Some(arg) = arg {
+        return std::path::absolute(arg).with_context(|| format!("{command}: invalid path {arg}"));
+    }
+    if let Some(configured) = configured {
+        return Ok(expand(home, configured));
+    }
+
+    Ok(data_dir()?.join(DEFAULT_REPO_DIR))
+}
 
 pub fn require_repo(command: &str, configured: Option<&Path>) -> Result<PathBuf> {
     let configured = match configured {

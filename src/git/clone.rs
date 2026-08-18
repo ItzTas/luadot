@@ -1,13 +1,15 @@
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use gix::progress::Discard;
 use tracing::debug;
 
+use super::empty::require_empty;
+
 pub fn clone(dir: &Path, url: &str) -> Result<()> {
     debug!(url, dir = %dir.display(), "cloning");
-    require_empty(dir)?;
+    require_empty("clone", dir)?;
 
     if let Some(parent) = dir.parent() {
         std::fs::create_dir_all(parent)
@@ -31,20 +33,6 @@ pub fn clone(dir: &Path, url: &str) -> Result<()> {
     Ok(())
 }
 
-fn require_empty(dir: &Path) -> Result<()> {
-    if !dir.exists() {
-        return Ok(());
-    }
-
-    let mut entries = std::fs::read_dir(dir)
-        .with_context(|| format!("clone: failed to read {}", dir.display()))?;
-    if entries.next().is_some() {
-        bail!("clone: destination {} is not empty", dir.display());
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,17 +47,5 @@ mod tests {
 
         assert!(target.join(".git").is_dir());
         assert!(target.join("README").exists());
-    }
-
-    #[test]
-    fn fails_when_destination_is_not_empty() {
-        let dir = tempfile::tempdir().unwrap();
-        let target = dir.path().join("repo");
-        std::fs::create_dir_all(&target).unwrap();
-        std::fs::write(target.join("existing.txt"), "data").unwrap();
-
-        let err = clone(&target, "https://example.com/repo.git").unwrap_err();
-
-        assert!(err.to_string().contains("not empty"));
     }
 }
