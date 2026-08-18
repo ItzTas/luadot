@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use super::paths::{expand, home_dir, repo_path};
 use crate::crypt;
+use crate::files;
 use crate::state;
 
 pub fn require_repo(command: &str, configured: Option<&Path>) -> Result<PathBuf> {
@@ -26,11 +27,18 @@ pub fn managed_path(command: &str, home: &Path, repo: &Path, arg: &str) -> Resul
     if let Some(stored) = crypt::stored_variant(&managed) {
         return Ok(stored);
     }
+    if let Some(template) = template_variant(&managed) {
+        return Ok(template);
+    }
 
     bail!(
         "{command}: {} is not managed by the repository",
         target.display()
     )
+}
+
+fn template_variant(managed: &Path) -> Option<PathBuf> {
+    files::template_dir(managed).filter(|path| std::fs::symlink_metadata(path).is_ok())
 }
 
 fn resolve(
@@ -198,6 +206,48 @@ mod tests {
         std::fs::write(repo.join("home/.netrc.age"), "cipher").unwrap();
 
         let arg = home.join(".netrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), plain);
+    }
+
+    #[test]
+    fn managed_path_finds_the_template_producing_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let template = repo.join("home/.zshrc.luadot");
+        std::fs::create_dir_all(&template).unwrap();
+        std::fs::write(template.join("luadot.lua"), "return \"\"\n").unwrap();
+
+        let arg = home.join(".zshrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), template);
+    }
+
+    #[test]
+    fn managed_path_finds_the_standalone_template_producing_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let template = repo.join("home/.zprofile.luadot");
+        std::fs::write(&template, "export HOST=1\n").unwrap();
+
+        let arg = home.join(".zprofile").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("rm", &home, &repo, &arg).unwrap(), template);
+    }
+
+    #[test]
+    fn managed_path_prefers_the_managed_file_over_the_template() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home/.zshrc.luadot")).unwrap();
+        let plain = repo.join("home/.zshrc");
+        std::fs::write(&plain, "managed").unwrap();
+
+        let arg = home.join(".zshrc").to_string_lossy().into_owned();
 
         assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), plain);
     }
