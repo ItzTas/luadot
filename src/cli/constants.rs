@@ -13,8 +13,6 @@ pub const UNDECLARED: &str = "(not declared)";
 
 pub const DEFAULT_SHELL: &str = "/bin/sh";
 
-pub const DEFAULT_REPO_DIR: &str = "repo";
-
 pub const PREVIEW_LIMIT: usize = 10;
 
 pub const YES_FLAGS: &str = "-y or --yes";

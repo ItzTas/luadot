@@ -6,6 +6,8 @@ pub const ROOT_PREFIX: &str = "root";
 
 pub const DEFAULT_EDITOR: &str = "vi";
 
+pub const DEFAULT_REPO_DIR: &str = "repo";
+
 pub const SYSTEM_TEXT_MODE: u32 = 0o644;
 
 pub const SPAN_UNITS: [(u64, &str); 4] = [
