@@ -67,7 +67,7 @@ fn resolve(
         .clone()
         .or_else(|| remembered.map(Path::to_path_buf))
     else {
-        bail!("{command}: no repository set; run `luadot clone <url>` first");
+        bail!("{command}: no repository set; run `luadot clone <url>` or `luadot init` first");
     };
 
     if repo.is_dir() {
@@ -82,7 +82,7 @@ fn resolve(
     }
 
     bail!(
-        "{command}: repository {} does not exist; run `luadot clone <url>` first",
+        "{command}: repository {} does not exist; run `luadot clone <url>` or `luadot init` first",
         repo.display()
     )
 }
@@ -92,11 +92,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_destination_argument_wins_over_everything_else() {
+        let dir = destination(
+            "clone",
+            Path::new("/home/u"),
+            Some("/data/dotfiles"),
+            Some(Path::new("~/configured")),
+        )
+        .unwrap();
+
+        assert_eq!(dir, PathBuf::from("/data/dotfiles"));
+    }
+
+    #[test]
+    fn the_configured_destination_is_used_when_no_argument_is_given() {
+        let dir = destination(
+            "clone",
+            Path::new("/home/u"),
+            None,
+            Some(Path::new("~/dotfiles")),
+        )
+        .unwrap();
+
+        assert_eq!(dir, PathBuf::from("/home/u/dotfiles"));
+    }
+
+    #[test]
+    fn without_either_the_destination_lands_where_luadot_keeps_its_data() {
+        let dir = destination("init", Path::new("/home/u"), None, None).unwrap();
+
+        assert_eq!(dir, data_dir().unwrap().join(DEFAULT_REPO_DIR));
+    }
+
+    #[test]
     fn errors_when_no_repository_is_set() {
         let err = resolve("add", None, None).unwrap_err().to_string();
         assert_eq!(
             err,
-            "add: no repository set; run `luadot clone <url>` first"
+            "add: no repository set; run `luadot clone <url>` or `luadot init` first"
         );
     }
 
@@ -111,7 +144,7 @@ mod tests {
         assert_eq!(
             err,
             format!(
-                "git: repository {} does not exist; run `luadot clone <url>` first",
+                "git: repository {} does not exist; run `luadot clone <url>` or `luadot init` first",
                 missing.display()
             )
         );

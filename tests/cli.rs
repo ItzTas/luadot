@@ -121,7 +121,7 @@ fn a_command_without_a_repository_says_how_to_get_one() {
         .failure()
         .code(1)
         .stderr(predicate::str::contains(
-            "status: no repository set; run `luadot clone <url>` first",
+            "status: no repository set; run `luadot clone <url>` or `luadot init` first",
         ));
 }
 
@@ -247,6 +247,41 @@ fn the_configuration_points_luadot_at_its_own_repository() {
     luadot(&home).arg("apply").assert().success();
 
     assert_eq!(read(&home.join(".bashrc")), "managed\n");
+}
+
+#[test]
+fn init_creates_a_repository_and_makes_it_the_managed_one() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("dotfiles");
+    write(&home.join(".vimrc"), "set number\n");
+
+    luadot(&home)
+        .args(["init", repo.to_str().unwrap()])
+        .assert()
+        .success();
+    assert!(repo.join(".git").is_dir());
+
+    luadot(&home)
+        .args(["add", home.join(".vimrc").to_str().unwrap()])
+        .assert()
+        .success();
+    assert_eq!(read(&repo.join("home/.vimrc")), "set number\n");
+}
+
+#[test]
+fn init_refuses_a_directory_holding_something() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("dotfiles");
+    write(&repo.join("kept.txt"), "data");
+
+    luadot(&home)
+        .args(["init", repo.to_str().unwrap()])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("init: destination"));
 }
 
 #[test]

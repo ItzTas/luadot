@@ -2,8 +2,8 @@ use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
     AddArgs, AltArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs,
-    EditArgs, ExecArgs, GitArgs, NewArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs, SetupArgs,
-    StatusArgs,
+    EditArgs, ExecArgs, GitArgs, InitArgs, NewArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs,
+    SetupArgs, StatusArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -28,6 +28,8 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Cmd {
+    #[command(about = "Create an empty dotfiles repository and make it the managed one")]
+    Init(InitArgs),
     #[command(about = "Clone a dotfiles repository and make it the managed one")]
     Clone(CloneArgs),
     #[command(about = "Start managing files or directories, linking them into the repository")]
