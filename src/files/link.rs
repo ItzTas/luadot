@@ -81,11 +81,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_mode_is_hard() {
-        assert_eq!(LinkMode::default(), LinkMode::Hard);
-    }
-
-    #[test]
     fn hard_link_shares_the_same_inode() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source.txt");

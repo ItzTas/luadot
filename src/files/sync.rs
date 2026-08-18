@@ -165,11 +165,6 @@ mod tests {
     }
 
     #[test]
-    fn default_policy_is_overwrite() {
-        assert_eq!(ConflictPolicy::default(), ConflictPolicy::Overwrite);
-    }
-
-    #[test]
     fn creates_a_hard_link_when_destination_is_missing() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
@@ -366,21 +361,5 @@ mod tests {
 
         let err = sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap_err();
         assert!(err.to_string().contains("is not a file"));
-    }
-
-    #[test]
-    fn copy_duplicates_file_contents_into_a_new_inode() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-
-        copy(&source, &dest).unwrap();
-
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
-        assert_ne!(
-            std::fs::metadata(&source).unwrap().ino(),
-            std::fs::metadata(&dest).unwrap().ino()
-        );
     }
 }

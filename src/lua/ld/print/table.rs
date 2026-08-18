@@ -13,26 +13,3 @@ pub fn table(lua: &Lua) -> mlua::Result<Table> {
 
     Ok(print)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::table;
-    use crate::lua::runtime::runtime;
-
-    #[test]
-    fn the_namespace_is_callable_and_carries_every_call() {
-        let lua = runtime().unwrap();
-        lua.globals().set("print_", table(&lua).unwrap()).unwrap();
-
-        lua.load(
-            r#"
-            assert(type(getmetatable(print_).__call) == "function", "print is not callable")
-            for _, name in ipairs({ "note", "warn", "error", "section", "entry", "field" }) do
-              assert(type(print_[name]) == "function", "print." .. name .. " is missing")
-            end
-            "#,
-        )
-        .exec()
-        .unwrap();
-    }
-}

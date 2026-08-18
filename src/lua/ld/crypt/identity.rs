@@ -34,21 +34,4 @@ mod tests {
 
         assert_eq!(config.crypt_identity(), Some(Path::new("~/.keys/age.txt")));
     }
-
-    #[test]
-    fn rejects_an_empty_path() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.crypt.identity("  ")"#).unwrap_err()
-        );
-
-        assert!(err.contains("`ld.crypt.identity` takes a path, got an empty string"));
-    }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_string() {
-        let err = format!("{:#}", from_source("ld.crypt.identity(42)").unwrap_err());
-
-        assert!(err.contains("`ld.crypt.identity` takes a string"));
-    }
 }

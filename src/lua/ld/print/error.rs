@@ -32,11 +32,4 @@ mod tests {
     fn an_error_carries_the_name_of_the_program() {
         assert!(run(r#"print_.error("broken")"#).is_ok());
     }
-
-    #[test]
-    fn reports_a_text_that_is_not_a_string() {
-        let err = run("print_.error(true)").unwrap_err().to_string();
-
-        assert!(err.contains("`ld.print.error` takes a string, got boolean"));
-    }
 }

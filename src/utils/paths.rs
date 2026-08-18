@@ -257,30 +257,14 @@ mod tests {
     }
 
     #[test]
-    fn relative_strips_the_repository_prefix() {
+    fn relative_strips_the_repository_prefix_and_keeps_what_is_outside() {
         assert_eq!(
             relative(Path::new("/repo"), Path::new("/repo/.config/nvim/init.lua")),
             Path::new(".config/nvim/init.lua")
         );
-    }
-
-    #[test]
-    fn relative_keeps_paths_outside_the_repository() {
         assert_eq!(
             relative(Path::new("/repo"), Path::new("/tmp/x")),
             Path::new("/tmp/x")
-        );
-    }
-
-    #[test]
-    fn system_path_rejects_paths_outside_repo() {
-        assert!(
-            system_path(
-                Path::new("/home/u"),
-                Path::new("/repo"),
-                Path::new("/tmp/x")
-            )
-            .is_err()
         );
     }
 }

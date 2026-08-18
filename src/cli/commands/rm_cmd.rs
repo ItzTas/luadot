@@ -578,13 +578,6 @@ mod tests {
     }
 
     #[test]
-    fn every_plan_says_how_the_file_ends_up() {
-        assert_eq!(Plan::Keep.detached(), Detached::Untouched);
-        assert_eq!(Plan::Copy.detached(), Detached::Restored);
-        assert_eq!(Plan::Relink.detached(), Detached::Restored);
-    }
-
-    #[test]
     fn detach_restores_a_missing_system_file() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");

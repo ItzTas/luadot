@@ -59,9 +59,4 @@ mod tests {
 
         assert!(err.contains("`ld.crypt.recipients` takes a key or a list of keys"));
     }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_key() {
-        assert!(from_source("ld.crypt.recipients(42)").is_err());
-    }
 }

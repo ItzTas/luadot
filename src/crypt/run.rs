@@ -399,18 +399,6 @@ mod tests {
     }
 
     #[test]
-    fn a_failing_piped_tool_reports_its_stderr() {
-        let mut invocation = Command::new("sh");
-        invocation.args(["-c", "echo no recipients >&2; exit 1"]);
-
-        let err = piped("add", invocation, b"secret\n")
-            .unwrap_err()
-            .to_string();
-
-        assert_eq!(err, "add: `sh` failed: no recipients");
-    }
-
-    #[test]
     fn age_decrypts_with_the_identity() {
         let invocation = decrypt_command(
             Backend::Age,

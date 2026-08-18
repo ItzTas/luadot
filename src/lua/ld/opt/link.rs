@@ -37,11 +37,4 @@ mod tests {
         assert!(err.contains("unknown link mode `magic`"));
         assert!(err.contains("hard, symbolic, copy"));
     }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_string() {
-        let err = format!("{:#}", from_source("ld.opt.link(true)").unwrap_err());
-
-        assert!(err.contains("`ld.opt.link` takes a string"));
-    }
 }

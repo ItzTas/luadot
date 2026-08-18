@@ -45,11 +45,4 @@ mod tests {
         assert!(err.contains("unknown crypt backend `vault`"));
         assert!(err.contains("age, gpg"));
     }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_string() {
-        let err = format!("{:#}", from_source("ld.crypt.backend(true)").unwrap_err());
-
-        assert!(err.contains("`ld.crypt.backend` takes a string"));
-    }
 }

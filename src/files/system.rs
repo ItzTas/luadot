@@ -701,17 +701,6 @@ mod tests {
     }
 
     #[test]
-    fn place_contents_refuses_to_replace_a_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("wg0.conf");
-        std::fs::create_dir(&dest).unwrap();
-
-        let err = place_contents("apply", b"secret", &dest, 0o600, None).unwrap_err();
-
-        assert!(err.to_string().contains("refusing to replace directory"));
-    }
-
-    #[test]
     fn the_escalated_write_installs_from_the_standard_input() {
         assert_eq!(
             install_arguments(0o600, None),

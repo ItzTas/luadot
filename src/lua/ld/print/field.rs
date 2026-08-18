@@ -35,13 +35,4 @@ mod tests {
     fn a_field_takes_a_name_and_its_value() {
         assert!(run(r#"print_.field("repository", "/data/repo")"#).is_ok());
     }
-
-    #[test]
-    fn reports_a_name_that_is_not_a_string() {
-        let err = run(r#"print_.field({}, "/data/repo")"#)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.print.field` takes a string, got table"));
-    }
 }

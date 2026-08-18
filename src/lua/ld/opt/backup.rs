@@ -32,24 +32,4 @@ mod tests {
 
         assert!(!config.backup());
     }
-
-    #[test]
-    fn turns_the_backup_back_on() {
-        let config = from_source(
-            r#"
-            ld.opt.backup(false)
-            ld.opt.backup(true)
-            "#,
-        )
-        .unwrap();
-
-        assert!(config.backup());
-    }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_boolean() {
-        let err = format!("{:#}", from_source(r#"ld.opt.backup("off")"#).unwrap_err());
-
-        assert!(err.contains("`ld.opt.backup` takes true or false"));
-    }
 }

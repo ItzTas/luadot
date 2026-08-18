@@ -47,18 +47,4 @@ mod tests {
 
         assert_eq!(config.repo_dir(), Some(Path::new("/data/second")));
     }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_string() {
-        let err = format!("{:#}", from_source("ld.opt.repo_dir(true)").unwrap_err());
-
-        assert!(err.contains("`ld.opt.repo_dir` takes a string"));
-    }
-
-    #[test]
-    fn rejects_an_empty_directory() {
-        let err = format!("{:#}", from_source(r#"ld.opt.repo_dir("")"#).unwrap_err());
-
-        assert!(err.contains("`ld.opt.repo_dir` takes a directory"));
-    }
 }

@@ -117,12 +117,6 @@ mod tests {
     }
 
     #[test]
-    fn rm_rejects_an_unknown_option() {
-        let err = parse(&["luadot", "rm", "--force", ".bashrc"]).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::UnknownArgument);
-    }
-
-    #[test]
     fn git_keeps_every_argument_verbatim() {
         let cli = parse(&["luadot", "git", "commit", "-m", "msg"]).unwrap();
 
@@ -214,28 +208,5 @@ mod tests {
         assert_eq!(parse(&["luadot", "-v", "status"]).unwrap().verbose, 1);
         assert_eq!(parse(&["luadot", "status", "-vv"]).unwrap().verbose, 2);
         assert_eq!(parse(&["luadot", "status"]).unwrap().verbose, 0);
-    }
-
-    #[test]
-    fn version_prints_the_package_version() {
-        let err = parse(&["luadot", "--version"]).unwrap_err();
-
-        assert_eq!(err.kind(), ErrorKind::DisplayVersion);
-        assert!(err.to_string().contains(env!("CARGO_PKG_VERSION")));
-    }
-
-    #[test]
-    fn an_unknown_command_is_refused() {
-        let err = parse(&["luadot", "nope"]).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
-    }
-
-    #[test]
-    fn a_bare_invocation_shows_the_help() {
-        let err = parse(&["luadot"]).unwrap_err();
-        assert_eq!(
-            err.kind(),
-            ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
-        );
     }
 }

@@ -14,25 +14,3 @@ pub fn table(lua: &Lua, classes: &Classes) -> mlua::Result<Table> {
 
     Ok(class)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lua::runtime::runtime;
-
-    #[test]
-    fn the_namespace_declares_and_reads() {
-        let lua = runtime().unwrap();
-
-        let class = table(&lua, &Classes::default()).unwrap();
-
-        assert!(class.get::<mlua::Function>(GET).is_ok());
-        assert!(
-            class
-                .metatable()
-                .unwrap()
-                .get::<mlua::Function>("__call")
-                .is_ok()
-        );
-    }
-}

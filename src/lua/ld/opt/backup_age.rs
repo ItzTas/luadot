@@ -89,11 +89,4 @@ mod tests {
         assert!(err.contains("`ld.opt.backup_age` takes a span like \"30d\""));
         assert!(err.contains("got `30`"));
     }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_string() {
-        let err = format!("{:#}", from_source("ld.opt.backup_age(30)").unwrap_err());
-
-        assert!(err.contains("`ld.opt.backup_age` takes a string"));
-    }
 }

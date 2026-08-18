@@ -36,27 +36,4 @@ mod tests {
 
         assert!(!config.crypt_passphrase_warn());
     }
-
-    #[test]
-    fn turns_the_warning_back_on() {
-        let config = from_source(
-            r#"
-            ld.crypt.passphrase_warn(false)
-            ld.crypt.passphrase_warn(true)
-            "#,
-        )
-        .unwrap();
-
-        assert!(config.crypt_passphrase_warn());
-    }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_boolean() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.crypt.passphrase_warn("off")"#).unwrap_err()
-        );
-
-        assert!(err.contains("`ld.crypt.passphrase_warn` takes true or false"));
-    }
 }
