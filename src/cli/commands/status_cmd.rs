@@ -77,9 +77,13 @@ fn managed_files(
     repo: &Path,
     files: &[Entry],
 ) -> Result<Vec<StatusFile>> {
-    let identity = config
-        .crypt_identity()
-        .map(|path| utils::expand(home, path));
+    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
+    let mut identity = crypt::Identity::new(
+        config
+            .crypt_identity()
+            .map(|path| utils::expand(home, path)),
+        config.crypt_identity_command().cloned(),
+    );
 
     let mut reported = Vec::new();
     for file in files.iter().map(Entry::path) {
@@ -94,14 +98,20 @@ fn managed_files(
             (Some((stripped, backend)), true) => crypt::system_status(
                 "status",
                 *backend,
-                identity.as_deref(),
+                lock,
+                identity.path("status")?,
                 file,
                 &dest,
                 config.mode(stripped),
             ),
-            (Some((_, backend)), false) => {
-                crypt::status("status", *backend, identity.as_deref(), file, &dest)
-            }
+            (Some((_, backend)), false) => crypt::status(
+                "status",
+                *backend,
+                lock,
+                identity.path("status")?,
+                file,
+                &dest,
+            ),
             (None, true) => files::inspect_system(file, &dest, config.mode(relative)),
             (None, false) => files::file_status(config.link_mode(relative), file, &dest),
         }

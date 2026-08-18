@@ -57,9 +57,13 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         return foresee(&home, &repo, &entries, &classes);
     }
 
-    let identity = config
-        .crypt_identity()
-        .map(|path| utils::expand(&home, path));
+    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
+    let mut identity = crypt::Identity::new(
+        config
+            .crypt_identity()
+            .map(|path| utils::expand(&home, path)),
+        config.crypt_identity_command().cloned(),
+    );
 
     if !args.yes && !confirmed(&repo, &entries)? {
         output::warn("aborted");
@@ -82,10 +86,11 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
             Entry::File(file) => {
                 vec![detach_file(
                     &config,
+                    lock,
+                    &mut identity,
                     &home,
                     &repo,
                     file,
-                    identity.as_deref(),
                     &mut backup,
                 )?]
             }
@@ -198,17 +203,18 @@ fn classes(entries: &[Entry]) -> Result<Classes> {
 
 fn detach_file(
     config: &Config,
+    lock: crypt::Lock,
+    identity: &mut crypt::Identity,
     home: &Path,
     repo: &Path,
     file: &Path,
-    identity: Option<&Path>,
     backup: &mut Option<Backup>,
 ) -> Result<Detached> {
     let split = crypt::split(utils::relative(repo, file));
     let dest = detach_target(home, repo, file, &split)?;
     let detached = match &split {
         Some((stripped, backend)) => {
-            detach_encrypted(config, *backend, identity, stripped, file, &dest)?
+            detach_encrypted(config, *backend, lock, identity, stripped, file, &dest)?
         }
         None => detach(file, &dest, backup)?,
     };
@@ -346,7 +352,8 @@ fn detach_target(
 fn detach_encrypted(
     config: &Config,
     backend: crypt::Backend,
-    identity: Option<&Path>,
+    lock: crypt::Lock,
+    identity: &mut crypt::Identity,
     stripped: &Path,
     source: &Path,
     dest: &Path,
@@ -355,7 +362,7 @@ fn detach_encrypted(
         return Ok(Detached::Untouched);
     }
 
-    let contents = crypt::decrypt("rm", backend, identity, source)
+    let contents = crypt::decrypt("rm", backend, lock, identity.path("rm")?, source)
         .with_context(|| format!("rm: failed to decrypt {}", source.display()))?;
 
     if utils::is_root(stripped) {

@@ -9,7 +9,7 @@ use super::constants::{CLASS_QUESTION, GIT_DIR, MATCH};
 use super::diff::Diff;
 use super::report::Report;
 use crate::backup::Retention;
-use crate::crypt::Backend;
+use crate::crypt::{Backend, Provider};
 use crate::files::{ConflictPolicy, LinkMode};
 
 #[derive(Debug, Clone)]
@@ -27,6 +27,7 @@ pub struct Config {
     crypt_backend: Backend,
     crypt_recipients: Vec<String>,
     crypt_identity: Option<PathBuf>,
+    crypt_identity_command: Option<Provider>,
     crypt_passphrase: bool,
     crypt_passphrase_warn: bool,
     diff: Diff,
@@ -50,6 +51,9 @@ impl Default for Config {
             crypt_backend: Backend::default(),
             crypt_recipients: Vec::new(),
             crypt_identity: None,
+            crypt_identity_command: None,
+            crypt_passphrase: false,
+            crypt_passphrase_warn: true,
             diff: Diff::default(),
             status: Report::default(),
             runtime: None,
@@ -200,6 +204,30 @@ impl Config {
 
     pub fn crypt_identity(&self) -> Option<&Path> {
         self.crypt_identity.as_deref()
+    }
+
+    pub fn set_crypt_identity_command(&mut self, provider: Provider) {
+        self.crypt_identity_command = Some(provider);
+    }
+
+    pub fn crypt_identity_command(&self) -> Option<&Provider> {
+        self.crypt_identity_command.as_ref()
+    }
+
+    pub fn set_crypt_passphrase(&mut self, passphrase: bool) {
+        self.crypt_passphrase = passphrase;
+    }
+
+    pub fn crypt_passphrase(&self) -> bool {
+        self.crypt_passphrase
+    }
+
+    pub fn set_crypt_passphrase_warn(&mut self, warn: bool) {
+        self.crypt_passphrase_warn = warn;
+    }
+
+    pub fn crypt_passphrase_warn(&self) -> bool {
+        self.crypt_passphrase_warn
     }
 
     pub fn link(&self) -> LinkMode {

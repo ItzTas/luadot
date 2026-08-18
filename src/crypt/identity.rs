@@ -136,7 +136,10 @@ mod tests {
     fn without_a_provider_the_identity_is_the_configured_file() {
         let mut identity = Identity::new(Some(PathBuf::from("/home/u/key.txt")), None);
 
-        assert_eq!(identity.path("apply").unwrap(), Some(Path::new("/home/u/key.txt")));
+        assert_eq!(
+            identity.path("apply").unwrap(),
+            Some(Path::new("/home/u/key.txt"))
+        );
     }
 
     #[test]
@@ -148,7 +151,9 @@ mod tests {
     fn the_provider_wins_over_the_file_and_lands_in_a_private_file() {
         let mut identity = Identity::new(
             Some(PathBuf::from("/home/u/key.txt")),
-            Some(Provider::Line("printf 'AGE-SECRET-KEY-1TEST\n'".to_string())),
+            Some(Provider::Line(
+                "printf 'AGE-SECRET-KEY-1TEST\n'".to_string(),
+            )),
         );
 
         let path = identity.path("apply").unwrap().unwrap().to_path_buf();
@@ -187,7 +192,9 @@ mod tests {
         let path = {
             let mut identity = Identity::new(
                 None,
-                Some(Provider::Line("printf 'AGE-SECRET-KEY-1TEST\n'".to_string())),
+                Some(Provider::Line(
+                    "printf 'AGE-SECRET-KEY-1TEST\n'".to_string(),
+                )),
             );
             identity.path("apply").unwrap().unwrap().to_path_buf()
         };

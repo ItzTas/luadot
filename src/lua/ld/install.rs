@@ -58,7 +58,7 @@ mod tests {
           assert(type(ld.opt[name]) == "function", "opt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.opt).__call) == "function", "opt is not callable")
-        for _, name in ipairs({ "backend", "recipients", "identity" }) do
+        for _, name in ipairs({ "backend", "recipients", "identity", "identity_command", "passphrase", "passphrase_warn" }) do
           assert(type(ld.crypt[name]) == "function", "crypt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.crypt).__call) == "function", "crypt is not callable")
@@ -157,6 +157,9 @@ mod tests {
             ld.crypt.backend("gpg")
             ld.crypt.recipients("age1example")
             ld.crypt.identity("~/.keys/age.txt")
+            ld.crypt.identity_command("pass show age/key")
+            ld.crypt.passphrase(false)
+            ld.crypt.passphrase_warn(false)
             ld.crypt({ backend = "age" })
             ld.on.diff({ summary = false })
             ld.on.status({ summary = false })

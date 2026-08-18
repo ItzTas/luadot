@@ -34,6 +34,7 @@ cargo install --git https://github.com/ItzTas/luadot luadot
 | `luadot new [-f] <path>` | Creates an empty template in the repository, for the file that path names. |
 | `luadot restore [-l] [-y] [-n] [backup]` | Puts back the files an earlier `apply` or `alt` replaced. |
 | `luadot edit <path>` | Opens the repository's copy of a file, or the script of the template producing it, in `$VISUAL`/`$EDITOR`. |
+| `luadot rekey [-n] [path]` | Re-encrypts the repository's secrets for the recipients set now. |
 | `luadot exec <source\|file.lua> [args]...` | Runs Lua with `ld` installed, from a string or a `.lua` file. |
 | `luadot config [show\|path\|edit]` | Shows the resolved configuration, prints its path, or opens it. |
 | `luadot class [list\|set\|unset\|get]` | Lists the declared classes and answers them for this machine. |
@@ -255,6 +256,40 @@ and decrypting with age needs the `identity`, the private key file. gpg ignores
 the identity and uses its own keyring for both directions. A failed decryption
 stops `apply` with the tool's own error rather than skipping the file.
 
+`ld.crypt.identity_command` names a command that hands the identity over
+instead, for a key that lives in a password manager rather than on disk. A
+string runs through `sh`, a list runs the program itself, and what it prints is
+the private key. It runs once per command, never per file, and its output is
+written to a `600` file inside the same private temporary directory `edit`
+uses, removed when the command ends — the key never touches your dotfiles.
+
+```lua
+ld.crypt.identity_command("pass show age/key")
+ld.crypt.identity_command({ "op", "read", "op://vault/age/key" })
+```
+
+age plugins work as they do for age itself: point `identity` (or
+`identity_command`) at the plugin identity and use the plugin's recipients.
+luadot only checks that the plugin binary a key names is on your `PATH` —
+`AGE-PLUGIN-YUBIKEY-1…` and `age1yubikey1…` both need `age-plugin-yubikey` —
+and says which one is missing instead of letting age fail obscurely.
+
+`ld.crypt.passphrase(true)` encrypts to a passphrase instead of keys: `age
+--passphrase` or `gpg --symmetric`, with the tool doing the asking, so nothing
+about the passphrase passes through luadot. **It is weaker than keys** — the
+one passphrase opens every secret, everyone sharing the repository shares it,
+and changing it means re-encrypting everything — so every command touching a
+secret says so once. `ld.crypt.passphrase_warn(false)` silences that line and
+nothing else. age asks per file, and only gpg's agent caches the answer, so
+expect one prompt per secret with age.
+
+Changing the recipients does not reach the files already stored: `luadot rekey`
+decrypts each secret and encrypts it again for the recipients set now, in
+place, one staging file at a time so a failure never leaves a half-written
+secret. `-n` reports what it would touch. Switching `ld.crypt.backend` and
+running it moves each secret to the other extension (`home/.netrc.age` becomes
+`home/.netrc.gpg`), and the repository is yours to commit afterwards.
+
 Files under `root/` can be encrypted too, and the plaintext never reaches the
 disk on the way. Reading one to `add` it and writing one back on `apply` are
 tried as you first; when the filesystem answers "permission denied", the
@@ -268,6 +303,9 @@ there is none, and an `owner` rule sets who owns it, as for any system file.
 | `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
 | `ld.crypt.recipients(keys)` | a key or a list of them | Public keys or key ids the files are encrypted to. |
 | `ld.crypt.identity(path)` | a path | Private key used to decrypt with age; gpg uses its keyring. `~` and a relative path resolve against your home directory. |
+| `ld.crypt.identity_command(command)` | a command line, or a list of a program and its arguments | Command printing the identity, run once per command instead of reading a key file. |
+| `ld.crypt.passphrase(enabled)` | `true`, `false` | Whether secrets are locked with a passphrase the backend asks for instead of the recipients. Defaults to `false`. |
+| `ld.crypt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |
 | `ld.crypt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 
 ### Seeing it first
@@ -453,6 +491,9 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
 | `ld.crypt.recipients(keys)` | a key or a list of them | Public keys or key ids encrypted files are encrypted to. |
 | `ld.crypt.identity(path)` | a path | Private key used to decrypt with age. |
+| `ld.crypt.identity_command(command)` | a command line, or a list of a program and its arguments | Command printing the identity, for a key kept in a password manager. |
+| `ld.crypt.passphrase(enabled)` | `true`, `false` | Whether secrets are locked with a passphrase instead of the recipients. Defaults to `false`. |
+| `ld.crypt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |
 | `ld.crypt(options)` | a table of options | Sets several crypt options at once; only the keys it carries. |
 | `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, and marks them as encrypted. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
@@ -490,7 +531,7 @@ instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.backup_age`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.crypt.backend`, `ld.crypt.recipients`, `ld.crypt.identity`, `ld.class`, `ld.on.status`, `ld.on.diff` | `config.lua`, which builds the configuration | does nothing, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.backup_age`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.crypt.backend`, `ld.crypt.recipients`, `ld.crypt.identity`, `ld.crypt.identity_command`, `ld.crypt.passphrase`, `ld.crypt.passphrase_warn`, `ld.class`, `ld.on.status`, `ld.on.diff` | `config.lua`, which builds the configuration | does nothing, warns |
 | `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path`, `ld.print` | everywhere | — |

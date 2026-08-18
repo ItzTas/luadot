@@ -49,6 +49,7 @@ fn dispatch(cli: Cli) -> Result<()> {
         Cmd::Git(args) => commands::git_cmd(args),
         Cmd::New(args) => commands::new_cmd(args),
         Cmd::Push(args) => commands::push_cmd(args),
+        Cmd::Rekey(args) => commands::rekey_cmd(args),
         Cmd::Rm(args) => commands::rm_cmd(args),
         Cmd::Setup(args) => commands::setup_cmd(args),
         Cmd::Status(args) => commands::status_cmd(args),

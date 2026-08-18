@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 use super::backend::Backend;
 use super::constants::{GPG_FLAGS, GPG_PASSPHRASE_FLAGS};
 use super::lock::Lock;
+use super::plugin;
 
 pub fn encrypt(
     command: &str,
@@ -17,6 +18,7 @@ pub fn encrypt(
     dest: &Path,
 ) -> Result<()> {
     require_recipients(command, lock, recipients)?;
+    plugin::for_recipients(command, backend, lock, recipients)?;
     run(
         command,
         encrypt_command(backend, lock, recipients, Some(source), dest),
@@ -33,6 +35,7 @@ pub fn encrypt_contents(
     dest: &Path,
 ) -> Result<()> {
     require_recipients(command, lock, recipients)?;
+    plugin::for_recipients(command, backend, lock, recipients)?;
     piped(
         command,
         encrypt_command(backend, lock, recipients, None, dest),
@@ -48,6 +51,7 @@ pub fn decrypt(
     source: &Path,
 ) -> Result<Vec<u8>> {
     require_identity(command, backend, lock, identity)?;
+    plugin::for_identity(command, backend, lock, identity)?;
     run(
         command,
         decrypt_command(backend, lock, identity, source, None),
@@ -63,6 +67,7 @@ pub fn decrypt_into(
     dest: &Path,
 ) -> Result<()> {
     require_identity(command, backend, lock, identity)?;
+    plugin::for_identity(command, backend, lock, identity)?;
     run(
         command,
         decrypt_command(backend, lock, identity, source, Some(dest)),

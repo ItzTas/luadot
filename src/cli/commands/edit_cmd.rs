@@ -46,14 +46,25 @@ fn edit_encrypted(
     in_repo: &Path,
     stripped: &Path,
 ) -> Result<()> {
-    let identity = config
-        .crypt_identity()
-        .map(|path| utils::expand(home, path));
+    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
+    let mut identity = crypt::Identity::new(
+        config
+            .crypt_identity()
+            .map(|path| utils::expand(home, path)),
+        config.crypt_identity_command().cloned(),
+    );
     let name = stripped.file_name().unwrap_or(OsStr::new("plaintext"));
 
     let workspace = crypt::Workspace::create("edit")?;
     let plain = workspace.file(name);
-    crypt::decrypt_into("edit", backend, identity.as_deref(), in_repo, &plain)?;
+    crypt::decrypt_into(
+        "edit",
+        backend,
+        lock,
+        identity.path("edit")?,
+        in_repo,
+        &plain,
+    )?;
     let before = read(&plain)?;
 
     let status = utils::launch("edit", &plain)?;
@@ -67,19 +78,32 @@ fn edit_encrypted(
         return Ok(());
     }
 
-    reencrypt(config, backend, &plain, in_repo)
+    reencrypt(config, backend, lock, &plain, in_repo)
 }
 
-fn reencrypt(config: &Config, backend: crypt::Backend, plain: &Path, in_repo: &Path) -> Result<()> {
+fn reencrypt(
+    config: &Config,
+    backend: crypt::Backend,
+    lock: crypt::Lock,
+    plain: &Path,
+    in_repo: &Path,
+) -> Result<()> {
     let mut staging = in_repo.as_os_str().to_os_string();
     staging.push(".tmp");
     let staging = Path::new(&staging);
 
-    let placed = crypt::encrypt("edit", backend, config.crypt_recipients(), plain, staging)
-        .and_then(|()| {
-            std::fs::rename(staging, in_repo)
-                .with_context(|| format!("edit: failed to write {}", in_repo.display()))
-        });
+    let placed = crypt::encrypt(
+        "edit",
+        backend,
+        lock,
+        config.crypt_recipients(),
+        plain,
+        staging,
+    )
+    .and_then(|()| {
+        std::fs::rename(staging, in_repo)
+            .with_context(|| format!("edit: failed to write {}", in_repo.display()))
+    });
     if placed.is_err() {
         let _ = std::fs::remove_file(staging);
     }

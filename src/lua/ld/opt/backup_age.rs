@@ -81,7 +81,10 @@ mod tests {
 
     #[test]
     fn rejects_a_span_without_a_unit() {
-        let err = format!("{:#}", from_source(r#"ld.opt.backup_age("30")"#).unwrap_err());
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.opt.backup_age("30")"#).unwrap_err()
+        );
 
         assert!(err.contains("`ld.opt.backup_age` takes a span like \"30d\""));
         assert!(err.contains("got `30`"));

@@ -50,13 +50,38 @@ mod tests {
     }
 
     #[test]
+    fn the_call_form_reaches_the_passphrase_and_the_provider() {
+        let config = from_source(
+            r#"
+            ld.crypt({
+              passphrase = true,
+              passphrase_warn = false,
+              identity_command = "pass show age/key",
+            })
+            "#,
+        )
+        .unwrap();
+
+        assert!(config.crypt_passphrase());
+        assert!(!config.crypt_passphrase_warn());
+        assert_eq!(
+            config.crypt_identity_command(),
+            Some(&crate::crypt::Provider::Line(
+                "pass show age/key".to_string()
+            ))
+        );
+    }
+
+    #[test]
     fn an_unknown_option_is_refused() {
         let err = format!(
             "{:#}",
-            from_source(r#"ld.crypt({ passphrase = "hunter2" })"#).unwrap_err()
+            from_source(r#"ld.crypt({ secret = "hunter2" })"#).unwrap_err()
         );
 
-        assert!(err.contains("unknown crypt option `passphrase`"));
-        assert!(err.contains("backend, identity, recipients"));
+        assert!(err.contains("unknown crypt option `secret`"));
+        assert!(err.contains(
+            "backend, identity, identity_command, passphrase, passphrase_warn, recipients"
+        ));
     }
 }

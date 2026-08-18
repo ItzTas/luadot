@@ -39,19 +39,16 @@ exists and leaves the home copy where it is. What is still missing:
 
 Encrypted files exist: an `encrypt` rule makes `add` store ciphertext under a
 `.age`/`.gpg` extension, `apply`, `status`, `edit` and `rm` decrypt through the
-`age` or `gpg` binary, configured by `ld.crypt.backend`, `ld.crypt.recipients`
-and `ld.crypt.identity`. Files under `root/` are covered too: the plaintext
+`age` or `gpg` binary, configured by `ld.crypt.backend`, `ld.crypt.recipients`,
+`ld.crypt.identity`, `ld.crypt.identity_command` and `ld.crypt.passphrase`, and
+`luadot rekey` re-encrypts everything for the recipients set now. Files under
+`root/` are covered too: the plaintext
 reaches the backend and `sudo install` on their standard input, so escalation
 never puts it on disk. What was left out of that first pass:
 
 - **`diff` over an encrypted file.** It still compares the stored ciphertext;
   comparing the decrypted content means staging it into the same private mirror
   `diff` already builds, so no plaintext outlives the command.
-- **A passphrase-only mode.** Both backends run non-interactively against a
-  key; someone who keeps no key on the machine has no way in.
-- **Re-encrypting after a recipient change.** New recipients only reach a file
-  when its content changes through `edit`; a command re-encrypting everything
-  in place is still missing.
 - **A Rust implementation as a fallback.** Everything shells out to the
   `age`/`gpg` binaries; a machine without them cannot decrypt. Any crate
   considered has to be checked for current maintenance before it is added.

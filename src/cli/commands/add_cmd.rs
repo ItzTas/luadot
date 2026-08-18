@@ -20,8 +20,11 @@ pub struct AddArgs {
 pub fn add_cmd(args: AddArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("add")?;
 
-    for (source, dest) in plan(&home, &repo, &args.paths, &config)? {
-        link_into_repo(&config, &repo, &source, &dest)?;
+    let pairs = plan(&home, &repo, &args.paths, &config)?;
+    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
+
+    for (source, dest) in pairs {
+        link_into_repo(&config, lock, &repo, &source, &dest)?;
     }
     Ok(())
 }
@@ -186,7 +189,13 @@ fn check_conflicts(pairs: &[(PathBuf, PathBuf)]) -> Result<()> {
     Ok(())
 }
 
-fn link_into_repo(config: &Config, repo: &Path, source: &Path, dest: &Path) -> Result<()> {
+fn link_into_repo(
+    config: &Config,
+    lock: crypt::Lock,
+    repo: &Path,
+    source: &Path,
+    dest: &Path,
+) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("add: failed to create {}", parent.display()))?;
@@ -197,7 +206,14 @@ fn link_into_repo(config: &Config, repo: &Path, source: &Path, dest: &Path) -> R
         && config.encrypt(&stripped)
     {
         let contents = files::read_contents("add", source)?;
-        return crypt::encrypt_contents("add", backend, config.crypt_recipients(), &contents, dest);
+        return crypt::encrypt_contents(
+            "add",
+            backend,
+            lock,
+            config.crypt_recipients(),
+            &contents,
+            dest,
+        );
     }
     if utils::is_root(relative) {
         return files::import_system(source, dest);
@@ -536,7 +552,7 @@ mod tests {
         let dest = repo.join("home/dest.txt");
         std::fs::write(&source, "hello").unwrap();
 
-        link_into_repo(&Config::default(), &repo, &source, &dest).unwrap();
+        link_into_repo(&Config::default(), crypt::Lock::Keys, &repo, &source, &dest).unwrap();
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
         assert_eq!(
@@ -555,7 +571,7 @@ mod tests {
         let dest = repo.join("root/etc/pacman.conf");
         std::fs::write(&source, "conf").unwrap();
 
-        link_into_repo(&Config::default(), &repo, &source, &dest).unwrap();
+        link_into_repo(&Config::default(), crypt::Lock::Keys, &repo, &source, &dest).unwrap();
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "conf");
         assert_ne!(
@@ -572,7 +588,7 @@ mod tests {
         let dest = repo.join("home/nested/deep/dest.txt");
         std::fs::write(&source, "hello").unwrap();
 
-        link_into_repo(&Config::default(), &repo, &source, &dest).unwrap();
+        link_into_repo(&Config::default(), crypt::Lock::Keys, &repo, &source, &dest).unwrap();
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
     }

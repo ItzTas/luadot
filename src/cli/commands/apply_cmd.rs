@@ -9,6 +9,12 @@ use crate::lua::Config;
 use crate::output;
 use crate::utils::{self, Run, Workspace};
 
+struct Secrets<'a> {
+    config: &'a Config,
+    lock: crypt::Lock,
+    identity: crypt::Identity,
+}
+
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
     #[arg(value_name = "PATH")]
@@ -35,6 +41,16 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     }
 
     let mut run = Run::open("apply", args.dry_run, &home, &config)?;
+    let mut secrets = Secrets {
+        config: &config,
+        lock: crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn()),
+        identity: crypt::Identity::new(
+            config
+                .crypt_identity()
+                .map(|path| utils::expand(&home, path)),
+            config.crypt_identity_command().cloned(),
+        ),
+    };
 
     let mut created = 0u32;
     let mut replaced = 0u32;
@@ -44,9 +60,15 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         let relative = utils::relative(&repo, file);
 
         let outcome = match crypt::split(relative) {
-            Some((stripped, backend)) => {
-                place_encrypted(&config, backend, &stripped, file, &home, &repo, &mut run)?
-            }
+            Some((stripped, backend)) => place_encrypted(
+                &mut secrets,
+                backend,
+                &stripped,
+                file,
+                &home,
+                &repo,
+                &mut run,
+            )?,
             None => {
                 let dest = utils::system_path(&home, &repo, file)?;
                 match utils::is_root(relative) {
@@ -105,7 +127,7 @@ fn place_home(
 }
 
 fn place_encrypted(
-    config: &Config,
+    secrets: &mut Secrets,
     backend: crypt::Backend,
     stripped: &Path,
     file: &Path,
@@ -113,14 +135,18 @@ fn place_encrypted(
     repo: &Path,
     run: &mut Run,
 ) -> Result<SyncOutcome> {
+    let config = secrets.config;
     let dest = utils::system_path(home, repo, &repo.join(stripped))?;
     let policy = config.conflict_policy(stripped);
-    let identity = config
-        .crypt_identity()
-        .map(|path| utils::expand(home, path));
 
-    let contents = crypt::decrypt("apply", backend, identity.as_deref(), file)
-        .with_context(|| format!("apply: failed to decrypt {}", file.display()))?;
+    let contents = crypt::decrypt(
+        "apply",
+        backend,
+        secrets.lock,
+        secrets.identity.path("apply")?,
+        file,
+    )
+    .with_context(|| format!("apply: failed to decrypt {}", file.display()))?;
 
     if utils::is_root(stripped) {
         return place_root_secret(config, stripped, &contents, &dest, run);
