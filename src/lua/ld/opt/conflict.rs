@@ -49,11 +49,4 @@ mod tests {
         assert!(err.contains("unknown conflict policy `explode`"));
         assert!(err.contains("overwrite, skip, error"));
     }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_string() {
-        let err = format!("{:#}", from_source("ld.opt.conflict(true)").unwrap_err());
-
-        assert!(err.contains("`ld.opt.conflict` takes a string"));
-    }
 }

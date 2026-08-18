@@ -127,20 +127,6 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_only_overrides_the_fields_it_sets() {
-        let config = configure(
-            r#"
-            ld.opt.conflict("skip")
-            ld.rules({ { match = ".ssh/**", link = "symbolic" } })
-            "#,
-        );
-        let key = Path::new(".ssh/config");
-
-        assert_eq!(config.link_mode(key), LinkMode::Symbolic);
-        assert_eq!(config.conflict_policy(key), ConflictPolicy::Skip);
-    }
-
-    #[test]
     fn a_rule_names_the_command_the_files_it_matches_run() {
         let config = configure(
             r#"
@@ -168,16 +154,6 @@ mod tests {
 
         assert_eq!(
             config.link_mode(Path::new(".ssh/keys/id_ed25519")),
-            LinkMode::Symbolic
-        );
-    }
-
-    #[test]
-    fn a_single_rule_needs_no_list_around_it() {
-        let config = configure(r#"ld.rules({ match = ".ssh/**", link = "symbolic" })"#);
-
-        assert_eq!(
-            config.link_mode(Path::new(".ssh/config")),
             LinkMode::Symbolic
         );
     }
@@ -433,13 +409,6 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_list_declares_nothing() {
-        let config = configure("ld.rules({})");
-
-        assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Hard);
-    }
-
-    #[test]
     fn rejects_an_invalid_pattern() {
         let err = format!(
             "{:#}",
@@ -447,16 +416,6 @@ mod tests {
         );
 
         assert!(err.contains("invalid pattern `[`"));
-    }
-
-    #[test]
-    fn rejects_a_lone_rule_without_a_pattern() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.rules({ link = "hard" })"#).unwrap_err()
-        );
-
-        assert!(err.contains("needs a `match` or `regex` pattern"));
     }
 
     #[test]

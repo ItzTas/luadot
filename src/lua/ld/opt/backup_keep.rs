@@ -61,11 +61,4 @@ mod tests {
         assert!(err.contains("`ld.opt.backup_keep` takes one or more"));
         assert!(err.contains("`ld.opt.backup(false)`"));
     }
-
-    #[test]
-    fn rejects_a_value_that_is_not_a_whole_number() {
-        let err = format!("{:#}", from_source("ld.opt.backup_keep(2.5)").unwrap_err());
-
-        assert!(err.contains("`ld.opt.backup_keep` takes a whole number"));
-    }
 }

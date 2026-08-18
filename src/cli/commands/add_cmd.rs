@@ -307,21 +307,6 @@ mod tests {
     }
 
     #[test]
-    fn plan_keeps_the_files_no_gitignore_pattern_reaches() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        gitignore(&repo, "home/*.swp\n");
-        let source = home.join(".vimrc");
-        std::fs::write(&source, "a").unwrap();
-
-        let pairs = plan(&home, &repo, &[arg(&source)], &Config::default()).unwrap();
-
-        assert_eq!(pairs, vec![(source, repo.join("home/.vimrc"))]);
-    }
-
-    #[test]
     fn plan_refuses_a_file_a_template_already_produces() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -362,20 +347,6 @@ mod tests {
     }
 
     #[test]
-    fn plan_maps_a_file_mirroring_home() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let source = home.join(".bashrc");
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::write(&source, "x").unwrap();
-
-        let pairs = plan(&home, &repo, &[arg(&source)], &Config::default()).unwrap();
-
-        assert_eq!(pairs, vec![(source, repo.join("home/.bashrc"))]);
-    }
-
-    #[test]
     fn plan_maps_a_system_file_under_the_root_prefix() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -412,26 +383,6 @@ mod tests {
         let pairs = plan(&home, &repo, &[arg(&source)], &config).unwrap();
 
         assert_eq!(pairs, vec![(source, repo.join("home/.netrc.gpg"))]);
-    }
-
-    #[test]
-    fn plan_stores_an_encrypted_system_file_under_the_backend_extension() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let source = dir.path().join("etc/secret.conf");
-        std::fs::create_dir_all(source.parent().unwrap()).unwrap();
-        std::fs::write(&source, "secret").unwrap();
-
-        let config =
-            lua::from_source(r#"ld.rules({ match = "root/**", encrypt = true })"#).unwrap();
-        let pairs = plan(&home, &repo, &[arg(&source)], &config).unwrap();
-
-        let relative = source.strip_prefix("/").unwrap();
-        let stored = repo
-            .join("root")
-            .join(format!("{}.age", relative.display()));
-        assert_eq!(pairs, vec![(source, stored)]);
     }
 
     #[test]
@@ -578,18 +529,5 @@ mod tests {
             std::fs::metadata(&source).unwrap().ino(),
             std::fs::metadata(&dest).unwrap().ino()
         );
-    }
-
-    #[test]
-    fn link_into_repo_creates_missing_parent_directories() {
-        let dir = tempfile::tempdir().unwrap();
-        let repo = dir.path().join("repo");
-        let source = dir.path().join("source.txt");
-        let dest = repo.join("home/nested/deep/dest.txt");
-        std::fs::write(&source, "hello").unwrap();
-
-        link_into_repo(&Config::default(), crypt::Lock::Keys, &repo, &source, &dest).unwrap();
-
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
     }
 }

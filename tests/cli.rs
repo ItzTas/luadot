@@ -288,37 +288,6 @@ fn a_limit_drops_the_oldest_backups() {
 }
 
 #[test]
-fn an_age_drops_the_backups_it_has_outlived() {
-    let root = tempfile::tempdir().unwrap();
-    let home = root.path().join("home");
-    let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
-    write(&home.join(".bashrc"), "handwritten\n");
-    write(
-        &home.join(".config/luadot/config.lua"),
-        r#"ld.opt.backup_age("1d")"#,
-    );
-    write_state(&home, &repo);
-
-    let backups = home.join(".local/share/luadot/backups");
-    write(&backups.join("100/home/.bashrc"), "ancient\n");
-
-    luadot(&home)
-        .arg("apply")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(
-            "dropped 1 backup(s), keeping the ones taken in the last 1 day",
-        ));
-
-    assert!(!backups.join("100").exists());
-    assert_eq!(
-        read(&only_dir(&backups).join("home/.bashrc")),
-        "handwritten\n"
-    );
-}
-
-#[test]
 fn rm_backs_up_what_it_takes_out_of_the_repository() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

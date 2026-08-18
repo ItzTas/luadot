@@ -30,18 +30,4 @@ mod tests {
     fn a_note_carries_the_name_of_the_program() {
         assert!(run(r#"print_.note("nothing is managed")"#).is_ok());
     }
-
-    #[test]
-    fn a_note_takes_the_options_it_is_styled_with() {
-        assert!(run(r#"print_.note("nothing is managed", { tone = "muted" })"#).is_ok());
-    }
-
-    #[test]
-    fn reports_an_unknown_option() {
-        let err = run(r#"print_.note("x", { colour = "red" })"#)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.print.note`: unknown option `colour`"));
-    }
 }

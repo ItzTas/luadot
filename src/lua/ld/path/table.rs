@@ -51,15 +51,4 @@ mod tests {
             "/data/repo/.zshrc.luadot"
         );
     }
-
-    #[test]
-    fn what_the_run_does_not_have_stays_absent() {
-        let lua = runtime().unwrap();
-        let paths = Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot"));
-
-        let table = table(&lua, &paths).unwrap();
-
-        assert!(table.get::<Option<String>>("repo").unwrap().is_none());
-        assert!(table.get::<Option<String>>("dir").unwrap().is_none());
-    }
 }

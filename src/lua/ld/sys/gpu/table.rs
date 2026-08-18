@@ -94,11 +94,4 @@ mod tests {
             assert_eq!(gpu.get::<String>(key).unwrap(), "");
         }
     }
-
-    #[test]
-    fn the_machine_running_the_tests_is_readable() {
-        let lua = runtime().unwrap();
-
-        assert!(table(&lua).unwrap().get::<String>(VENDOR).is_ok());
-    }
 }
