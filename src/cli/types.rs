@@ -2,7 +2,8 @@ use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
     AddArgs, AltArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs,
-    EditArgs, ExecArgs, GitArgs, NewArgs, PushArgs, RestoreArgs, RmArgs, SetupArgs, StatusArgs,
+    EditArgs, ExecArgs, GitArgs, NewArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs, SetupArgs,
+    StatusArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -47,6 +48,8 @@ pub enum Cmd {
     Restore(RestoreArgs),
     #[command(about = "Open the repository's copy of a file in $VISUAL/$EDITOR")]
     Edit(EditArgs),
+    #[command(about = "Re-encrypt the repository's secrets for the recipients set now")]
+    Rekey(RekeyArgs),
     #[command(about = "Run Lua with `ld` installed, from a string or a .lua file")]
     Exec(ExecArgs),
     #[command(about = "Show the resolved configuration, print its path, or open it")]

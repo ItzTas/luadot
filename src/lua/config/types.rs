@@ -6,7 +6,10 @@ use mlua::{AppDataRefMut, Lua};
 use regex::Regex;
 
 use super::constants::{CLASS_QUESTION, GIT_DIR, MATCH};
-use crate::crypt::Backend;
+use super::diff::Diff;
+use super::report::Report;
+use crate::backup::Retention;
+use crate::crypt::{Backend, Provider};
 use crate::files::{ConflictPolicy, LinkMode};
 
 #[derive(Debug, Clone)]
@@ -19,10 +22,17 @@ pub struct Config {
     backup: bool,
     backup_dir: Option<PathBuf>,
     backup_keep: Option<u32>,
+    backup_age: Option<u64>,
     repo_dir: Option<PathBuf>,
     crypt_backend: Backend,
     crypt_recipients: Vec<String>,
     crypt_identity: Option<PathBuf>,
+    crypt_identity_command: Option<Provider>,
+    crypt_passphrase: bool,
+    crypt_passphrase_warn: bool,
+    diff: Diff,
+    status: Report,
+    runtime: Option<Lua>,
 }
 
 impl Default for Config {
@@ -36,10 +46,17 @@ impl Default for Config {
             backup: true,
             backup_dir: None,
             backup_keep: None,
+            backup_age: None,
             repo_dir: None,
             crypt_backend: Backend::default(),
             crypt_recipients: Vec::new(),
             crypt_identity: None,
+            crypt_identity_command: None,
+            crypt_passphrase: false,
+            crypt_passphrase_warn: true,
+            diff: Diff::default(),
+            status: Report::default(),
+            runtime: None,
         }
     }
 }
@@ -74,6 +91,26 @@ impl Config {
     pub fn building(lua: &Lua) -> mlua::Result<AppDataRefMut<'_, Config>> {
         lua.app_data_mut::<Config>()
             .ok_or_else(|| mlua::Error::external("the configuration is not available"))
+    }
+
+    pub fn keep_runtime(&mut self, runtime: Lua) {
+        self.runtime = Some(runtime);
+    }
+
+    pub fn set_diff(&mut self, diff: Diff) {
+        self.diff.merge(diff);
+    }
+
+    pub fn diff(&self) -> &Diff {
+        &self.diff
+    }
+
+    pub fn set_status(&mut self, status: Report) {
+        self.status.merge(status);
+    }
+
+    pub fn status(&self) -> &Report {
+        &self.status
     }
 
     pub fn set_link(&mut self, link: LinkMode) {
@@ -125,6 +162,18 @@ impl Config {
         self.backup_keep
     }
 
+    pub fn set_backup_age(&mut self, age: u64) {
+        self.backup_age = Some(age);
+    }
+
+    pub fn backup_age(&self) -> Option<u64> {
+        self.backup_age
+    }
+
+    pub fn retention(&self) -> Retention {
+        Retention::new(self.backup_keep, self.backup_age)
+    }
+
     pub fn set_repo_dir(&mut self, dir: PathBuf) {
         self.repo_dir = Some(dir);
     }
@@ -155,6 +204,30 @@ impl Config {
 
     pub fn crypt_identity(&self) -> Option<&Path> {
         self.crypt_identity.as_deref()
+    }
+
+    pub fn set_crypt_identity_command(&mut self, provider: Provider) {
+        self.crypt_identity_command = Some(provider);
+    }
+
+    pub fn crypt_identity_command(&self) -> Option<&Provider> {
+        self.crypt_identity_command.as_ref()
+    }
+
+    pub fn set_crypt_passphrase(&mut self, passphrase: bool) {
+        self.crypt_passphrase = passphrase;
+    }
+
+    pub fn crypt_passphrase(&self) -> bool {
+        self.crypt_passphrase
+    }
+
+    pub fn set_crypt_passphrase_warn(&mut self, warn: bool) {
+        self.crypt_passphrase_warn = warn;
+    }
+
+    pub fn crypt_passphrase_warn(&self) -> bool {
+        self.crypt_passphrase_warn
     }
 
     pub fn link(&self) -> LinkMode {

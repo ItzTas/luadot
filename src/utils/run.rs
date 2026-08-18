@@ -31,7 +31,7 @@ impl Run {
                 command,
                 home,
                 config.backup_dir(),
-                config.backup_keep(),
+                config.retention(),
             )?),
         };
 

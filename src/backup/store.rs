@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 
 use super::constants::BACKUPS_DIR;
+use super::retention::Retention;
 use crate::files::link_target;
 use crate::utils::{data_dir, expand, home_dir};
 
@@ -65,16 +66,24 @@ pub fn taken(command: &str, root: &Path) -> Result<Vec<(u64, PathBuf)>> {
     Ok(taken)
 }
 
-pub(super) fn prune(command: &str, root: &Path, keep: u32) -> Result<u32> {
-    let mut taken = taken(command, root)?;
-    let extra = taken.len().saturating_sub(keep as usize);
+pub(super) fn prune(command: &str, root: &Path, retention: Retention, now: u64) -> Result<u32> {
+    let taken = taken(command, root)?;
+    let extra = retention.extra(taken.len());
+    let cutoff = retention.cutoff(now);
 
-    for (_, dir) in taken.drain(..extra) {
-        std::fs::remove_dir_all(&dir)
+    let mut dropped = 0;
+    for (index, (stamp, dir)) in taken.iter().enumerate() {
+        let expired = cutoff.is_some_and(|cutoff| *stamp < cutoff);
+        if index >= extra && !expired {
+            continue;
+        }
+
+        std::fs::remove_dir_all(dir)
             .with_context(|| format!("{command}: failed to remove {}", dir.display()))?;
+        dropped += 1;
     }
 
-    Ok(extra as u32)
+    Ok(dropped)
 }
 
 pub fn copy_entry(command: &str, source: &Path, dest: &Path) -> Result<()> {
@@ -139,15 +148,22 @@ mod tests {
         );
     }
 
-    #[test]
-    fn pruning_keeps_the_most_recent_backups() {
+    fn filled(names: [&str; 3]) -> tempfile::TempDir {
         let root = tempfile::tempdir().unwrap();
-        for name in ["100", "200", "300"] {
+        for name in names {
             std::fs::create_dir(root.path().join(name)).unwrap();
             std::fs::write(root.path().join(name).join(".zshrc"), name).unwrap();
         }
 
-        assert_eq!(prune("apply", root.path(), 2).unwrap(), 1);
+        root
+    }
+
+    #[test]
+    fn pruning_keeps_the_most_recent_backups() {
+        let root = filled(["100", "200", "300"]);
+        let retention = Retention::new(Some(2), None);
+
+        assert_eq!(prune("apply", root.path(), retention, 300).unwrap(), 1);
 
         assert!(!root.path().join("100").exists());
         assert!(root.path().join("200").is_dir());
@@ -158,10 +174,60 @@ mod tests {
     fn pruning_removes_nothing_while_the_limit_is_not_reached() {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join("100")).unwrap();
+        let retention = Retention::new(Some(2), None);
 
-        assert_eq!(prune("apply", root.path(), 2).unwrap(), 0);
-        assert_eq!(prune("apply", &root.path().join("gone"), 1).unwrap(), 0);
+        assert_eq!(prune("apply", root.path(), retention, 100).unwrap(), 0);
+        assert_eq!(
+            prune("apply", &root.path().join("gone"), retention, 100).unwrap(),
+            0
+        );
         assert!(root.path().join("100").is_dir());
+    }
+
+    #[test]
+    fn pruning_drops_every_backup_older_than_the_age() {
+        let root = filled(["1000", "5000", "9000"]);
+        let retention = Retention::new(None, Some(5));
+
+        assert_eq!(prune("apply", root.path(), retention, 10_000).unwrap(), 1);
+
+        assert!(!root.path().join("1000").exists());
+        assert!(root.path().join("5000").is_dir());
+        assert!(root.path().join("9000").is_dir());
+    }
+
+    #[test]
+    fn an_age_reaching_no_backup_removes_nothing() {
+        let root = filled(["1000", "5000", "9000"]);
+        let retention = Retention::new(None, Some(60));
+
+        assert_eq!(prune("apply", root.path(), retention, 10_000).unwrap(), 0);
+
+        assert!(root.path().join("1000").is_dir());
+    }
+
+    #[test]
+    fn a_count_and_an_age_each_drop_what_they_reach() {
+        let root = filled(["1000", "5000", "9000"]);
+        let retention = Retention::new(Some(2), Some(2));
+
+        assert_eq!(prune("apply", root.path(), retention, 10_000).unwrap(), 2);
+
+        assert!(!root.path().join("1000").exists());
+        assert!(!root.path().join("5000").exists());
+        assert!(root.path().join("9000").is_dir());
+    }
+
+    #[test]
+    fn no_limit_at_all_removes_nothing() {
+        let root = filled(["1000", "5000", "9000"]);
+
+        assert_eq!(
+            prune("apply", root.path(), Retention::default(), 10_000).unwrap(),
+            0
+        );
+
+        assert!(root.path().join("1000").is_dir());
     }
 
     #[test]

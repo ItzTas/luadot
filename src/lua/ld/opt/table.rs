@@ -17,7 +17,7 @@ mod tests {
     #[test]
     fn a_table_call_sets_every_option_it_carries() {
         let config = from_source(
-            r#"ld.opt({ link = "symbolic", pkg_warn = false, backup = false, backup_dir = "~/saved", backup_keep = 3 })"#,
+            r#"ld.opt({ link = "symbolic", pkg_warn = false, backup = false, backup_dir = "~/saved", backup_keep = 3, backup_age = "30d" })"#,
         )
         .unwrap();
 
@@ -26,6 +26,7 @@ mod tests {
         assert!(!config.backup());
         assert_eq!(config.backup_dir(), Some(Path::new("~/saved")));
         assert_eq!(config.backup_keep(), Some(3));
+        assert_eq!(config.backup_age(), Some(2_592_000));
     }
 
     #[test]
@@ -43,6 +44,7 @@ mod tests {
         assert!(config.backup());
         assert_eq!(config.backup_dir(), None);
         assert_eq!(config.backup_keep(), None);
+        assert_eq!(config.backup_age(), None);
     }
 
     #[test]
@@ -54,7 +56,7 @@ mod tests {
 
         assert!(err.contains("unknown option `lnik`"));
         assert!(err.contains(
-            "available: backup, backup_dir, backup_keep, conflict, link, pkg_warn, repo_dir"
+            "available: backup, backup_age, backup_dir, backup_keep, conflict, link, pkg_warn, repo_dir"
         ));
     }
 

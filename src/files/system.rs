@@ -1,14 +1,16 @@
 use std::io::Write;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use anyhow::{Context, Result, bail};
 use tracing::debug;
 
-use super::constants::{COMMAND, MODE_BITS, SUDO};
-use super::fs::{create_parent, exists, link_target, mode_bits, regular_file, remove_existing};
+use super::constants::{COMMAND, MODE_BITS, STDIN_PATH, SUDO};
+use super::fs::{
+    create_parent, exists, link_target, mode_bits, regular_file, remove_existing, write_mode,
+};
 use super::link::{LinkMode, link};
 use super::status::FileStatus;
 use super::sync::{ConflictPolicy, SyncOutcome};
@@ -84,6 +86,26 @@ pub fn sync_system(
     );
 
     Ok(outcome)
+}
+
+pub fn place_contents(
+    command: &str,
+    contents: &[u8],
+    dest: &Path,
+    mode: u32,
+    owner: Option<&str>,
+) -> Result<()> {
+    let parsed = owner.map(Owner::parse);
+    if parsed.as_ref().is_some_and(|owner| owner.ids().is_none()) {
+        return piped_sudo(command, contents, dest, mode, parsed.as_ref());
+    }
+
+    match write_contents(command, contents, dest, mode, parsed.as_ref()) {
+        Err(err) if permission_denied(&err) => {
+            piped_sudo(command, contents, dest, mode, parsed.as_ref())
+        }
+        other => other,
+    }
 }
 
 pub fn import_system(source: &Path, dest: &Path) -> Result<()> {
@@ -303,6 +325,73 @@ fn place_plain(source: &Path, dest: &Path, mode: Option<u32>, owner: Option<&Own
 
 fn place_sudo(source: &Path, dest: &Path, mode: Option<u32>, owner: Option<&Owner>) -> Result<()> {
     let mode = effective_mode(source, mode)?;
+
+    sudo(
+        COMMAND,
+        dest,
+        install_arguments(mode, owner),
+        [source, dest],
+    )
+}
+
+fn write_contents(
+    command: &str,
+    contents: &[u8],
+    dest: &Path,
+    mode: u32,
+    owner: Option<&Owner>,
+) -> Result<()> {
+    create_parent(command, dest)?;
+    if exists(command, dest)? {
+        remove_existing(command, dest)?;
+    }
+    write_mode(command, dest, contents, mode)?;
+
+    let Some((user, group)) = owner.and_then(Owner::ids) else {
+        return Ok(());
+    };
+    std::os::unix::fs::chown(dest, Some(user), group)
+        .with_context(|| format!("{command}: failed to set the owner of {}", dest.display()))
+}
+
+fn piped_sudo(
+    command: &str,
+    contents: &[u8],
+    dest: &Path,
+    mode: u32,
+    owner: Option<&Owner>,
+) -> Result<()> {
+    let mut invocation = Command::new(SUDO);
+    invocation
+        .args(install_arguments(mode, owner))
+        .args([Path::new(STDIN_PATH), dest])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    debug!(?invocation, "escalating a secret");
+
+    let failed = || format!("{command}: failed to run {SUDO} for {}", dest.display());
+    let mut child = invocation.spawn().with_context(failed)?;
+    child
+        .stdin
+        .take()
+        .with_context(failed)?
+        .write_all(contents)
+        .with_context(|| format!("{command}: failed to hand {} to {SUDO}", dest.display()))?;
+
+    let output = child.wait_with_output().with_context(failed)?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    bail!(
+        "{command}: {SUDO} could not place {}: {}",
+        dest.display(),
+        String::from_utf8_lossy(&output.stderr).trim()
+    )
+}
+
+fn install_arguments(mode: u32, owner: Option<&Owner>) -> Vec<String> {
     let mut arguments = vec![
         "install".to_string(),
         "-D".to_string(),
@@ -317,7 +406,7 @@ fn place_sudo(source: &Path, dest: &Path, mode: Option<u32>, owner: Option<&Owne
     }
     arguments.push("--".to_string());
 
-    sudo("files", dest, arguments, [source, dest])
+    arguments
 }
 
 fn sudo<A, P>(command: &str, dest: &Path, arguments: A, paths: P) -> Result<()>
@@ -571,6 +660,69 @@ mod tests {
 
         let err = sync_system(ConflictPolicy::Overwrite, &source, &dest, None, None).unwrap_err();
         assert!(err.to_string().contains("refusing to replace directory"));
+    }
+
+    #[test]
+    fn place_contents_writes_the_bytes_with_the_mode_it_is_given() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("etc/wg0.conf");
+
+        place_contents("apply", b"PrivateKey = secret\n", &dest, 0o600, None).unwrap();
+
+        assert_eq!(std::fs::read(&dest).unwrap(), b"PrivateKey = secret\n");
+        assert_eq!(bits(&dest), 0o600);
+    }
+
+    #[test]
+    fn place_contents_narrows_a_widened_destination_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("wg0.conf");
+        write(&dest, "stale");
+        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        place_contents("apply", b"secret", &dest, 0o600, None).unwrap();
+
+        assert_eq!(std::fs::read(&dest).unwrap(), b"secret");
+        assert_eq!(bits(&dest), 0o600);
+    }
+
+    #[test]
+    fn place_contents_replaces_a_symlink_with_a_file_of_its_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("elsewhere");
+        let dest = dir.path().join("wg0.conf");
+        write(&source, "elsewhere");
+        std::os::unix::fs::symlink(&source, &dest).unwrap();
+
+        place_contents("apply", b"secret", &dest, 0o600, None).unwrap();
+
+        assert!(!std::fs::symlink_metadata(&dest).unwrap().is_symlink());
+        assert_eq!(std::fs::read_to_string(&source).unwrap(), "elsewhere");
+    }
+
+    #[test]
+    fn place_contents_refuses_to_replace_a_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("wg0.conf");
+        std::fs::create_dir(&dest).unwrap();
+
+        let err = place_contents("apply", b"secret", &dest, 0o600, None).unwrap_err();
+
+        assert!(err.to_string().contains("refusing to replace directory"));
+    }
+
+    #[test]
+    fn the_escalated_write_installs_from_the_standard_input() {
+        assert_eq!(
+            install_arguments(0o600, None),
+            ["install", "-D", "-m", "600", "--"]
+        );
+        assert_eq!(
+            install_arguments(0o640, Some(&Owner::parse("root:wheel"))),
+            [
+                "install", "-D", "-m", "640", "-o", "root", "-g", "wheel", "--"
+            ]
+        );
     }
 
     #[test]

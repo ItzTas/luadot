@@ -8,6 +8,7 @@ use crate::crypt;
 use crate::files;
 use crate::git;
 use crate::lua::Config;
+use crate::output;
 use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
@@ -19,8 +20,11 @@ pub struct AddArgs {
 pub fn add_cmd(args: AddArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("add")?;
 
-    for (source, dest) in plan(&home, &repo, &args.paths, &config)? {
-        link_into_repo(&config, &repo, &source, &dest)?;
+    let pairs = plan(&home, &repo, &args.paths, &config)?;
+    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
+
+    for (source, dest) in pairs {
+        link_into_repo(&config, lock, &repo, &source, &dest)?;
     }
     Ok(())
 }
@@ -56,6 +60,7 @@ fn collect(
     }
     if source.is_file() {
         check_gitignore(home, &source, git::Kind::File, excludes)?;
+        check_template(home, repo, &source)?;
         let Some(pair) = pair(home, repo, source, config, excludes)? else {
             return Ok(Vec::new());
         };
@@ -79,11 +84,37 @@ fn collect_dir(
 
     let mut pairs = Vec::new();
     for file in files {
+        if let Some(template) = template_for(home, repo, &file)? {
+            output::warn(format!(
+                "{} is produced by {}, leaving it out",
+                file.display(),
+                template.display()
+            ));
+            continue;
+        }
         if let Some(pair) = pair(home, repo, file, config, excludes)? {
             pairs.push(pair);
         }
     }
     Ok(pairs)
+}
+
+fn check_template(home: &Path, repo: &Path, source: &Path) -> Result<()> {
+    let Some(template) = template_for(home, repo, source)? else {
+        return Ok(());
+    };
+
+    bail!(
+        "add: {} is produced by {}; run `luadot edit` on it instead",
+        source.display(),
+        template.display()
+    )
+}
+
+fn template_for(home: &Path, repo: &Path, source: &Path) -> Result<Option<PathBuf>> {
+    let dest = utils::repo_path(home, repo, source)?;
+
+    Ok(files::template_dir(&dest).filter(|path| std::fs::symlink_metadata(path).is_ok()))
 }
 
 fn check_gitignore(
@@ -119,12 +150,6 @@ fn pair(
     }
     if !config.encrypt(relative) {
         return Ok(Some((source, dest)));
-    }
-    if utils::is_root(relative) {
-        bail!(
-            "add: {} matches an encrypt rule, and encrypted system files are not supported",
-            source.display()
-        );
     }
 
     let stored = crypt::stored(&dest, config.crypt_backend());
@@ -164,7 +189,13 @@ fn check_conflicts(pairs: &[(PathBuf, PathBuf)]) -> Result<()> {
     Ok(())
 }
 
-fn link_into_repo(config: &Config, repo: &Path, source: &Path, dest: &Path) -> Result<()> {
+fn link_into_repo(
+    config: &Config,
+    lock: crypt::Lock,
+    repo: &Path,
+    source: &Path,
+    dest: &Path,
+) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("add: failed to create {}", parent.display()))?;
@@ -174,7 +205,15 @@ fn link_into_repo(config: &Config, repo: &Path, source: &Path, dest: &Path) -> R
     if let Some((stripped, backend)) = crypt::split(relative)
         && config.encrypt(&stripped)
     {
-        return crypt::encrypt("add", backend, config.crypt_recipients(), source, dest);
+        let contents = files::read_contents("add", source)?;
+        return crypt::encrypt_contents(
+            "add",
+            backend,
+            lock,
+            config.crypt_recipients(),
+            &contents,
+            dest,
+        );
     }
     if utils::is_root(relative) {
         return files::import_system(source, dest);
@@ -283,6 +322,46 @@ mod tests {
     }
 
     #[test]
+    fn plan_refuses_a_file_a_template_already_produces() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(repo.join("home/.zshrc.luadot")).unwrap();
+        let source = home.join(".zshrc");
+        std::fs::write(&source, "handwritten\n").unwrap();
+
+        let err = plan(&home, &repo, &[arg(&source)], &Config::default())
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("add: "));
+        assert!(err.contains("is produced by"));
+        assert!(err.contains(".zshrc.luadot"));
+    }
+
+    #[test]
+    fn plan_leaves_out_the_walked_files_a_template_produces() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let nvim = home.join(".config/nvim");
+        std::fs::create_dir_all(&nvim).unwrap();
+        std::fs::create_dir_all(repo.join("home/.config/nvim/init.lua.luadot")).unwrap();
+        let generated = nvim.join("init.lua");
+        let plain = nvim.join("options.lua");
+        std::fs::write(&generated, "generated").unwrap();
+        std::fs::write(&plain, "options").unwrap();
+
+        let pairs = plan(&home, &repo, &[arg(&nvim)], &Config::default()).unwrap();
+
+        assert_eq!(
+            pairs,
+            vec![(plain, repo.join("home/.config/nvim/options.lua"))]
+        );
+    }
+
+    #[test]
     fn plan_maps_a_file_mirroring_home() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -336,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_refuses_an_encrypted_system_file() {
+    fn plan_stores_an_encrypted_system_file_under_the_backend_extension() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -346,11 +425,13 @@ mod tests {
 
         let config =
             lua::from_source(r#"ld.rules({ match = "root/**", encrypt = true })"#).unwrap();
-        let err = plan(&home, &repo, &[arg(&source)], &config)
-            .unwrap_err()
-            .to_string();
+        let pairs = plan(&home, &repo, &[arg(&source)], &config).unwrap();
 
-        assert!(err.contains("encrypted system files are not supported"));
+        let relative = source.strip_prefix("/").unwrap();
+        let stored = repo
+            .join("root")
+            .join(format!("{}.age", relative.display()));
+        assert_eq!(pairs, vec![(source, stored)]);
     }
 
     #[test]
@@ -471,7 +552,7 @@ mod tests {
         let dest = repo.join("home/dest.txt");
         std::fs::write(&source, "hello").unwrap();
 
-        link_into_repo(&Config::default(), &repo, &source, &dest).unwrap();
+        link_into_repo(&Config::default(), crypt::Lock::Keys, &repo, &source, &dest).unwrap();
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
         assert_eq!(
@@ -490,7 +571,7 @@ mod tests {
         let dest = repo.join("root/etc/pacman.conf");
         std::fs::write(&source, "conf").unwrap();
 
-        link_into_repo(&Config::default(), &repo, &source, &dest).unwrap();
+        link_into_repo(&Config::default(), crypt::Lock::Keys, &repo, &source, &dest).unwrap();
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "conf");
         assert_ne!(
@@ -507,7 +588,7 @@ mod tests {
         let dest = repo.join("home/nested/deep/dest.txt");
         std::fs::write(&source, "hello").unwrap();
 
-        link_into_repo(&Config::default(), &repo, &source, &dest).unwrap();
+        link_into_repo(&Config::default(), crypt::Lock::Keys, &repo, &source, &dest).unwrap();
 
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
     }
