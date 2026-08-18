@@ -718,6 +718,50 @@ fn diff_reports_a_system_file_whose_mode_is_all_that_drifted() {
 }
 
 #[test]
+fn rm_takes_a_template_out_and_leaves_the_file_it_produced_working() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join("home/.zshrc.luadot/laptop.zsh"), "laptop\n");
+    write(
+        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        r#"return { content = ld.alt.file("laptop.zsh"), link = "symbolic" }"#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("alt").assert().success();
+    assert_eq!(
+        std::fs::read_link(home.join(".zshrc")).unwrap(),
+        repo.join("home/.zshrc.luadot/laptop.zsh")
+    );
+
+    luadot(&home)
+        .args(["rm", "--dry-run", home.join(".zshrc").to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "would stop managing 1 template(s) (1 restored, 0 left untouched)",
+        ));
+    assert!(repo.join("home/.zshrc.luadot").is_dir());
+
+    luadot(&home)
+        .args(["rm", "--yes", home.join(".zshrc").to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "stopped managing 1 template(s) (1 restored, 0 left untouched)",
+        ));
+
+    assert!(!repo.join("home/.zshrc.luadot").exists());
+    assert!(
+        !std::fs::symlink_metadata(home.join(".zshrc"))
+            .unwrap()
+            .is_symlink()
+    );
+    assert_eq!(read(&home.join(".zshrc")), "laptop\n");
+}
+
+#[test]
 fn diff_shows_what_a_template_would_write_only_when_it_is_asked_to() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

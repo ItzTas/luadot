@@ -6,8 +6,9 @@ use clap::Args;
 
 use crate::backup::Backup;
 use crate::crypt;
-use crate::files;
+use crate::files::{self, Entry};
 use crate::output;
+use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
 
 use super::super::constants::{PREVIEW_LIMIT, YES_FLAGS};
@@ -35,24 +36,31 @@ enum Plan {
     Relink,
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Counts {
+    restored: u32,
+    untouched: u32,
+}
+
 pub fn rm_cmd(args: RmArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("rm")?;
 
-    let files = plan(&home, &repo, &args.paths)?;
-    if files.is_empty() {
+    let entries = plan(&home, &repo, &args.paths)?;
+    if entries.is_empty() {
         output::note("nothing to remove");
         return Ok(());
     }
 
+    let classes = classes(&entries)?;
     if args.dry_run {
-        return foresee(&home, &repo, &files);
+        return foresee(&home, &repo, &entries, &classes);
     }
 
     let identity = config
         .crypt_identity()
         .map(|path| utils::expand(&home, path));
 
-    if !args.yes && !confirmed(&repo, &files)? {
+    if !args.yes && !confirmed(&repo, &entries)? {
         output::warn("aborted");
         return Ok(());
     }
@@ -67,31 +75,24 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         false => None,
     };
 
-    let mut restored = 0u32;
-    let mut untouched = 0u32;
-    for file in &files {
-        let split = crypt::split(utils::relative(&repo, file));
-        let dest = detach_target(&home, &repo, file, &split)?;
-        let detached = match &split {
-            Some((_, backend)) => detach_encrypted(*backend, identity.as_deref(), file, &dest)?,
-            None => detach(file, &dest, &mut backup)?,
+    let mut counts = Counts::default();
+    for entry in &entries {
+        let detached = match entry {
+            Entry::File(file) => {
+                vec![detach_file(
+                    &home,
+                    &repo,
+                    file,
+                    identity.as_deref(),
+                    &mut backup,
+                )?]
+            }
+            template => detach_template(&home, &repo, template, &classes, &mut backup)?,
         };
-        match detached {
-            Detached::Restored => restored += 1,
-            Detached::Untouched => untouched += 1,
-        }
-        if let Some(backup) = backup.as_mut() {
-            backup.save(file)?;
-        }
-        std::fs::remove_file(file)
-            .with_context(|| format!("rm: failed to remove {}", file.display()))?;
-        prune_parents(&repo, file)?;
+        counts.record(&detached);
     }
 
-    output::note(format!(
-        "stopped managing {} file(s) ({restored} restored, {untouched} left untouched)",
-        files.len()
-    ));
+    output::note(summary("stopped managing", &entries, &counts));
     if let Some(backup) = backup.as_ref() {
         backup.finish()?;
     }
@@ -99,71 +100,230 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
     Ok(())
 }
 
-fn foresee(home: &Path, repo: &Path, files: &[PathBuf]) -> Result<()> {
-    output::line(preview(repo, files, files.len()));
+fn foresee(home: &Path, repo: &Path, entries: &[Entry], classes: &Classes) -> Result<()> {
+    output::line(preview(repo, entries, entries.len()));
 
-    let mut restored = 0u32;
-    let mut untouched = 0u32;
-    for file in files {
-        let split = crypt::split(utils::relative(repo, file));
-        let dest = detach_target(home, repo, file, &split)?;
-        let detached = match &split {
-            Some(_) => match metadata(&dest)?.is_some() {
-                true => Detached::Untouched,
-                false => Detached::Restored,
-            },
-            None => decide(file, &dest)?.detached(),
+    let mut counts = Counts::default();
+    for entry in entries {
+        let detached = match entry {
+            Entry::File(file) => vec![foresee_file(home, repo, file)?],
+            template => foresee_template(home, repo, template, classes)?,
         };
-        match detached {
-            Detached::Restored => restored += 1,
-            Detached::Untouched => untouched += 1,
-        }
+        counts.record(&detached);
     }
 
-    output::note(format!(
-        "would stop managing {} file(s) ({restored} restored, {untouched} left untouched)",
-        files.len()
-    ));
+    output::note(summary("would stop managing", entries, &counts));
 
     Ok(())
 }
 
-fn confirmed(repo: &Path, files: &[PathBuf]) -> Result<bool> {
-    if files.len() < 2 {
+fn confirmed(repo: &Path, entries: &[Entry]) -> Result<bool> {
+    if entries.len() < 2 {
         return Ok(true);
     }
 
-    output::line(preview(repo, files, PREVIEW_LIMIT));
+    output::line(preview(repo, entries, PREVIEW_LIMIT));
     output::confirm(
         "rm",
-        &format!("Stop managing {} file(s)?", files.len()),
+        &format!("Stop managing {}?", what(entries)),
         YES_FLAGS,
     )
 }
 
-fn preview(repo: &Path, files: &[PathBuf], limit: usize) -> String {
-    let mut lines: Vec<String> = files
+fn preview(repo: &Path, entries: &[Entry], limit: usize) -> String {
+    let mut lines: Vec<String> = entries
         .iter()
         .take(limit)
-        .map(|file| format!("  {}", utils::relative(repo, file).display()))
+        .map(|entry| format!("  {}", utils::relative(repo, entry.path()).display()))
         .collect();
 
-    if files.len() > limit {
-        lines.push(format!("  ... and {} more", files.len() - limit));
+    if entries.len() > limit {
+        lines.push(format!("  ... and {} more", entries.len() - limit));
     }
 
     lines.join("\n")
 }
 
-fn plan(home: &Path, repo: &Path, args: &[String]) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
+fn summary(verb: &str, entries: &[Entry], counts: &Counts) -> String {
+    format!(
+        "{verb} {} ({} restored, {} left untouched)",
+        what(entries),
+        counts.restored,
+        counts.untouched
+    )
+}
+
+fn what(entries: &[Entry]) -> String {
+    let templates = entries
+        .iter()
+        .filter(|entry| !matches!(entry, Entry::File(_)))
+        .count();
+    let files = entries.len() - templates;
+
+    let mut counted = Vec::new();
+    if files > 0 || templates == 0 {
+        counted.push(format!("{files} file(s)"));
+    }
+    if templates > 0 {
+        counted.push(format!("{templates} template(s)"));
+    }
+
+    counted.join(" and ")
+}
+
+fn plan(home: &Path, repo: &Path, args: &[String]) -> Result<Vec<Entry>> {
+    let mut entries = Vec::new();
     for arg in args {
         let root = utils::managed_path("rm", home, repo, arg)?;
-        files.extend(files::collect_files("rm", &root)?);
+        entries.extend(files::collect_entries("rm", &root)?);
     }
-    files.sort();
-    files.dedup();
-    Ok(files)
+    entries.sort_by(|left, right| left.path().cmp(right.path()));
+    entries.dedup();
+
+    Ok(entries)
+}
+
+fn classes(entries: &[Entry]) -> Result<Classes> {
+    if !entries
+        .iter()
+        .any(|entry| matches!(entry, Entry::Template(_)))
+    {
+        return Ok(Classes::default());
+    }
+
+    Ok(state::load()?.classes().clone())
+}
+
+fn detach_file(
+    home: &Path,
+    repo: &Path,
+    file: &Path,
+    identity: Option<&Path>,
+    backup: &mut Option<Backup>,
+) -> Result<Detached> {
+    let split = crypt::split(utils::relative(repo, file));
+    let dest = detach_target(home, repo, file, &split)?;
+    let detached = match &split {
+        Some((_, backend)) => detach_encrypted(*backend, identity, file, &dest)?,
+        None => detach(file, &dest, backup)?,
+    };
+
+    if let Some(backup) = backup.as_mut() {
+        backup.save(file)?;
+    }
+    std::fs::remove_file(file)
+        .with_context(|| format!("rm: failed to remove {}", file.display()))?;
+    prune_parents(repo, file)?;
+
+    Ok(detached)
+}
+
+fn detach_template(
+    home: &Path,
+    repo: &Path,
+    entry: &Entry,
+    classes: &Classes,
+    backup: &mut Option<Backup>,
+) -> Result<Vec<Detached>> {
+    let template = entry.path();
+
+    let mut detached = Vec::new();
+    for dest in produced(home, repo, entry, classes)? {
+        detached.push(match link_into(template, &dest)? {
+            Some(source) => detach(&source, &dest, backup)?,
+            None => Detached::Untouched,
+        });
+    }
+
+    for file in files::collect_files("rm", template)? {
+        if let Some(backup) = backup.as_mut() {
+            backup.save(&file)?;
+        }
+    }
+    remove_template(template)?;
+    prune_parents(repo, template)?;
+
+    Ok(detached)
+}
+
+fn foresee_file(home: &Path, repo: &Path, file: &Path) -> Result<Detached> {
+    let split = crypt::split(utils::relative(repo, file));
+    let dest = detach_target(home, repo, file, &split)?;
+
+    let Some(_) = &split else {
+        return Ok(decide(file, &dest)?.detached());
+    };
+
+    Ok(match metadata(&dest)?.is_some() {
+        true => Detached::Untouched,
+        false => Detached::Restored,
+    })
+}
+
+fn foresee_template(
+    home: &Path,
+    repo: &Path,
+    entry: &Entry,
+    classes: &Classes,
+) -> Result<Vec<Detached>> {
+    let template = entry.path();
+
+    produced(home, repo, entry, classes)?
+        .iter()
+        .map(|dest| {
+            Ok(match link_into(template, dest)? {
+                Some(_) => Detached::Restored,
+                None => Detached::Untouched,
+            })
+        })
+        .collect()
+}
+
+fn produced(home: &Path, repo: &Path, entry: &Entry, classes: &Classes) -> Result<Vec<PathBuf>> {
+    let mirrored = utils::system_path(home, repo, &entry.target())?;
+
+    let Entry::Template(_) = entry else {
+        return Ok(vec![mirrored]);
+    };
+
+    match utils::outputs("rm", home, repo, entry, classes) {
+        Ok(outputs) => Ok(outputs
+            .iter()
+            .map(|output| output.dest().to_path_buf())
+            .collect()),
+        Err(err) => {
+            output::warn(format!(
+                "{} did not resolve, only {} was inspected: {err:#}",
+                entry.path().display(),
+                mirrored.display()
+            ));
+
+            Ok(vec![mirrored])
+        }
+    }
+}
+
+fn link_into(template: &Path, dest: &Path) -> Result<Option<PathBuf>> {
+    let Some(meta) = metadata(dest)? else {
+        return Ok(None);
+    };
+    if !meta.file_type().is_symlink() {
+        return Ok(None);
+    }
+
+    let target = std::fs::read_link(dest)
+        .with_context(|| format!("rm: failed to read {}", dest.display()))?;
+
+    Ok(target.starts_with(template).then_some(target))
+}
+
+fn remove_template(template: &Path) -> Result<()> {
+    let removed = match template.is_dir() {
+        true => std::fs::remove_dir_all(template),
+        false => std::fs::remove_file(template),
+    };
+
+    removed.with_context(|| format!("rm: failed to remove {}", template.display()))
 }
 
 fn detach_target(
@@ -236,6 +396,17 @@ impl Plan {
     }
 }
 
+impl Counts {
+    fn record(&mut self, detached: &[Detached]) {
+        for one in detached {
+            match one {
+                Detached::Restored => self.restored += 1,
+                Detached::Untouched => self.untouched += 1,
+            }
+        }
+    }
+}
+
 fn restore(source: &Path, dest: &Path) -> Result<()> {
     match restore_plain(source, dest) {
         Err(err) if files::permission_denied(&err) => files::escalate_entry("rm", source, dest),
@@ -299,35 +470,69 @@ mod tests {
         std::fs::write(path, contents).unwrap();
     }
 
-    #[test]
-    fn a_single_file_needs_no_confirmation() {
-        let repo = Path::new("/repo");
-
-        assert!(confirmed(repo, &[repo.join(".bashrc")]).unwrap());
+    fn counts(restored: u32, untouched: u32) -> Counts {
+        Counts {
+            restored,
+            untouched,
+        }
     }
 
     #[test]
-    fn preview_lists_the_files_relative_to_the_repository() {
+    fn a_single_entry_needs_no_confirmation() {
         let repo = Path::new("/repo");
-        let files = vec![repo.join(".bashrc"), repo.join(".config/nvim/init.lua")];
+
+        assert!(confirmed(repo, &[Entry::File(repo.join(".bashrc"))]).unwrap());
+    }
+
+    #[test]
+    fn preview_lists_the_entries_relative_to_the_repository() {
+        let repo = Path::new("/repo");
+        let entries = vec![
+            Entry::File(repo.join(".bashrc")),
+            Entry::Template(repo.join(".zshrc.luadot")),
+        ];
 
         assert_eq!(
-            preview(repo, &files, PREVIEW_LIMIT),
-            "  .bashrc\n  .config/nvim/init.lua"
+            preview(repo, &entries, PREVIEW_LIMIT),
+            "  .bashrc\n  .zshrc.luadot"
         );
     }
 
     #[test]
     fn preview_truncates_a_long_list() {
         let repo = Path::new("/repo");
-        let files: Vec<PathBuf> = (0..PREVIEW_LIMIT + 3)
-            .map(|index| repo.join(format!(".file{index}")))
+        let entries: Vec<Entry> = (0..PREVIEW_LIMIT + 3)
+            .map(|index| Entry::File(repo.join(format!(".file{index}"))))
             .collect();
 
-        let preview = preview(repo, &files, PREVIEW_LIMIT);
+        let preview = preview(repo, &entries, PREVIEW_LIMIT);
 
         assert_eq!(preview.lines().count(), PREVIEW_LIMIT + 1);
         assert!(preview.ends_with("  ... and 3 more"));
+    }
+
+    #[test]
+    fn the_summary_counts_the_files_and_the_templates_apart() {
+        let repo = Path::new("/repo");
+        let files = [Entry::File(repo.join(".bashrc"))];
+        let both = [
+            Entry::File(repo.join(".bashrc")),
+            Entry::Template(repo.join(".zshrc.luadot")),
+        ];
+        let templates = [Entry::Standalone(repo.join(".zprofile.luadot"))];
+
+        assert_eq!(
+            summary("stopped managing", &files, &counts(1, 0)),
+            "stopped managing 1 file(s) (1 restored, 0 left untouched)"
+        );
+        assert_eq!(
+            summary("would stop managing", &both, &counts(1, 1)),
+            "would stop managing 1 file(s) and 1 template(s) (1 restored, 1 left untouched)"
+        );
+        assert_eq!(
+            summary("stopped managing", &templates, &counts(0, 1)),
+            "stopped managing 1 template(s) (0 restored, 1 left untouched)"
+        );
     }
 
     #[test]
@@ -519,12 +724,31 @@ mod tests {
             .join("nvim")
             .to_string_lossy()
             .into_owned();
-        let files = plan(&home, &repo, &[arg]).unwrap();
+        let entries = plan(&home, &repo, &[arg]).unwrap();
 
         assert_eq!(
-            files,
-            vec![nvim.join("init.lua"), nvim.join("lua").join("plugins.lua")]
+            entries,
+            vec![
+                Entry::File(nvim.join("init.lua")),
+                Entry::File(nvim.join("lua").join("plugins.lua")),
+            ]
         );
+    }
+
+    #[test]
+    fn plan_keeps_a_template_whole() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let template = repo.join("home/.zshrc.luadot");
+        std::fs::create_dir_all(&template).unwrap();
+        write(&template.join("luadot.lua"), "return \"\"\n");
+        write(&template.join("laptop.zsh"), "laptop");
+
+        let arg = home.join(".zshrc").to_string_lossy().into_owned();
+        let entries = plan(&home, &repo, &[arg]).unwrap();
+
+        assert_eq!(entries, vec![Entry::Template(template)]);
     }
 
     #[test]
@@ -536,8 +760,150 @@ mod tests {
         write(&repo.join("home/.bashrc"), "data");
 
         let arg = home.join(".bashrc").to_string_lossy().into_owned();
-        let files = plan(&home, &repo, &[arg.clone(), arg]).unwrap();
+        let entries = plan(&home, &repo, &[arg.clone(), arg]).unwrap();
 
-        assert_eq!(files, vec![repo.join("home/.bashrc")]);
+        assert_eq!(entries, vec![Entry::File(repo.join("home/.bashrc"))]);
+    }
+
+    #[test]
+    fn a_template_goes_away_and_leaves_what_it_generated_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let template = repo.join("home/.zshrc.luadot");
+        std::fs::create_dir_all(&template).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+        write(&template.join("luadot.lua"), r#"return "generated\n""#);
+        write(&home.join(".zshrc"), "generated\n");
+
+        let detached = detach_template(
+            &home,
+            &repo,
+            &Entry::Template(template.clone()),
+            &Classes::default(),
+            &mut None,
+        )
+        .unwrap();
+
+        assert_eq!(detached, vec![Detached::Untouched]);
+        assert!(!template.exists());
+        assert_eq!(
+            std::fs::read_to_string(home.join(".zshrc")).unwrap(),
+            "generated\n"
+        );
+    }
+
+    #[test]
+    fn a_link_into_the_template_becomes_a_file_of_its_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let template = repo.join("home/.zshrc.luadot");
+        std::fs::create_dir_all(&template).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+        write(&template.join("laptop.zsh"), "laptop\n");
+        write(
+            &template.join("luadot.lua"),
+            r#"return { content = ld.alt.file("laptop.zsh"), link = "symbolic" }"#,
+        );
+        std::os::unix::fs::symlink(template.join("laptop.zsh"), home.join(".zshrc")).unwrap();
+
+        let detached = detach_template(
+            &home,
+            &repo,
+            &Entry::Template(template.clone()),
+            &Classes::default(),
+            &mut None,
+        )
+        .unwrap();
+
+        assert_eq!(detached, vec![Detached::Restored]);
+        assert!(!template.exists());
+        assert!(
+            !std::fs::symlink_metadata(home.join(".zshrc"))
+                .unwrap()
+                .is_symlink()
+        );
+        assert_eq!(
+            std::fs::read_to_string(home.join(".zshrc")).unwrap(),
+            "laptop\n"
+        );
+    }
+
+    #[test]
+    fn a_standalone_template_goes_away_on_its_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let template = repo.join("home/.zprofile.luadot");
+        std::fs::create_dir_all(template.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+        write(&template, "export HOST=1\n");
+        write(&home.join(".zprofile"), "export HOST=1\n");
+
+        let detached = detach_template(
+            &home,
+            &repo,
+            &Entry::Standalone(template.clone()),
+            &Classes::default(),
+            &mut None,
+        )
+        .unwrap();
+
+        assert_eq!(detached, vec![Detached::Untouched]);
+        assert!(!template.exists());
+        assert_eq!(
+            std::fs::read_to_string(home.join(".zprofile")).unwrap(),
+            "export HOST=1\n"
+        );
+    }
+
+    #[test]
+    fn a_template_that_does_not_resolve_still_goes_away() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let template = repo.join("home/.zshrc.luadot");
+        std::fs::create_dir_all(&template).unwrap();
+        write(&template.join("luadot.lua"), "error(\"broken\")");
+
+        let detached = detach_template(
+            &home,
+            &repo,
+            &Entry::Template(template.clone()),
+            &Classes::default(),
+            &mut None,
+        )
+        .unwrap();
+
+        assert_eq!(detached, vec![Detached::Untouched]);
+        assert!(!template.exists());
+    }
+
+    #[test]
+    fn only_a_link_reaching_inside_the_template_is_followed() {
+        let dir = tempfile::tempdir().unwrap();
+        let template = dir.path().join(".zshrc.luadot");
+        let inside = template.join("laptop.zsh");
+        let outside = dir.path().join("elsewhere.zsh");
+        std::fs::create_dir_all(&template).unwrap();
+        write(&inside, "laptop");
+        write(&outside, "elsewhere");
+
+        let linked = dir.path().join("linked");
+        std::os::unix::fs::symlink(&inside, &linked).unwrap();
+        assert_eq!(link_into(&template, &linked).unwrap(), Some(inside));
+
+        let other = dir.path().join("other");
+        std::os::unix::fs::symlink(&outside, &other).unwrap();
+        assert_eq!(link_into(&template, &other).unwrap(), None);
+
+        let plain = dir.path().join("plain");
+        write(&plain, "plain");
+        assert_eq!(link_into(&template, &plain).unwrap(), None);
+        assert_eq!(
+            link_into(&template, &dir.path().join("gone")).unwrap(),
+            None
+        );
     }
 }
