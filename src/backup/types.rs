@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+use super::retention::Retention;
 use super::store::{backups_root, copy_entry, free, now, prune};
 use crate::output;
 use crate::utils::managed_relative;
@@ -13,7 +14,7 @@ pub struct Backup {
     root: PathBuf,
     dir: PathBuf,
     saved: u32,
-    keep: Option<u32>,
+    retention: Retention,
 }
 
 impl Backup {
@@ -21,15 +22,16 @@ impl Backup {
         command: &str,
         home: &Path,
         configured: Option<&Path>,
-        keep: Option<u32>,
+        retention: Retention,
     ) -> Result<Self> {
         let root = backups_root(configured)?;
         let dir = free(&root, now()?);
 
-        Ok(Self {
-            keep,
-            ..Self::at(command, home, dir)
-        })
+        Ok(Self::at(command, home, dir).keeping(retention))
+    }
+
+    pub fn keeping(self, retention: Retention) -> Self {
+        Self { retention, ..self }
     }
 
     pub fn at(command: &str, home: &Path, dir: PathBuf) -> Self {
@@ -39,7 +41,7 @@ impl Backup {
             root: dir.parent().unwrap_or(&dir).to_path_buf(),
             dir,
             saved: 0,
-            keep: None,
+            retention: Retention::default(),
         }
     }
 
@@ -54,14 +56,15 @@ impl Backup {
     pub fn finish(&self) -> Result<()> {
         self.report();
 
-        let Some(keep) = self.keep else {
+        if self.retention.is_empty() {
             return Ok(());
-        };
+        }
 
-        let dropped = prune(&self.command, &self.root, keep)?;
+        let dropped = prune(&self.command, &self.root, self.retention, now()?)?;
         if dropped > 0 {
             output::note(format!(
-                "dropped {dropped} backup(s), keeping the {keep} most recent"
+                "dropped {dropped} backup(s), {}",
+                self.retention.label()
             ));
         }
 
@@ -186,6 +189,38 @@ mod tests {
 
         assert!(root.path().join("backups/100").is_dir());
         assert!(root.path().join("backups/200").is_dir());
+    }
+
+    #[test]
+    fn an_age_limit_drops_the_backups_it_has_outlived() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let dir = root.path().join("backups/100");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(root.path().join("backups/200")).unwrap();
+
+        Backup::at("apply", &home, dir)
+            .keeping(Retention::new(None, Some(60)))
+            .finish()
+            .unwrap();
+
+        assert!(!root.path().join("backups/100").exists());
+        assert!(!root.path().join("backups/200").exists());
+    }
+
+    #[test]
+    fn an_age_limit_leaves_a_backup_it_has_not_outlived() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let dir = root.path().join("backups").join(now().unwrap().to_string());
+        std::fs::create_dir_all(&dir).unwrap();
+
+        Backup::at("apply", &home, dir.clone())
+            .keeping(Retention::new(None, Some(60)))
+            .finish()
+            .unwrap();
+
+        assert!(dir.is_dir());
     }
 
     #[test]

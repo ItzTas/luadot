@@ -76,8 +76,12 @@ fn run(
         .exec()
         .with_context(|| format!("config: failed to run {name}"))?;
 
-    lua.remove_app_data::<Config>()
-        .context("config: the configuration was lost while running the script")
+    let mut config = lua
+        .remove_app_data::<Config>()
+        .context("config: the configuration was lost while running the script")?;
+    config.keep_runtime(lua);
+
+    Ok(config)
 }
 
 #[cfg(test)]

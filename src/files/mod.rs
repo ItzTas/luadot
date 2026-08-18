@@ -20,7 +20,7 @@ pub use status::{FileStatus, file_status};
 pub use sync::{ConflictPolicy, SyncOutcome, refused, sync_file};
 pub use system::{
     Staged, effective_mode, escalate_entry, escalated_read, escalated_status, import_system,
-    inspect_system, permission_denied, read_contents, stage_text, sync_system,
+    inspect_system, permission_denied, place_contents, read_contents, stage_text, sync_system,
 };
 pub use template::{is_template, template_dir, template_target};
 pub use walk::{Entry, collect_entries, collect_files};

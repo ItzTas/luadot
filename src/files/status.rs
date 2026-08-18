@@ -16,6 +16,18 @@ pub enum FileStatus {
     Unreadable,
 }
 
+impl FileStatus {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Synced => "synced",
+            Self::Missing => "missing",
+            Self::Unlinked => "unlinked",
+            Self::Differs => "differs",
+            Self::Unreadable => "unreadable",
+        }
+    }
+}
+
 pub fn file_status(mode: LinkMode, source: &Path, dest: &Path) -> Result<FileStatus> {
     if !exists(COMMAND, dest)? {
         return Ok(FileStatus::Missing);

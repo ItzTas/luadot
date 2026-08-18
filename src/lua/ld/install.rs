@@ -3,20 +3,22 @@ use mlua::{Lua, Table};
 use super::constants::API;
 use super::path::Paths;
 use super::surface::Surface;
-use super::{alt, argv, class, cmd, crypt, git, opt, path, pkg, root, setup, sys};
+use super::{alt, argv, class, cmd, crypt, git, on, opt, path, pkg, print, root, setup, sys};
 use crate::lua::Config;
 use crate::state::Classes;
 
 type Namespace = fn(&Lua) -> mlua::Result<Table>;
 
 pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) -> mlua::Result<()> {
-    let namespaces: [(&str, Namespace); 7] = [
+    let namespaces: [(&str, Namespace); 9] = [
         (alt::NAMESPACE, alt::table),
         (argv::NAMESPACE, argv::table),
         (cmd::NAMESPACE, cmd::table),
         (crypt::NAMESPACE, crypt::table),
+        (on::NAMESPACE, on::table),
         (opt::NAMESPACE, opt::table),
         (pkg::NAMESPACE, pkg::table),
+        (print::NAMESPACE, print::table),
         (sys::NAMESPACE, sys::table),
     ];
 
@@ -52,7 +54,7 @@ mod tests {
           assert(type(ld.alt[name]) == "function", "alt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.git).__call) == "function", "git is not callable")
-        for _, name in ipairs({ "backup", "backup_dir", "backup_keep", "conflict", "link", "pkg_warn", "repo_dir" }) do
+        for _, name in ipairs({ "backup", "backup_age", "backup_dir", "backup_keep", "conflict", "link", "pkg_warn", "repo_dir" }) do
           assert(type(ld.opt[name]) == "function", "opt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.opt).__call) == "function", "opt is not callable")
@@ -69,6 +71,13 @@ mod tests {
         assert(type(getmetatable(ld.class).__call) == "function", "class is not callable")
         assert(type(getmetatable(ld.cmd).__call) == "function", "cmd is not callable")
         assert(type(ld.cmd.ls) == "function", "cmd is not indexable")
+        assert(type(getmetatable(ld.print).__call) == "function", "print is not callable")
+        for _, name in ipairs({ "note", "warn", "error", "section", "entry", "field" }) do
+          assert(type(ld.print[name]) == "function", "print." .. name .. " is missing")
+        end
+        for _, name in ipairs({ "diff", "status" }) do
+          assert(type(ld.on[name]) == "function", "on." .. name .. " is missing")
+        end
         assert(type(ld.argv.name) == "string", "argv.name is missing")
         assert(type(ld.argv.args) == "table", "argv.args is missing")
         assert(ld.host == nil, "host leaked into the root")
@@ -149,6 +158,8 @@ mod tests {
             ld.crypt.recipients("age1example")
             ld.crypt.identity("~/.keys/age.txt")
             ld.crypt({ backend = "age" })
+            ld.on.diff({ summary = false })
+            ld.on.status({ summary = false })
             "#,
         );
     }

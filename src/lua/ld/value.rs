@@ -44,6 +44,17 @@ pub fn flag(namespace: &str, value: &Value, option: &str) -> mlua::Result<bool> 
     }
 }
 
+pub fn span(namespace: &str, value: &Value, option: &str, kind: &str) -> mlua::Result<u64> {
+    let raw = text(namespace, value, option)?;
+    let Some(seconds) = crate::utils::seconds(&raw) else {
+        return Err(external(format!(
+            "`{API}.{namespace}.{option}` takes {kind}, got `{raw}`"
+        )));
+    };
+
+    Ok(seconds)
+}
+
 pub fn count(namespace: &str, value: &Value, option: &str) -> mlua::Result<u32> {
     let whole = match value {
         Value::Integer(count) => *count,
@@ -116,6 +127,39 @@ mod tests {
             .to_string();
 
         assert!(err.contains("`ld.opt.pkg_warn` takes true or false"));
+    }
+
+    #[test]
+    fn span_reads_a_string_carrying_a_unit() {
+        let lua = runtime().unwrap();
+        let value = Value::String(lua.create_string("30d").unwrap());
+
+        assert_eq!(
+            span("opt", &value, "backup_age", "a span like \"30d\"").unwrap(),
+            2_592_000
+        );
+    }
+
+    #[test]
+    fn span_rejects_a_string_without_a_known_unit() {
+        let lua = runtime().unwrap();
+        let value = Value::String(lua.create_string("30").unwrap());
+
+        let err = span("opt", &value, "backup_age", "a span like \"30d\"")
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("`ld.opt.backup_age` takes a span like \"30d\""));
+        assert!(err.contains("got `30`"));
+    }
+
+    #[test]
+    fn span_rejects_anything_that_is_not_a_string() {
+        let err = span("opt", &Value::Integer(30), "backup_age", "a span")
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("`ld.opt.backup_age` takes a string"));
     }
 
     #[test]

@@ -5,13 +5,15 @@ use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::crypt;
-use crate::files::{self, Entry, FileStatus};
-use crate::lua::Config;
+use crate::files::{self, Entry, FileStatus, Side};
+use crate::lua::{Config, StatusCounts, StatusFile};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
 
-use super::super::constants::STATUS_LABELS;
+use super::super::constants::{
+    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, STATUS_CUSTOM, STATUS_LABELS,
+};
 
 #[derive(Debug, Args)]
 pub struct StatusArgs {
@@ -46,8 +48,9 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
     }
 
     if !files.is_empty() {
-        let counts = report_files(&config, &home, &repo, &files)?;
-        output::note(format!("{} managed file(s) ({counts})", files.len()));
+        let reported = managed_files(&config, &home, &repo, &files)?;
+        show(&config, &reported)?;
+        summary(&config, Side::Repository, &reported, 0)?;
     }
 
     if templates.is_empty() {
@@ -62,21 +65,23 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
     }
 
     let classes = state::load()?.classes().clone();
-    let (produced, counts) = report_templates(&config, &home, &repo, &templates, &classes)?;
-    output::note(format!(
-        "{} template(s) into {produced} file(s) ({counts})",
-        templates.len()
-    ));
+    let reported = generated_files(&config, &home, &repo, &templates, &classes)?;
+    show(&config, &reported)?;
 
-    Ok(())
+    summary(&config, Side::Generated, &reported, templates.len())
 }
 
-fn report_files(config: &Config, home: &Path, repo: &Path, files: &[Entry]) -> Result<Counts> {
+fn managed_files(
+    config: &Config,
+    home: &Path,
+    repo: &Path,
+    files: &[Entry],
+) -> Result<Vec<StatusFile>> {
     let identity = config
         .crypt_identity()
         .map(|path| utils::expand(home, path));
 
-    let mut counts = Counts::default();
+    let mut reported = Vec::new();
     for file in files.iter().map(Entry::path) {
         let relative = utils::relative(repo, file);
         let split = crypt::split(relative);
@@ -85,54 +90,135 @@ fn report_files(config: &Config, home: &Path, repo: &Path, files: &[Entry]) -> R
             .map(|(stripped, _)| stripped.as_path())
             .unwrap_or(relative);
         let dest = utils::system_path(home, repo, &repo.join(logical))?;
-        let status = match split {
-            Some((_, backend)) => {
-                crypt::status("status", backend, identity.as_deref(), file, &dest)
+        let status = match (&split, utils::is_root(relative)) {
+            (Some((stripped, backend)), true) => crypt::system_status(
+                "status",
+                *backend,
+                identity.as_deref(),
+                file,
+                &dest,
+                config.mode(stripped),
+            ),
+            (Some((_, backend)), false) => {
+                crypt::status("status", *backend, identity.as_deref(), file, &dest)
             }
-            None => match utils::is_root(relative) {
-                true => files::inspect_system(file, &dest, config.mode(relative)),
-                false => files::file_status(config.link_mode(relative), file, &dest),
-            },
+            (None, true) => files::inspect_system(file, &dest, config.mode(relative)),
+            (None, false) => files::file_status(config.link_mode(relative), file, &dest),
         }
         .with_context(|| format!("status: failed to inspect {}", dest.display()))?;
 
-        counts.record(status);
-        report(status, relative.display());
+        reported.push(StatusFile::new(
+            relative.to_path_buf(),
+            dest,
+            Side::Repository,
+            status,
+        ));
     }
 
-    Ok(counts)
+    Ok(reported)
 }
 
-fn report_templates(
+fn generated_files(
     config: &Config,
     home: &Path,
     repo: &Path,
     templates: &[Entry],
     classes: &Classes,
-) -> Result<(usize, Counts)> {
-    let mut produced = 0usize;
-    let mut counts = Counts::default();
+) -> Result<Vec<StatusFile>> {
+    let mut reported = Vec::new();
     for entry in templates {
         for output in utils::outputs("status", home, repo, entry, classes)? {
             let status = utils::output_status("status", config, home, &output)?;
             let relative = utils::output_relative("status", home, &output)?;
 
-            produced += 1;
-            counts.record(status);
-            report(status, relative.display());
+            reported.push(StatusFile::new(
+                relative,
+                output.dest().to_path_buf(),
+                Side::Generated,
+                status,
+            ));
         }
     }
 
-    Ok((produced, counts))
+    Ok(reported)
 }
 
-fn report(status: FileStatus, path: impl Display) {
-    if status == FileStatus::Synced {
+fn show(config: &Config, reported: &[StatusFile]) -> Result<()> {
+    if reported.is_empty() {
+        return Ok(());
+    }
+
+    if let Some(custom) = config.status().render() {
+        utils::said(custom.shown(
+            &what(CUSTOM_RENDER),
+            reported.iter().collect::<Vec<&StatusFile>>(),
+        )?);
+        return Ok(());
+    }
+
+    for file in reported {
+        announced(config, file)?;
+    }
+
+    Ok(())
+}
+
+fn announced(config: &Config, file: &StatusFile) -> Result<()> {
+    let Some(custom) = config.status().entry() else {
+        reported(file);
+        return Ok(());
+    };
+
+    utils::said(custom.shown(&what(CUSTOM_ENTRY), file)?);
+
+    Ok(())
+}
+
+fn reported(file: &StatusFile) {
+    if file.state() == FileStatus::Synced {
         return;
     }
 
-    let (tone, label) = display(status);
-    output::entry(tone, label, path);
+    let (tone, label) = display(file.state());
+    output::entry(tone, label, file.path().display());
+}
+
+fn summary(config: &Config, side: Side, reported: &[StatusFile], templates: usize) -> Result<()> {
+    let counted = counted(reported);
+    let default = line(side, reported.len(), templates, &counted);
+
+    let Some(custom) = config.status().summary() else {
+        output::note(default);
+        return Ok(());
+    };
+
+    let counts = StatusCounts::new(side, reported.len(), default)
+        .with_templates(templates)
+        .with_states(counted.states());
+
+    utils::said(custom.shown(&what(CUSTOM_SUMMARY), &counts)?);
+
+    Ok(())
+}
+
+fn line(side: Side, total: usize, templates: usize, counts: &Counts) -> String {
+    match side {
+        Side::Generated => format!("{templates} template(s) into {total} file(s) ({counts})"),
+        Side::Repository | Side::System => format!("{total} managed file(s) ({counts})"),
+    }
+}
+
+fn counted(reported: &[StatusFile]) -> Counts {
+    let mut counts = Counts::default();
+    for file in reported {
+        counts.record(file.state());
+    }
+
+    counts
+}
+
+fn what(key: &str) -> String {
+    utils::customized("status", STATUS_CUSTOM, key)
 }
 
 fn display(status: FileStatus) -> (Tone, &'static str) {
@@ -154,6 +240,14 @@ impl Counts {
 
         self.0[index] += 1;
     }
+
+    fn states(&self) -> Vec<(FileStatus, u32)> {
+        STATUS_LABELS
+            .iter()
+            .zip(self.0)
+            .map(|((kind, _, _), count)| (*kind, count))
+            .collect()
+    }
 }
 
 impl Display for Counts {
@@ -171,7 +265,20 @@ impl Display for Counts {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
+    use crate::lua::from_source;
+
     use super::*;
+
+    fn counts(states: &[FileStatus]) -> Counts {
+        let mut counts = Counts::default();
+        for status in states {
+            counts.record(*status);
+        }
+
+        counts
+    }
 
     #[test]
     fn every_status_has_a_label() {
@@ -188,6 +295,13 @@ mod tests {
     }
 
     #[test]
+    fn the_label_of_a_state_is_the_name_the_configuration_reads() {
+        for (status, label, _) in STATUS_LABELS {
+            assert_eq!(label, status.name());
+        }
+    }
+
+    #[test]
     fn labels_fit_the_printed_column() {
         for (_, text, _) in STATUS_LABELS {
             assert!(text.len() < 11);
@@ -196,10 +310,7 @@ mod tests {
 
     #[test]
     fn the_counts_name_every_state_a_file_can_be_in() {
-        let mut counts = Counts::default();
-        counts.record(FileStatus::Synced);
-        counts.record(FileStatus::Synced);
-        counts.record(FileStatus::Differs);
+        let counts = counts(&[FileStatus::Synced, FileStatus::Synced, FileStatus::Differs]);
 
         assert_eq!(
             counts.to_string(),
@@ -209,13 +320,85 @@ mod tests {
 
     #[test]
     fn an_unreadable_file_is_counted_only_when_there_is_one() {
-        let mut counts = Counts::default();
-        counts.record(FileStatus::Unreadable);
+        let counts = counts(&[FileStatus::Unreadable]);
 
         assert_eq!(
             counts.to_string(),
             "0 synced, 0 missing, 0 unlinked, 0 differs, 1 unreadable"
         );
+    }
+
+    #[test]
+    fn the_states_are_counted_one_by_one_for_the_configuration() {
+        let states = counts(&[FileStatus::Synced, FileStatus::Differs]).states();
+
+        assert_eq!(states.len(), STATUS_LABELS.len());
+        assert!(states.contains(&(FileStatus::Synced, 1)));
+        assert!(states.contains(&(FileStatus::Differs, 1)));
+        assert!(states.contains(&(FileStatus::Missing, 0)));
+    }
+
+    #[test]
+    fn each_side_counts_what_it_reports() {
+        let counts = counts(&[FileStatus::Synced, FileStatus::Missing]);
+
+        assert_eq!(
+            line(Side::Repository, 2, 0, &counts),
+            "2 managed file(s) (1 synced, 1 missing, 0 unlinked, 0 differs)"
+        );
+        assert_eq!(
+            line(Side::Generated, 2, 1, &counts),
+            "1 template(s) into 2 file(s) (1 synced, 1 missing, 0 unlinked, 0 differs)"
+        );
+    }
+
+    #[test]
+    fn a_customized_entry_reads_the_state_of_the_file() {
+        let config = from_source(
+            r#"ld.on.status({ entry = function(file)
+                 return file.side .. " " .. file.state .. " " .. file.path
+               end })"#,
+        )
+        .unwrap();
+
+        let file = StatusFile::new(
+            PathBuf::from("home/.bashrc"),
+            PathBuf::from("/home/u/.bashrc"),
+            Side::Repository,
+            FileStatus::Unlinked,
+        );
+
+        let shown = config
+            .status()
+            .entry()
+            .unwrap()
+            .shown(&what(CUSTOM_ENTRY), &file)
+            .unwrap();
+
+        assert_eq!(shown, Some("repository unlinked home/.bashrc".to_string()));
+    }
+
+    #[test]
+    fn a_customized_summary_reads_the_counts_of_the_side() {
+        let config = from_source(
+            r#"ld.on.status({ summary = function(counts)
+                 return counts.templates .. " into " .. counts.total .. ", " .. counts.synced
+               end })"#,
+        )
+        .unwrap();
+
+        let counts = StatusCounts::new(Side::Generated, 3, "unused".to_string())
+            .with_templates(2)
+            .with_states(counts(&[FileStatus::Synced, FileStatus::Synced]).states());
+
+        let shown = config
+            .status()
+            .summary()
+            .unwrap()
+            .shown(&what(CUSTOM_SUMMARY), &counts)
+            .unwrap();
+
+        assert_eq!(shown, Some("2 into 3, 2".to_string()));
     }
 
     #[test]
@@ -227,7 +410,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
 
-        let (produced, counts) = report_templates(
+        let reported = generated_files(
             &Config::default(),
             &home,
             &repo,
@@ -236,11 +419,9 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(produced, 1);
-        assert_eq!(
-            counts.to_string(),
-            "0 synced, 1 missing, 0 unlinked, 0 differs"
-        );
+        assert_eq!(reported.len(), 1);
+        assert_eq!(reported[0].state(), FileStatus::Missing);
+        assert_eq!(reported[0].path(), Path::new("home/.zshrc"));
     }
 
     #[test]
@@ -254,7 +435,7 @@ mod tests {
         std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
         std::fs::write(home.join(".zshrc"), "generated\n").unwrap();
 
-        let (produced, counts) = report_templates(
+        let reported = generated_files(
             &Config::default(),
             &home,
             &repo,
@@ -263,10 +444,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(produced, 1);
-        assert_eq!(
-            counts.to_string(),
-            "1 synced, 0 missing, 0 unlinked, 0 differs"
-        );
+        assert_eq!(reported.len(), 1);
+        assert_eq!(reported[0].state(), FileStatus::Synced);
     }
 }

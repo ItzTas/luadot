@@ -15,13 +15,6 @@ const YES_FLAGS: &str = "-y or --yes";
 
 const MILLIS: u64 = 1_000;
 
-const UNITS: [(u64, &str); 4] = [
-    (86_400, "day"),
-    (3_600, "hour"),
-    (60, "minute"),
-    (1, "second"),
-];
-
 #[derive(Debug, Args)]
 pub struct RestoreArgs {
     #[arg(value_name = "BACKUP")]
@@ -213,19 +206,10 @@ fn clear(command: &str, dest: &Path) -> Result<()> {
 }
 
 fn ago(seconds: u64) -> String {
-    for (size, name) in UNITS {
-        if seconds < size {
-            continue;
-        }
-        let count = seconds / size;
-        let plural = match count {
-            1 => "",
-            _ => "s",
-        };
-        return format!("{count} {name}{plural} ago");
+    match seconds {
+        0 => "just now".to_string(),
+        seconds => format!("{} ago", utils::span(seconds)),
     }
-
-    "just now".to_string()
 }
 
 #[cfg(test)]

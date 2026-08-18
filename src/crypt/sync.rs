@@ -4,15 +4,17 @@ use anyhow::Result;
 
 use super::backend::Backend;
 use super::constants::SECRET_MODE;
+use super::lock::Lock;
 use super::run;
 use crate::files::{
-    ConflictPolicy, FileStatus, SyncOutcome, create_parent, exists, mode_bits, refused,
-    regular_file, remove_existing, write_mode,
+    ConflictPolicy, FileStatus, SyncOutcome, create_parent, exists, mode_bits, place_contents,
+    read_contents, refused, regular_file, remove_existing, write_mode,
 };
 
 pub fn status(
     command: &str,
     backend: Backend,
+    lock: Lock,
     identity: Option<&Path>,
     source: &Path,
     dest: &Path,
@@ -21,11 +23,54 @@ pub fn status(
         return Ok(FileStatus::Missing);
     }
 
-    let Ok(expected) = run::decrypt(command, backend, identity, source) else {
+    let Ok(expected) = run::decrypt(command, backend, lock, identity, source) else {
         return Ok(FileStatus::Unreadable);
     };
 
     plain_status(command, &expected, dest)
+}
+
+pub fn system_status(
+    command: &str,
+    backend: Backend,
+    lock: Lock,
+    identity: Option<&Path>,
+    source: &Path,
+    dest: &Path,
+    mode: Option<u32>,
+) -> Result<FileStatus> {
+    if !exists(command, dest)? {
+        return Ok(FileStatus::Missing);
+    }
+
+    let Ok(expected) = run::decrypt(command, backend, lock, identity, source) else {
+        return Ok(FileStatus::Unreadable);
+    };
+    if !carries(dest, secret_mode(mode)) {
+        return Ok(FileStatus::Differs);
+    }
+
+    let Ok(found) = std::fs::read(dest) else {
+        return Ok(FileStatus::Unreadable);
+    };
+
+    Ok(compared(&found, &expected))
+}
+
+pub fn escalated_status(
+    command: &str,
+    expected: &[u8],
+    dest: &Path,
+    mode: Option<u32>,
+) -> Result<FileStatus> {
+    if !exists(command, dest)? {
+        return Ok(FileStatus::Missing);
+    }
+    if !carries(dest, secret_mode(mode)) {
+        return Ok(FileStatus::Differs);
+    }
+
+    Ok(compared(&read_contents(command, dest)?, expected))
 }
 
 pub fn plain_status(command: &str, expected: &[u8], dest: &Path) -> Result<FileStatus> {
@@ -64,6 +109,43 @@ pub fn place(
     write(command, dest, contents)?;
 
     Ok(SyncOutcome::Replaced)
+}
+
+pub fn place_system(
+    command: &str,
+    policy: ConflictPolicy,
+    contents: &[u8],
+    dest: &Path,
+    mode: Option<u32>,
+    owner: Option<&str>,
+) -> Result<SyncOutcome> {
+    let outcome = match escalated_status(command, contents, dest, mode)? {
+        FileStatus::Missing => SyncOutcome::Created,
+        FileStatus::Synced => return Ok(SyncOutcome::AlreadySynced),
+        _ => match refused(command, policy, dest)? {
+            Some(outcome) => return Ok(outcome),
+            None => SyncOutcome::Replaced,
+        },
+    };
+
+    place_contents(command, contents, dest, secret_mode(mode), owner)?;
+
+    Ok(outcome)
+}
+
+fn secret_mode(mode: Option<u32>) -> u32 {
+    mode.unwrap_or(SECRET_MODE)
+}
+
+fn carries(dest: &Path, mode: u32) -> bool {
+    matches!(regular_file(dest), Some(meta) if mode_bits(&meta) == mode)
+}
+
+fn compared(found: &[u8], expected: &[u8]) -> FileStatus {
+    match found == expected {
+        true => FileStatus::Synced,
+        false => FileStatus::Differs,
+    }
 }
 
 fn holds(dest: &Path, expected: &[u8]) -> bool {
@@ -201,6 +283,133 @@ mod tests {
         assert_eq!(
             plain_status("status", b"secret", &dest).unwrap(),
             FileStatus::Differs
+        );
+    }
+
+    #[test]
+    fn place_system_writes_the_secret_with_the_mode_the_rules_ask_for() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("etc/wireguard/wg0.conf");
+
+        let outcome = place_system(
+            "apply",
+            ConflictPolicy::Error,
+            b"PrivateKey = secret\n",
+            &dest,
+            Some(0o640),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(outcome, SyncOutcome::Created);
+        assert_eq!(std::fs::read(&dest).unwrap(), b"PrivateKey = secret\n");
+        assert_eq!(mode_of(&dest), 0o640);
+    }
+
+    #[test]
+    fn place_system_without_a_mode_keeps_the_secret_private() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("wg0.conf");
+
+        place_system("apply", ConflictPolicy::Error, b"secret", &dest, None, None).unwrap();
+
+        assert_eq!(mode_of(&dest), SECRET_MODE);
+    }
+
+    #[test]
+    fn place_system_leaves_a_matching_destination_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("wg0.conf");
+        place_system("apply", ConflictPolicy::Error, b"secret", &dest, None, None).unwrap();
+
+        let outcome =
+            place_system("apply", ConflictPolicy::Error, b"secret", &dest, None, None).unwrap();
+
+        assert_eq!(outcome, SyncOutcome::AlreadySynced);
+    }
+
+    #[test]
+    fn place_system_follows_the_conflict_policy() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("wg0.conf");
+        std::fs::write(&dest, "handwritten").unwrap();
+
+        assert_eq!(
+            place_system("apply", ConflictPolicy::Skip, b"secret", &dest, None, None).unwrap(),
+            SyncOutcome::Skipped
+        );
+        assert_eq!(std::fs::read(&dest).unwrap(), b"handwritten");
+
+        assert!(
+            place_system("apply", ConflictPolicy::Error, b"secret", &dest, None, None).is_err()
+        );
+
+        assert_eq!(
+            place_system(
+                "apply",
+                ConflictPolicy::Overwrite,
+                b"secret",
+                &dest,
+                None,
+                None
+            )
+            .unwrap(),
+            SyncOutcome::Replaced
+        );
+        assert_eq!(std::fs::read(&dest).unwrap(), b"secret");
+    }
+
+    #[test]
+    fn escalated_status_weighs_the_contents_and_the_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("wg0.conf");
+
+        assert_eq!(
+            escalated_status("apply", b"secret", &dest, Some(0o640)).unwrap(),
+            FileStatus::Missing
+        );
+
+        place_system(
+            "apply",
+            ConflictPolicy::Error,
+            b"secret",
+            &dest,
+            Some(0o640),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            escalated_status("apply", b"secret", &dest, Some(0o640)).unwrap(),
+            FileStatus::Synced
+        );
+        assert_eq!(
+            escalated_status("apply", b"secret", &dest, None).unwrap(),
+            FileStatus::Differs
+        );
+
+        std::fs::set_permissions(&dest, Permissions::from_mode(SECRET_MODE)).unwrap();
+        assert_eq!(
+            escalated_status("apply", b"handwritten", &dest, None).unwrap(),
+            FileStatus::Differs
+        );
+    }
+
+    #[test]
+    fn a_system_secret_the_system_never_got_reads_as_missing() {
+        let dir = tempfile::tempdir().unwrap();
+
+        assert_eq!(
+            system_status(
+                "status",
+                Backend::Age,
+                Lock::Keys,
+                None,
+                &dir.path().join("wg0.conf.age"),
+                &dir.path().join("wg0.conf"),
+                None,
+            )
+            .unwrap(),
+            FileStatus::Missing
         );
     }
 

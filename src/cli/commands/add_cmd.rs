@@ -148,12 +148,6 @@ fn pair(
     if !config.encrypt(relative) {
         return Ok(Some((source, dest)));
     }
-    if utils::is_root(relative) {
-        bail!(
-            "add: {} matches an encrypt rule, and encrypted system files are not supported",
-            source.display()
-        );
-    }
 
     let stored = crypt::stored(&dest, config.crypt_backend());
     Ok(Some((source, stored)))
@@ -202,7 +196,8 @@ fn link_into_repo(config: &Config, repo: &Path, source: &Path, dest: &Path) -> R
     if let Some((stripped, backend)) = crypt::split(relative)
         && config.encrypt(&stripped)
     {
-        return crypt::encrypt("add", backend, config.crypt_recipients(), source, dest);
+        let contents = files::read_contents("add", source)?;
+        return crypt::encrypt_contents("add", backend, config.crypt_recipients(), &contents, dest);
     }
     if utils::is_root(relative) {
         return files::import_system(source, dest);
@@ -404,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_refuses_an_encrypted_system_file() {
+    fn plan_stores_an_encrypted_system_file_under_the_backend_extension() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -414,11 +409,13 @@ mod tests {
 
         let config =
             lua::from_source(r#"ld.rules({ match = "root/**", encrypt = true })"#).unwrap();
-        let err = plan(&home, &repo, &[arg(&source)], &config)
-            .unwrap_err()
-            .to_string();
+        let pairs = plan(&home, &repo, &[arg(&source)], &config).unwrap();
 
-        assert!(err.contains("encrypted system files are not supported"));
+        let relative = source.strip_prefix("/").unwrap();
+        let stored = repo
+            .join("root")
+            .join(format!("{}.age", relative.display()));
+        assert_eq!(pairs, vec![(source, stored)]);
     }
 
     #[test]

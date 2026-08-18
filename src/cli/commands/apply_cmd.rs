@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::crypt;
@@ -113,13 +113,6 @@ fn place_encrypted(
     repo: &Path,
     run: &mut Run,
 ) -> Result<SyncOutcome> {
-    if utils::is_root(stripped) {
-        bail!(
-            "apply: {}: encrypted system files are not supported",
-            stripped.display()
-        );
-    }
-
     let dest = utils::system_path(home, repo, &repo.join(stripped))?;
     let policy = config.conflict_policy(stripped);
     let identity = config
@@ -128,6 +121,11 @@ fn place_encrypted(
 
     let contents = crypt::decrypt("apply", backend, identity.as_deref(), file)
         .with_context(|| format!("apply: failed to decrypt {}", file.display()))?;
+
+    if utils::is_root(stripped) {
+        return place_root_secret(config, stripped, &contents, &dest, run);
+    }
+
     let status = crypt::plain_status("apply", &contents, &dest)
         .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
     let predicted = files::predict(policy, status, &dest)
@@ -141,6 +139,40 @@ fn place_encrypted(
         || {
             crypt::place("apply", policy, &contents, &dest)
                 .with_context(|| format!("apply: failed to apply {}", dest.display()))
+        },
+    )
+}
+
+fn place_root_secret(
+    config: &Config,
+    relative: &Path,
+    contents: &[u8],
+    dest: &Path,
+    run: &mut Run,
+) -> Result<SyncOutcome> {
+    let policy = config.conflict_policy(relative);
+    let mode = config.mode(relative);
+
+    let status = crypt::escalated_status("apply", contents, dest, mode)
+        .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
+    let predicted = files::predict(policy, status, dest)
+        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+    run.settle(
+        predicted,
+        relative,
+        dest,
+        config.on_change(relative),
+        || {
+            crypt::place_system(
+                "apply",
+                policy,
+                contents,
+                dest,
+                mode,
+                config.owner(relative),
+            )
+            .with_context(|| format!("apply: failed to apply {}", dest.display()))
         },
     )
 }

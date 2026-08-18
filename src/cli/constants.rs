@@ -21,7 +21,25 @@ pub const YES_FLAGS: &str = "-y or --yes";
 
 pub const TEMPLATE_SKELETON: &str = "return \"\"\n";
 
-pub const DIFF_ARGUMENTS: [&str; 4] = ["diff", "--no-index", "--no-prefix", "--"];
+pub const DIFF_PROGRAM: &str = "git";
+
+pub const DIFF_ARGUMENTS: [&str; 3] = ["diff", "--no-index", "--no-prefix"];
+
+pub const DIFF_SEPARATOR: &str = "--";
+
+pub const DIFF_CUSTOM: &str = "ld.on.diff";
+
+pub const STATUS_CUSTOM: &str = "ld.on.status";
+
+pub const CUSTOM_ENTRY: &str = "entry";
+
+pub const CUSTOM_RENDER: &str = "render";
+
+pub const CUSTOM_SUMMARY: &str = "summary";
+
+pub const MANAGED_FILES: &str = "managed";
+
+pub const GENERATED_FILES: &str = "generated";
 
 pub const STATUS_LABELS: [(FileStatus, &str, Tone); 5] = [
     (FileStatus::Synced, "synced", Tone::Good),

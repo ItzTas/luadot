@@ -7,6 +7,7 @@ use clap::Args;
 use crate::backup::Backup;
 use crate::crypt;
 use crate::files::{self, Entry};
+use crate::lua::Config;
 use crate::output;
 use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
@@ -70,7 +71,7 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
             "rm",
             &home,
             config.backup_dir(),
-            config.backup_keep(),
+            config.retention(),
         )?),
         false => None,
     };
@@ -80,6 +81,7 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         let detached = match entry {
             Entry::File(file) => {
                 vec![detach_file(
+                    &config,
                     &home,
                     &repo,
                     file,
@@ -195,6 +197,7 @@ fn classes(entries: &[Entry]) -> Result<Classes> {
 }
 
 fn detach_file(
+    config: &Config,
     home: &Path,
     repo: &Path,
     file: &Path,
@@ -204,7 +207,9 @@ fn detach_file(
     let split = crypt::split(utils::relative(repo, file));
     let dest = detach_target(home, repo, file, &split)?;
     let detached = match &split {
-        Some((_, backend)) => detach_encrypted(*backend, identity, file, &dest)?,
+        Some((stripped, backend)) => {
+            detach_encrypted(config, *backend, identity, stripped, file, &dest)?
+        }
         None => detach(file, &dest, backup)?,
     };
 
@@ -339,8 +344,10 @@ fn detach_target(
 }
 
 fn detach_encrypted(
+    config: &Config,
     backend: crypt::Backend,
     identity: Option<&Path>,
+    stripped: &Path,
     source: &Path,
     dest: &Path,
 ) -> Result<Detached> {
@@ -350,6 +357,19 @@ fn detach_encrypted(
 
     let contents = crypt::decrypt("rm", backend, identity, source)
         .with_context(|| format!("rm: failed to decrypt {}", source.display()))?;
+
+    if utils::is_root(stripped) {
+        crypt::place_system(
+            "rm",
+            files::ConflictPolicy::Overwrite,
+            &contents,
+            dest,
+            config.mode(stripped),
+            config.owner(stripped),
+        )?;
+        return Ok(Detached::Restored);
+    }
+
     crypt::place("rm", files::ConflictPolicy::Overwrite, &contents, dest)?;
     Ok(Detached::Restored)
 }
