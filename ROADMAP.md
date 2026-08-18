@@ -3,19 +3,6 @@
 Planned work, not implemented yet. Nothing here is settled: the shape of each
 item can change before it lands.
 
-## Templates
-
-Templates exist: a `*.luadot/` directory with a `luadot.lua` inside, resolved by
-`luadot alt`. What was left out of that first pass:
-
-- **`status` and `diff` for what a template produces.** Templates only run under
-  `alt`, so both say nothing about the files they generate and skip them.
-  Reporting them means either running the templates outside `alt`, or recording
-  the last resolution, or rendering into the temporary copy `diff` already
-  builds.
-- **`add`, `rm` and `edit` on a template.** They all work on plain managed
-  files; a template directory is reached by path only through `alt`.
-
 ## Diff
 
 `luadot diff` exists: it stages both sides of every file that is not synced into

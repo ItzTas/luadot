@@ -9,13 +9,13 @@ A dotfiles manager configured in Lua.
 | `luadot clone <url> [dir]` | Clones a dotfiles repository and makes it the managed one. |
 | `luadot add <path>...` | Starts managing a file or directory, mirroring it into the repository. |
 | `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving the system copy in place. |
-| `luadot status [path]` | Lists the managed files whose system copy is not in sync. |
-| `luadot diff [path]` | Shows what the repository holds and the system does not. |
+| `luadot status [-t] [path]` | Lists the managed files whose system copy is not in sync, `-t` the files the templates produce too. |
+| `luadot diff [-t] [path]` | Shows what the repository holds and the system does not, `-t` what the templates produce too. |
 | `luadot apply [-n] [path]` | Puts the repository's files back on the system. |
 | `luadot alt [-n] [path]` | Runs the templates and puts the files they produce on the system. |
 | `luadot new [-f] <path>` | Creates an empty template in the repository, for the file that path names. |
 | `luadot restore [-l] [-y] [-n] [backup]` | Puts back the files an earlier `apply` or `alt` replaced. |
-| `luadot edit <path>` | Opens the repository's copy of a file in `$VISUAL`/`$EDITOR`. |
+| `luadot edit <path>` | Opens the repository's copy of a file, or the script of the template producing it, in `$VISUAL`/`$EDITOR`. |
 | `luadot exec <source\|file.lua> [args]...` | Runs Lua with `ld` installed, from a string or a `.lua` file. |
 | `luadot config [show\|path\|edit]` | Shows the resolved configuration, prints its path, or opens it. |
 | `luadot class [list\|set\|unset\|get]` | Lists the declared classes and answers them for this machine. |
@@ -91,8 +91,21 @@ drifted gets a line of its own:
 mode       root/etc/sudoers.d/wheel 0644 -> 0440
 ```
 
-Templates are left out, their repository side not existing until `alt` runs
-them; the summary says how many were skipped.
+Templates are left out of both reports, their side not existing until they are
+resolved; the summary says how many were. `-t` (or `--templates`) resolves
+them and reports the files they produce, without writing any of them:
+
+```
+$ luadot status --templates
+missing    home/.config/nvim/init.lua
+luadot: 12 managed file(s) (12 synced, 0 missing, 0 unlinked, 0 differs)
+luadot: 2 template(s) into 3 file(s) (2 synced, 1 missing, 0 unlinked, 0 differs)
+```
+
+`diff --templates` shows the same files as a diff, the generated side under
+`generated/` rather than `repository/`. Both run the template's own
+`luadot.lua`, which is why the flag exists — the Templates section says more
+about it.
 
 `rm` is the inverse of `add`: it removes the file from the repository and leaves
 your home directory with a plain, unmanaged copy of it. When the system copy is
@@ -716,8 +729,9 @@ A path whose name ends in `.luadot` is a template, in one of two forms. A
 **directory** holds a `luadot.lua` deciding what ends up on the system, next to
 the files that decision picks from or renders. A plain **file** is an embedded
 template rendered directly to the mirrored path, with nothing else around it.
-`luadot alt` is what runs both: `apply` and `status` walk past them instead of
-mirroring them.
+`luadot alt` is what runs both: `apply` walks past them instead of mirroring
+them, and what the rest of the commands do with a template closes this
+section.
 
 ```
 ~/dotfiles/
@@ -964,6 +978,38 @@ directory:
 
 `ld.path.dir` is `nil` — there is no template directory; `ld.path.repo` still
 reaches a file shared elsewhere in the repository.
+
+### The other commands
+
+A template is one thing, not the files it holds, and every command treats it
+as one:
+
+| Command | On a template |
+| --- | --- |
+| `apply` | Walks past it; `alt` is what resolves it. |
+| `status -t`, `diff -t` | Resolves it and reports the files it produces; without the flag both say how many templates they left out. |
+| `add` | Refuses a file a template already produces, and leaves it out when it walks a directory. |
+| `rm` | Takes the whole template out and leaves what it produced on the system. |
+| `edit` | Opens the `luadot.lua` of a directory template, the file itself of a standalone one. |
+
+`status --templates` and `diff --templates` resolve the templates the way
+`alt --dry-run` does: the `luadot.lua` runs, `ld.cmd` and the rest of the
+interface run with it, and nothing is written — what comes out is compared
+against what the system holds and then dropped. That is why they take a flag
+instead of resolving on their own: a template asking a password store for a
+token has no business doing it on every `luadot status`.
+
+`diff --templates` puts the generated file under `generated/`, against the
+`system/` side it is compared to, rather than under the `repository/` side a
+managed file uses: what a template produces is not in the repository, it is
+built again on every run.
+
+`rm`, `edit`, `status` and `diff` reach a template through the path it
+produces — `luadot rm ~/.zshrc` takes out `home/.zshrc.luadot/` — and the
+template's own path works as well. `rm` backs up every file the template
+holds before removing it, and leaves the system alone: a file the template
+generated stays where it is, and a symlink pointing into the template becomes
+a file of its own so nothing is left dangling.
 
 ### Editor support
 
