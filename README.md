@@ -24,6 +24,7 @@ cargo install --git https://github.com/ItzTas/luadot luadot
 
 | Command | Effect |
 | --- | --- |
+| `luadot init [dir]` | Creates an empty dotfiles repository and makes it the managed one. |
 | `luadot clone <url> [dir]` | Clones a dotfiles repository and makes it the managed one. |
 | `luadot add <path>...` | Starts managing a file or directory, mirroring it into the repository. |
 | `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving the system copy in place. |
@@ -55,6 +56,18 @@ in, the way `git clone` does it:
 
 ```
 luadot clone git@github.com:me/dotfiles.git ~/dotfiles
+```
+
+`init` is the same thing without a repository to start from: it creates an empty
+git repository, in the same default place or in the directory you name, and
+remembers it too. The directory has to be empty or not exist yet, and nothing is
+committed for you — `luadot add` fills it and `luadot git` commits it:
+
+```
+luadot init ~/dotfiles
+luadot add ~/.zshrc
+luadot git add -A
+luadot git commit -m "first"
 ```
 
 `ld.opt.repo_dir` says it in the configuration instead, which is what a
