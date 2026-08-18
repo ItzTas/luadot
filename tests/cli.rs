@@ -334,7 +334,7 @@ fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
 }
 
 #[test]
-fn alt_resolves_both_template_forms_and_the_other_commands_walk_past_them() {
+fn alt_resolves_both_template_forms_and_apply_walks_past_them() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
@@ -380,7 +380,14 @@ fn alt_resolves_both_template_forms_and_the_other_commands_walk_past_them() {
         .arg("status")
         .assert()
         .success()
-        .stdout(predicate::str::contains("nothing is managed"));
+        .stdout(predicate::str::contains("2 template(s) skipped"));
+    luadot(&home)
+        .args(["status", "--templates"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "2 template(s) into 2 file(s) (0 synced, 2 missing, 0 unlinked, 0 differs)",
+        ));
     assert!(!home.join(".zshrc").exists());
     assert!(!home.join(".zprofile").exists());
 }
