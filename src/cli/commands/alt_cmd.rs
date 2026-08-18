@@ -3,13 +3,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
-use crate::files::{self, Entry, SyncOutcome};
-use crate::lua::{self, Config, Content, Output};
+use crate::files::{self, ConflictPolicy, Entry, SyncOutcome};
+use crate::lua::{Config, Content, Output};
 use crate::output;
 use crate::state::{self, Classes};
 use crate::utils::{self, Run, Workspace};
-
-use super::super::constants::SYSTEM_TEXT_MODE;
 
 #[derive(Debug, Args)]
 pub struct AltArgs {
@@ -96,91 +94,68 @@ fn resolve(
     classes: &Classes,
     run: &mut Run,
 ) -> Result<Vec<SyncOutcome>> {
-    outputs(home, repo, entry, classes)?
+    utils::outputs("alt", home, repo, entry, classes)?
         .iter()
         .map(|output| place(config, home, output, run))
         .collect()
 }
 
-fn outputs(home: &Path, repo: &Path, entry: &Entry, classes: &Classes) -> Result<Vec<Output>> {
-    match entry {
-        Entry::Template(dir) => lua::load_template("alt", home, repo, dir, classes),
-        Entry::Standalone(path) => Ok(vec![lua::load_template_file(
-            "alt", home, repo, path, classes,
-        )?]),
-        Entry::File(path) => bail!("alt: {} is not a template", path.display()),
-    }
-}
-
 fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result<SyncOutcome> {
-    let relative = utils::managed_relative(home, output.dest())
-        .with_context(|| format!("alt: failed to place {}", output.dest().display()))?;
-    if utils::is_root(&relative) {
-        return place_root(config, &relative, output, run);
-    }
+    let relative = utils::output_relative("alt", home, output)?;
+    let status = utils::escalated_output_status("alt", config, home, output)?;
 
-    let relative = relative.as_path();
     let policy = output
         .conflict()
-        .unwrap_or_else(|| config.conflict_policy(relative));
-    let mode = output.link().unwrap_or_else(|| config.link_mode(relative));
-
-    let status = match output.content() {
-        Content::File(source) => files::file_status(mode, source, output.dest()),
-        Content::Text(text) => files::text_status(output.dest(), text, output.mode()),
-    }
-    .with_context(|| format!("alt: failed to inspect {}", output.dest().display()))?;
-
+        .unwrap_or_else(|| config.conflict_policy(&relative));
     let predicted = files::predict(policy, status, output.dest())
         .with_context(|| format!("alt: failed to place {}", output.dest().display()))?;
+    let on_change = output.on_change().or_else(|| config.on_change(&relative));
 
-    let on_change = output.on_change().or_else(|| config.on_change(relative));
-
-    run.settle(predicted, relative, output.dest(), on_change, || {
-        match output.content() {
-            Content::File(source) => files::sync_file(policy, mode, source, output.dest()),
-            Content::Text(text) => files::write_file(policy, output.dest(), text, output.mode()),
-        }
-        .with_context(|| format!("alt: failed to place {}", output.dest().display()))
+    run.settle(predicted, &relative, output.dest(), on_change, || {
+        write(config, &relative, policy, output)
     })
 }
 
-fn place_root(
+fn write(
     config: &Config,
     relative: &Path,
+    policy: ConflictPolicy,
     output: &Output,
-    run: &mut Run,
 ) -> Result<SyncOutcome> {
     let dest = output.dest();
-    let policy = output
-        .conflict()
-        .unwrap_or_else(|| config.conflict_policy(relative));
+    let failed = || format!("alt: failed to place {}", dest.display());
 
+    if utils::is_root(relative) {
+        return write_root(config, relative, policy, output).with_context(failed);
+    }
+
+    let mode = output.link().unwrap_or_else(|| config.link_mode(relative));
+    match output.content() {
+        Content::File(source) => files::sync_file(policy, mode, source, dest),
+        Content::Text(text) => files::write_file(policy, dest, text, output.mode()),
+    }
+    .with_context(failed)
+}
+
+fn write_root(
+    config: &Config,
+    relative: &Path,
+    policy: ConflictPolicy,
+    output: &Output,
+) -> Result<SyncOutcome> {
     let staged;
     let (source, mode) = match output.content() {
         Content::File(source) => (source.as_path(), config.mode(relative)),
         Content::Text(text) => {
-            staged = files::stage_text(text)
-                .with_context(|| format!("alt: failed to place {}", dest.display()))?;
-            let mode = output
-                .mode()
-                .or_else(|| config.mode(relative))
-                .unwrap_or(SYSTEM_TEXT_MODE);
-            (staged.path(), Some(mode))
+            staged = files::stage_text(text)?;
+            (
+                staged.path(),
+                utils::generated_mode(config, relative, output),
+            )
         }
     };
 
-    let status = files::escalated_status(source, dest, mode)
-        .with_context(|| format!("alt: failed to inspect {}", dest.display()))?;
-    let predicted = files::predict(policy, status, dest)
-        .with_context(|| format!("alt: failed to place {}", dest.display()))?;
-
-    let on_change = output.on_change().or_else(|| config.on_change(relative));
-
-    run.settle(predicted, relative, dest, on_change, || {
-        files::sync_system(policy, source, dest, mode, config.owner(relative))
-            .with_context(|| format!("alt: failed to place {}", dest.display()))
-    })
+    files::sync_system(policy, source, output.dest(), mode, config.owner(relative))
 }
 
 fn count(outcomes: &[SyncOutcome], kind: SyncOutcome) -> usize {
@@ -191,6 +166,7 @@ fn count(outcomes: &[SyncOutcome], kind: SyncOutcome) -> usize {
 mod tests {
     use super::*;
     use crate::backup::Backup;
+    use crate::lua;
 
     fn write(path: &Path, contents: &str) {
         if let Some(parent) = path.parent() {
