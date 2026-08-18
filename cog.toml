@@ -1,0 +1,19 @@
+tag_prefix = "v"
+branch_whitelist = ["main", "nightly"]
+ignore_merge_commits = true
+pre = "nightly.*"
+
+pre_bump_hooks = [
+  "sed -i '0,/^version = .*/s//version = \"{{version}}\"/' Cargo.toml",
+  "cargo update --workspace",
+]
+
+[commit_types]
+init = { changelog_title = "Initial", bump_patch = false }
+
+[changelog]
+path = "CHANGELOG.md"
+template = "remote"
+remote = "github.com"
+owner = "ItzTas"
+repository = "luadot"

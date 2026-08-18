@@ -2,6 +2,24 @@
 
 A dotfiles manager configured in Lua.
 
+## Install
+
+On Arch Linux, from the AUR:
+
+```
+paru -S luadot
+```
+
+`luadot-nightly` follows the pre-release tags instead, and conflicts with
+`luadot` — install one or the other. Both build from the tagged source, run the
+test suite, and ship the shell completions.
+
+Anywhere else, from source:
+
+```
+cargo install --git https://github.com/ItzTas/luadot luadot
+```
+
 ## Commands
 
 | Command | Effect |
@@ -60,6 +78,10 @@ everything else:
 - `unreadable` — a system file luadot may not read; `status` never asks for
   privilege, `apply` does.
 
+Those lines and the count closing them are the configuration's to replace, in
+`ld.on.status` — [Customizing a command](#customizing-a-command) is what it
+takes.
+
 `diff` picks up where `status` stops, and shows the content behind a `differs`:
 
 ```
@@ -90,6 +112,10 @@ drifted gets a line of its own:
 ```
 mode       root/etc/sudoers.d/wheel 0644 -> 0440
 ```
+
+Every line of that report is the configuration's to replace, down to the
+program the two sides are handed to — `ld.on.diff` is where it is said, and
+[Customizing a command](#customizing-a-command) is what it takes.
 
 Templates are left out of both reports, their side not existing until they are
 resolved; the summary says how many were. `-t` (or `--templates`) resolves
@@ -184,10 +210,11 @@ cannot read as `unreadable` and moves on; `apply` and `diff` read it through
 
 ### Encrypted files
 
-Some dotfiles hold secrets — SSH private keys, API tokens, `~/.netrc` — and a
-public repository is no place for their plaintext. An `encrypt` rule keeps the
-file managed anyway: the repository stores only ciphertext, and the plaintext
-only ever exists in your home directory.
+Some dotfiles hold secrets — SSH private keys, API tokens, `~/.netrc`,
+`/etc/wireguard/wg0.conf` — and a public repository is no place for their
+plaintext. An `encrypt` rule keeps the file managed anyway: the repository
+stores only ciphertext, and the plaintext only ever exists where the file is
+meant to live.
 
 ```lua
 ld.crypt.recipients("age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p")
@@ -196,6 +223,7 @@ ld.crypt.identity("~/.keys/age.txt")
 ld.rules({
   { match = "home/.ssh/id_*", encrypt = true },
   { match = "home/.netrc", encrypt = true },
+  { match = "root/etc/wireguard/**", encrypt = true, owner = "root:root" },
 })
 ```
 
@@ -208,7 +236,7 @@ file as encrypted from then on, whatever the rules say later.
 
 - `add` encrypts the file into the repository instead of linking it, and never
   writes the plaintext there.
-- `apply` decrypts to the home directory. Linking is bypassed — a link to
+- `apply` decrypts to its place on the system. Linking is bypassed — a link to
   ciphertext would be useless — so the file is always a plain copy, written
   with mode `600`, whatever `link` says.
 - `status` compares the decrypted content against the system copy and reports
@@ -227,9 +255,13 @@ and decrypting with age needs the `identity`, the private key file. gpg ignores
 the identity and uses its own keyring for both directions. A failed decryption
 stops `apply` with the tool's own error rather than skipping the file.
 
-Files under `root/` cannot be encrypted: their apply path runs through `sudo`
-and staged writes, which would spill plaintext through pipes owned by other
-processes.
+Files under `root/` can be encrypted too, and the plaintext never reaches the
+disk on the way. Reading one to `add` it and writing one back on `apply` are
+tried as you first; when the filesystem answers "permission denied", the
+plaintext is handed to the backend and to `sudo install` on their standard
+input, so it exists only in the memory of the two processes that need it — no
+temporary file, no repository copy. A `mode` rule sets the bits, `600` when
+there is none, and an `owner` rule sets who owns it, as for any system file.
 
 | Call | Arguments | Effect |
 | --- | --- | --- |
@@ -307,7 +339,25 @@ luadot: dropped 1 backup(s), keeping the 10 most recent
 
 The limit counts whole backups, not the files inside them — a run either keeps
 everything it saved or is dropped as a whole, so a backup is never left half
-there. Without it the directory grows on every run and pruning is yours to do.
+there.
+
+`ld.opt.backup_age(span)` prunes by age instead: a backup older than the span
+is dropped at the end of every run that takes one, however many there are. The
+span is a number and a unit — `s`, `m`, `h`, `d` or `w`:
+
+```lua
+ld.opt.backup_age("30d")
+```
+
+```
+luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
+luadot: dropped 2 backup(s), keeping the ones taken in the last 30 days
+```
+
+Both limits can be set at once, and each one drops what it reaches:
+`ld.opt.backup_keep(10)` with `ld.opt.backup_age("30d")` leaves the 10 most
+recent backups taken in the last 30 days. Without either the directory grows on
+every run and pruning is yours to do.
 
 `exec` runs Lua with the same `ld` interface the configuration gets, which is
 how you ask a machine what luadot sees on it:
@@ -373,9 +423,9 @@ A rule carries seven more keys, all optional next to `match` or `regex`:
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the system copy differs. |
 | `on_change` | a command line | Runs after `apply` or `alt` created or replaced one of those files. |
 | `ignore` | `true`, `false` | Whether the matching files are left unmanaged. |
-| `mode` | three or four octal digits, as a string | The permission bits a matching file under `root/` is placed with. |
+| `mode` | three or four octal digits, as a string | The permission bits a matching file under `root/` is placed with. An encrypted file carries `600` without it. |
 | `owner` | `"user"` or `"user:group"` | Who owns a matching file under `root/`. |
-| `encrypt` | `true`, `false` | Whether `add` stores the matching files encrypted. Only for files under `home/`. |
+| `encrypt` | `true`, `false` | Whether `add` stores the matching files encrypted. |
 
 Either syntax also matches a directory on behalf of everything under it, so
 `{ match = "home/.ssh" }` and `{ regex = "^home/\\.ssh$" }` both cover
@@ -395,6 +445,7 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.opt.backup(enabled)` | `true`, `false` | Whether a file is copied aside before luadot writes over it. Defaults to `true`. |
 | `ld.opt.backup_dir(path)` | a directory | Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`. |
 | `ld.opt.backup_keep(count)` | a number of one or more | How many backups to keep; the oldest ones are dropped once there are more. Defaults to keeping every one of them. |
+| `ld.opt.backup_age(span)` | a span like `"30d"`, in `s`, `m`, `h`, `d` or `w` | How long a backup is kept; the ones older than that are dropped. Defaults to keeping them forever. |
 | `ld.opt.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
@@ -414,6 +465,11 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.cmd.<program>(args...)` | the arguments of that program | Runs the program itself and returns what it printed. |
 | `ld.git(args...)` | the arguments of a git command | Runs git inside the repository and returns what it printed. |
 | `ld.argv` | — | `name` and `args` of the command being run. |
+| `ld.on.status(options)` | a table of options | Says what `status` prints, line by line. |
+| `ld.on.diff(options)` | a table of options | Says what `diff` prints and which program compares the two sides. |
+| `ld.print(text, options)` | a string and a table of options | Writes a line to the terminal, styled the way the options ask. |
+| `ld.print.note(text)`, `ld.print.warn(text)`, `ld.print.error(text)` | a string and a table of options | The same line carrying `luadot:`; the last two on the error stream. |
+| `ld.print.section(title)`, `ld.print.entry(label, text)`, `ld.print.field(name, value)` | strings and a table of options | A title over a blank line, a labelled line, a named value. |
 
 Options also take the table form, which sets whatever keys it carries and leaves
 the rest alone:
@@ -434,10 +490,10 @@ instead of hiding the call:
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.crypt.backend`, `ld.crypt.recipients`, `ld.crypt.identity`, `ld.class` | `config.lua`, which builds the configuration | does nothing, warns |
+| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.backup_age`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.crypt.backend`, `ld.crypt.recipients`, `ld.crypt.identity`, `ld.class`, `ld.on.status`, `ld.on.diff` | `config.lua`, which builds the configuration | does nothing, warns |
 | `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
-| `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path` | everywhere | — |
+| `ld.opt.pkg_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path`, `ld.print` | everywhere | — |
 
 A call away from where it has an effect is not an error; it runs, does nothing
 and says so:
@@ -658,6 +714,176 @@ stops instead of running git somewhere else:
 luadot: `ld.git`: no repository set; run `luadot clone <url>` first
 ```
 
+### Printing
+
+`ld.print` writes to the terminal the way luadot writes to it. Called on its
+own it is one line, and the table beside the text is what it is styled with:
+
+```lua
+ld.print("nothing drifted")
+ld.print("applied", { tone = "good" })
+ld.print("applied", { fg = "#ff8800", bold = true, indent = 2 })
+```
+
+| Option | Values | Effect |
+| --- | --- | --- |
+| `tone` | `"good"`, `"warning"`, `"bad"`, `"strong"`, `"muted"` | The palette luadot's own output uses. |
+| `fg`, `bg` | a color name, a number from 0 to 255, `"#ff8800"` | The color of the text and of what sits behind it, over whatever the tone carries. |
+| `bold`, `dim`, `italic`, `underline` | `true`, `false` | Adds an attribute, or takes back one the tone carries. |
+| `mark` | a string, or a function returning one | What opens the line, one space before the text. |
+| `time` | `true`, or a strftime format like `"%H:%M"` | A timestamp opening the line, before the `mark`. |
+| `indent` | a whole number | Spaces before everything else. |
+| `width` | a whole number | The column the styled part is padded to. |
+| `stream` | `"stdout"`, `"stderr"` | Where the line goes. Defaults to `"stdout"`. |
+| `newline` | `true`, `false` | Whether the line ends; `false` leaves the cursor where the text stopped. |
+
+The color names are the sixteen ANSI ones — `black`, `red`, … `white`, and
+`bright-black` through `bright-white` — and every color is dropped when the
+output is not a terminal, so a piped or redirected `luadot` stays plain text.
+
+A `mark` given a function is called every time the line is written, which is
+what a clock or a counter of your own needs; `time` is the clock already
+written:
+
+```lua
+ld.print("applied", { mark = "»" })                        --> » applied
+ld.print("applied", { time = "%H:%M" })                    --> 14:32 applied
+ld.print("applied", { time = true, mark = "»" })           --> 14:32:07 » applied
+ld.print("applied", { mark = function() return "[" .. count .. "]" end })
+```
+
+The rest of the family writes the shapes luadot itself uses and takes those
+same options:
+
+| Call | Writes |
+| --- | --- |
+| `ld.print.note(text)` | `luadot: text` |
+| `ld.print.warn(text)` | the same line, in yellow, on the error stream |
+| `ld.print.error(text)` | the same line, in red, on the error stream |
+| `ld.print.section(title)` | a blank line and the title, in bold |
+| `ld.print.entry(label, text)` | the label in a column of its own and the text beside it |
+| `ld.print.field(name, value)` | the same, for a name and the value it holds |
+
+```lua
+ld.print.section("Repository")
+ld.print.field("path", ld.path.repo)
+ld.print.entry("create", "~/.bashrc", { tone = "good" })
+```
+
+It runs in every script luadot runs, and it is what a customized command writes
+with.
+
+### Customizing a command
+
+`ld.on` is where a command of luadot's own is told what to say. One call per
+command — `ld.on.status`, `ld.on.diff` — and the three pieces every report is
+made of are the same in both:
+
+| Key | Takes | Effect |
+| --- | --- | --- |
+| `entry` | a function, or `false` | Runs for every file the command inspected, in place of the line it would have written. |
+| `summary` | a function, a string, or `false` | Replaces the count line closing each side. |
+| `render` | a function, or `false` | Runs once, with every one of those files, and takes the whole report over. |
+
+Each one takes a function, and the one that is only a line takes a string too.
+Whatever a function returns is written as a line, and a function returning
+nothing writes nothing — which is what one printing for itself with `ld.print`
+wants:
+
+```lua
+ld.on.status({
+  entry = function(file)
+    ld.print.entry(file.state, file.path, { tone = "warning" })
+  end,
+  summary = function(counts)
+    return counts.synced .. "/" .. counts.total .. " in sync"
+  end,
+})
+```
+
+`false` silences the piece it is given to, so `ld.on.status({ summary = false })`
+drops the count lines. A second call replaces only the keys it carries, and the
+two commands are customized apart — neither reads the other's call.
+
+`entry` and `render` are handed the same table, one file at a time or every one
+of them at once. `path`, `system` and `side` are in both commands' tables:
+
+| Field | Holds |
+| --- | --- |
+| `path` | The path as the repository writes it: `home/.bashrc`. |
+| `system` | The absolute path of the system copy. |
+| `side` | `"repository"` for a managed file, `"generated"` for one a template produced. |
+| `state` | Where the file stands — the two commands answer it differently, below. |
+
+#### `ld.on.status`
+
+`state` is the word `status` reports with: `"synced"`, `"missing"`,
+`"unlinked"`, `"differs"` or `"unreadable"`. Every inspected file reaches
+`entry` and `render`, the synced ones included — the built-in report leaves
+those out, a customized one decides for itself:
+
+```lua
+ld.on.status({
+  render = function(files)
+    for _, file in ipairs(files) do
+      ld.print.entry(file.state, file.path, { tone = "muted" })
+    end
+  end,
+})
+```
+
+`summary` is handed `side`, `total` — the files that side reported — `templates`,
+the templates behind them on the generated side, `default`, the line it stands
+in for, and one count per state: `synced`, `missing`, `unlinked`, `differs` and
+`unreadable`.
+
+#### `ld.on.diff`
+
+`state` says what drifted: `"missing"`, `"differs"`, `"mode"` or `"other"`. Only
+the drifted files reach `entry` and `render`, and their table carries both sides
+of the comparison:
+
+| Field | Holds |
+| --- | --- |
+| `content` | `source` and `system`, the bytes of both sides; `system` is absent when the file is not there. |
+| `mode` | `source` and `system`, as octal strings like `"0644"`. |
+
+`summary` is handed `side`, `drifted`, `total` and `default`, the line it stands
+in for. `render` takes the diff over completely — nothing is compared afterwards,
+so `ld.on.diff({ render = false })` reports the drifted files without diffing
+them at all:
+
+```lua
+ld.on.diff({
+  render = function(files)
+    for _, file in ipairs(files) do
+      ld.print.section(file.path)
+      ld.print(file.content.source, { fg = "green", newline = false })
+      ld.print(file.content.system or "", { fg = "red", newline = false })
+    end
+  end,
+})
+```
+
+`diff` carries two keys of its own, for the program the two sides are handed to:
+
+| Key | Takes | Effect |
+| --- | --- | --- |
+| `tool` | a program, or a list holding it and its arguments | Compares the two sides instead of `git diff`. |
+| `args` | a word or a list of them | Extra arguments for whichever program compares them. |
+
+The tool runs inside the same private copy of the two sides, with the two
+directories as its last two arguments, and `args` is passed to whichever program
+runs — git included, where it lands before the `--`:
+
+```lua
+ld.on.diff({ tool = { "difft", "--color", "always" } })
+ld.on.diff({ args = { "--stat" } })
+```
+
+Exit status `0` or `1` counts as success, the way `git diff` reports a
+difference; anything else stops the command.
+
 ### Slow calls
 
 `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup` and `ld.setup.all` reach other
@@ -801,6 +1027,7 @@ ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 | `ld.cmd(line)` | a command line | Runs it and returns what it printed; also `ld.cmd.<program>(args...)`. |
 | `ld.git(args...)` | the arguments of a git command | Runs git inside the repository and returns what it printed. |
 | `ld.argv` | — | `name` and `args` of the command being run. |
+| `ld.print(text, options)` | a string and a table of options | Writes a styled line; also `note`, `warn`, `error`, `section`, `entry` and `field`. |
 | `ld.path` | — | `home`, `config`, `repo` and `dir`, the template's own directory. |
 
 A declared file carries what it needs and nothing else:
