@@ -8,6 +8,7 @@ use crate::crypt;
 use crate::files;
 use crate::git;
 use crate::lua::Config;
+use crate::output;
 use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
@@ -56,6 +57,7 @@ fn collect(
     }
     if source.is_file() {
         check_gitignore(home, &source, git::Kind::File, excludes)?;
+        check_template(home, repo, &source)?;
         let Some(pair) = pair(home, repo, source, config, excludes)? else {
             return Ok(Vec::new());
         };
@@ -79,11 +81,37 @@ fn collect_dir(
 
     let mut pairs = Vec::new();
     for file in files {
+        if let Some(template) = template_for(home, repo, &file)? {
+            output::warn(format!(
+                "{} is produced by {}, leaving it out",
+                file.display(),
+                template.display()
+            ));
+            continue;
+        }
         if let Some(pair) = pair(home, repo, file, config, excludes)? {
             pairs.push(pair);
         }
     }
     Ok(pairs)
+}
+
+fn check_template(home: &Path, repo: &Path, source: &Path) -> Result<()> {
+    let Some(template) = template_for(home, repo, source)? else {
+        return Ok(());
+    };
+
+    bail!(
+        "add: {} is produced by {}; run `luadot edit` on it instead",
+        source.display(),
+        template.display()
+    )
+}
+
+fn template_for(home: &Path, repo: &Path, source: &Path) -> Result<Option<PathBuf>> {
+    let dest = utils::repo_path(home, repo, source)?;
+
+    Ok(files::template_dir(&dest).filter(|path| std::fs::symlink_metadata(path).is_ok()))
 }
 
 fn check_gitignore(
@@ -280,6 +308,46 @@ mod tests {
         let pairs = plan(&home, &repo, &[arg(&source)], &Config::default()).unwrap();
 
         assert_eq!(pairs, vec![(source, repo.join("home/.vimrc"))]);
+    }
+
+    #[test]
+    fn plan_refuses_a_file_a_template_already_produces() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(repo.join("home/.zshrc.luadot")).unwrap();
+        let source = home.join(".zshrc");
+        std::fs::write(&source, "handwritten\n").unwrap();
+
+        let err = plan(&home, &repo, &[arg(&source)], &Config::default())
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("add: "));
+        assert!(err.contains("is produced by"));
+        assert!(err.contains(".zshrc.luadot"));
+    }
+
+    #[test]
+    fn plan_leaves_out_the_walked_files_a_template_produces() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let nvim = home.join(".config/nvim");
+        std::fs::create_dir_all(&nvim).unwrap();
+        std::fs::create_dir_all(repo.join("home/.config/nvim/init.lua.luadot")).unwrap();
+        let generated = nvim.join("init.lua");
+        let plain = nvim.join("options.lua");
+        std::fs::write(&generated, "generated").unwrap();
+        std::fs::write(&plain, "options").unwrap();
+
+        let pairs = plan(&home, &repo, &[arg(&nvim)], &Config::default()).unwrap();
+
+        assert_eq!(
+            pairs,
+            vec![(plain, repo.join("home/.config/nvim/options.lua"))]
+        );
     }
 
     #[test]
