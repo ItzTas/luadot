@@ -14,4 +14,6 @@ pub const MIRROR_MODE: u32 = 0o700;
 
 pub const REPOSITORY_SIDE: &str = "repository";
 
+pub const GENERATED_SIDE: &str = "generated";
+
 pub const SYSTEM_SIDE: &str = "system";

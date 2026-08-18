@@ -5,13 +5,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use anyhow::{Context, Result};
 
-use super::constants::{MIRROR_MODE, MIRROR_PREFIX, REPOSITORY_SIDE, SYSTEM_SIDE};
+use super::constants::{GENERATED_SIDE, MIRROR_MODE, MIRROR_PREFIX, REPOSITORY_SIDE, SYSTEM_SIDE};
 
 static MIRROR: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Repository,
+    Generated,
     System,
 }
 
@@ -25,6 +26,7 @@ impl Side {
     pub fn dir(self) -> &'static str {
         match self {
             Self::Repository => REPOSITORY_SIDE,
+            Self::Generated => GENERATED_SIDE,
             Self::System => SYSTEM_SIDE,
         }
     }
@@ -170,6 +172,7 @@ mod tests {
     #[test]
     fn a_side_names_the_directory_it_holds() {
         assert_eq!(Side::Repository.dir(), "repository");
+        assert_eq!(Side::Generated.dir(), "generated");
         assert_eq!(Side::System.dir(), "system");
     }
 }

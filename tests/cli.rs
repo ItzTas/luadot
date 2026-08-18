@@ -717,6 +717,39 @@ fn diff_reports_a_system_file_whose_mode_is_all_that_drifted() {
     );
 }
 
+#[test]
+fn diff_shows_what_a_template_would_write_only_when_it_is_asked_to() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&home.join(".bashrc"), "managed\n");
+    write(
+        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        r#"return "export EDITOR=nvim\n""#,
+    );
+    write(&home.join(".zshrc"), "export EDITOR=vi\n");
+    write_state(&home, &repo);
+
+    luadot(&home).arg("diff").assert().success().stdout(
+        predicate::str::contains("1 template(s) skipped")
+            .and(predicate::str::contains(".zshrc").not()),
+    );
+
+    luadot(&home)
+        .args(["diff", "--templates"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("generated/home/.zshrc system/home/.zshrc")
+                .and(predicate::str::contains("-export EDITOR=nvim"))
+                .and(predicate::str::contains("+export EDITOR=vi"))
+                .and(predicate::str::contains("1 of 1 generated file(s) differ")),
+        );
+
+    assert_eq!(read(&home.join(".zshrc")), "export EDITOR=vi\n");
+}
+
 fn mirrors() -> usize {
     std::fs::read_dir(std::env::temp_dir())
         .unwrap()
