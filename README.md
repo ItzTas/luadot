@@ -293,8 +293,15 @@ ld.rules({
 ```
 
 The rules answer per file and a run commits as soon as one file it touched asks
-for it. Nothing else changes: the commit carries the same default message, and a
+for it. `autocommit = false` is the way out of both, since a commit is what
+there is to push; `autopush = false` keeps the commit and leaves the pushing to
+you. Nothing else changes: the commit carries the same default message, and a
 repository with no commit yet is left alone rather than pushed.
+
+What a rule decides is whether a file *starts* a commit, not what the commit
+carries: git commits the whole index, so a file staged earlier and left there
+travels with the next commit something else triggers. A file that should never
+reach the repository at all is `ignore`d instead.
 
 ### The layout
 
@@ -658,7 +665,7 @@ A rule carries nine more keys, all optional next to `match` or `regex`:
 | `owner` | `"user"` or `"user:group"` | Who owns a matching file under `root/`. |
 | `encrypt` | `true`, `false` | Whether `add` stores the matching files encrypted. |
 | `autocommit` | `true`, `false` | Whether `add` and `rm` commit on their own once one of those files is staged. |
-| `autopush` | `true`, `false` | Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it. |
+| `autopush` | `true`, `false` | Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back. |
 
 Either syntax also matches a directory on behalf of everything under it, so
 `{ match = "home/.ssh" }` and `{ regex = "^home/\\.ssh$" }` both cover

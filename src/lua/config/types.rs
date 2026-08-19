@@ -282,9 +282,13 @@ impl Config {
     }
 
     pub fn autocommit(&self, relative: &Path) -> bool {
-        match self.matching(relative).filter_map(Rule::autocommit).next_back() {
+        match self
+            .matching(relative)
+            .filter_map(Rule::autocommit)
+            .next_back()
+        {
             Some(autocommit) => autocommit,
-            None => self.autocommit || self.pushed(relative),
+            None => self.autocommit || self.autopush || self.pushed(relative),
         }
     }
 

@@ -336,6 +336,38 @@ mod tests {
     }
 
     #[test]
+    fn a_rule_committing_nothing_pushes_nothing_either() {
+        let config = configure(
+            r#"
+            ld.opt.autopush(true)
+            ld.rules({ { match = "home/.netrc", autocommit = false } })
+            "#,
+        );
+
+        let netrc = Path::new("home/.netrc");
+        assert!(!config.autocommit(netrc));
+        assert!(!config.autopush(netrc));
+
+        let bashrc = Path::new("home/.bashrc");
+        assert!(config.autocommit(bashrc));
+        assert!(config.autopush(bashrc));
+    }
+
+    #[test]
+    fn a_rule_can_hold_the_push_back_and_keep_the_commit() {
+        let config = configure(
+            r#"
+            ld.opt.autopush(true)
+            ld.rules({ { match = "home/.netrc", autopush = false } })
+            "#,
+        );
+
+        let netrc = Path::new("home/.netrc");
+        assert!(config.autocommit(netrc));
+        assert!(!config.autopush(netrc));
+    }
+
+    #[test]
     fn rejects_an_invalid_mode() {
         let err = format!(
             "{:#}",
