@@ -3,6 +3,7 @@ name = "luadot"
 version = "0.1.0-nightly.3"
 edition = "2024"
 description = "A dotfiles manager configured in Lua"
+build = "build/main.rs"
 repository = "https://github.com/ItzTas/luadot"
 license = "MIT"
 
@@ -32,11 +33,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [build-dependencies]
 cc = "1.2.63"
-flate2 = "1.1.9"
 lua-src = "550.0.0"
-sha2 = "0.11.0"
-tar = "0.4.46"
-ureq = "3.4.0"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
