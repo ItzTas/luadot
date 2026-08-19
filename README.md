@@ -271,20 +271,34 @@ and decrypting with age needs the `identity`, the private key file. gpg ignores
 the identity and uses its own keyring for both directions. A failed decryption
 stops `apply` with the tool's own error rather than skipping the file.
 
-The lock's `identity_command` names a command that hands the identity over
-instead, for a key that lives in a password manager rather than on disk. A
-string runs through `sh`, a list runs the program itself, and what it prints is
-the private key. It runs once per command, never per file, and its output is
-written to a `600` file inside the same private temporary directory `edit`
-uses, removed when the command ends — the key never touches your dotfiles.
+The `identity` also takes a command, for a key that lives in a password manager
+rather than on disk. What the command prints is the private key: it runs once
+per command, never per file, and its output is written to a `600` file inside
+the same private temporary directory `edit` uses, removed when the command ends
+— the key never touches your dotfiles.
+
+A written identity is read as a command when it carries a space and as a path
+when it does not, which covers both without saying which is which:
 
 ```lua
-ld.crypt.lock({ recipients = "age1ql3z…", identity_command = "pass show age/key" })
-ld.crypt.lock({ recipients = "age1ql3z…", identity_command = { "op", "read", "op://vault/age/key" } })
+ld.crypt.lock({ recipients = "age1ql3z…", identity = "~/.keys/age.txt" })
+ld.crypt.lock({ recipients = "age1ql3z…", identity = "pass show age/key" })
 ```
 
-age plugins work as they do for age itself: point `identity` (or
-`identity_command`) at the plugin identity and use the plugin's recipients.
+A `type` says it outright, for a path holding a space or a command that is one
+bare word, and the value follows it in the table. Several words are a program
+and its arguments, run without a shell in the way:
+
+```lua
+ld.crypt.lock({ identity = { type = "file", "/mnt/my key.txt" } })
+ld.crypt.lock({ identity = { type = "command", "unlock-key" } })
+ld.crypt.lock({ identity = { "op", "read", "op://vault/age/key" } })
+```
+
+`type` is one slot, so a lock names a file or a command and never both.
+
+age plugins work as they do for age itself: point `identity` at the plugin
+identity and use the plugin's recipients.
 luadot only checks that the plugin binary a key names is on your `PATH` —
 `AGE-PLUGIN-YUBIKEY-1…` and `age1yubikey1…` both need `age-plugin-yubikey` —
 and says which one is missing instead of letting age fail obscurely.
@@ -334,10 +348,9 @@ there is none, and an `owner` rule sets who owns it, as for any system file.
 | Call | Arguments | Effect |
 | --- | --- | --- |
 | `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
-| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients`, `identity` and `identity_command` | How secrets are locked. One call, one answer: a passphrase or keys, never both. Defaults to keys with none set. |
+| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked. One call, one answer: a passphrase or keys, never both. Defaults to keys with none set. |
 | `ld.crypt.lock`'s `recipients` | a key or a list of them | Public keys or key ids the files are encrypted to. |
-| `ld.crypt.lock`'s `identity` | a path | Private key used to decrypt with age; gpg uses its keyring. `~` and a relative path resolve against your home directory. |
-| `ld.crypt.lock`'s `identity_command` | a command line, or a list of a program and its arguments | Command printing the identity, run once per command instead of reading a key file. |
+| `ld.crypt.lock`'s `identity` | a path, a command line, or a table carrying `type` and its value | Private key used to decrypt with age; gpg uses its keyring. A path resolves `~` and a relative path against your home directory; a command prints the key instead. |
 | `ld.opt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |
 | `ld.crypt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 
@@ -522,16 +535,16 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 | `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
-| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients`, `identity` and `identity_command` | How secrets are locked: with a passphrase or with keys, never both. |
+| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked: with a passphrase or with keys, never both. The `identity` takes a path or a command. |
 | `ld.opt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |
 | `ld.crypt(options)` | a table of options | Sets several crypt options at once; only the keys it carries. |
 | `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, and marks them as encrypted. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |
-| `ld.setup(name)` | a setup name | Runs one setup script. |
+| `ld.setup(name)` | a setup name | Runs one setup script: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. |
 | `ld.setup.all(options)` | a table with an optional `order` list | Runs every setup script. |
-| `ld.setup.list()` | — | The names of the available setup scripts. |
+| `ld.setup.list()` | — | The names of the available setup scripts, directories included. |
 | `ld.cmd(line)` | a command line | Runs it through `sh` and returns what it printed. |
 | `ld.cmd.<program>(args...)` | the arguments of that program | Runs the program itself and returns what it printed. |
 | `ld.git(args...)` | the arguments of a git command | Runs git inside the repository and returns what it printed. |
@@ -575,10 +588,11 @@ effect (silence it with `ld.opt.pkg_warn(false)`)
 ```
 
 `ld.path` carries `home` and `config` everywhere, `repo` once a repository is
-set, and `dir` inside a template. Inside `config.lua` itself, `ld.path.repo` is the
-repository luadot knew about before the file ran, so it does not answer for an
-`ld.opt.repo_dir` set in that same file; every script luadot runs afterwards —
-`bootstrap.lua`, a setup script, a template — gets the resolved one.
+set, and `dir` inside a template or a setup directory. Inside `config.lua`
+itself, `ld.path.repo` is the repository luadot knew about before the file ran,
+so it does not answer for an `ld.opt.repo_dir` set in that same file; every
+script luadot runs afterwards — `bootstrap.lua`, a setup script, a template —
+gets the resolved one.
 
 ### The machine
 
@@ -1030,6 +1044,16 @@ local re = require("re")
 
 local name = re.match("neovim@0.11.2", "{%a+}")
 ```
+
+`ld.lpeg` and `ld.re` are the same two modules under the API, for a file that
+would rather not carry the `require` lines:
+
+```lua
+local name = ld.re.match("neovim@0.11.2", "{%a+}")
+```
+
+Neither is loaded until it is first reached, so a configuration that never
+mentions them pays nothing for them.
 
 Both are the upstream modules, documented at
 <https://www.inf.puc-rio.br/~roberto/lpeg/> and
