@@ -1,0 +1,117 @@
+use anyhow::{Context, Result, bail};
+use mlua::{Function, IntoLuaMulti, Value};
+
+#[derive(Debug, Clone)]
+pub struct Call(Function);
+
+#[derive(Debug, Clone)]
+pub enum Custom {
+    Silent,
+    Text(String),
+    Call(Call),
+}
+
+impl Call {
+    pub fn new(function: Function) -> Self {
+        Self(function)
+    }
+
+    pub fn run(&self, what: &str, argument: impl IntoLuaMulti) -> Result<Option<String>> {
+        let answer = self
+            .0
+            .call::<Value>(argument)
+            .with_context(|| format!("{what} failed"))?;
+
+        match answer {
+            Value::Nil | Value::Boolean(false) => Ok(None),
+            Value::String(text) => Ok(Some(text.to_str()?.to_string())),
+            other => bail!(
+                "{what} returned {}; a string or nothing is expected",
+                other.type_name()
+            ),
+        }
+    }
+}
+
+impl Custom {
+    pub fn shown(&self, what: &str, argument: impl IntoLuaMulti) -> Result<Option<String>> {
+        match self {
+            Self::Silent => Ok(None),
+            Self::Text(text) => Ok(Some(text.clone())),
+            Self::Call(call) => call.run(what, argument),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use mlua::Lua;
+
+    use super::*;
+
+    fn call(lua: &Lua, source: &str) -> Call {
+        Call::new(lua.load(source).eval().unwrap())
+    }
+
+    #[test]
+    fn a_call_answers_with_the_string_it_returns() {
+        let lua = Lua::new();
+        let call = call(
+            &lua,
+            r#"return function(count) return "seen " .. count end"#,
+        );
+
+        assert_eq!(call.run("a hook", 3).unwrap(), Some("seen 3".to_string()));
+    }
+
+    #[test]
+    fn a_call_returning_nothing_or_false_shows_nothing() {
+        let lua = Lua::new();
+
+        assert_eq!(
+            call(&lua, "return function() end")
+                .run("a hook", ())
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            call(&lua, "return function() return false end")
+                .run("a hook", ())
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_call_returning_anything_else_is_reported() {
+        let lua = Lua::new();
+        let call = call(&lua, "return function() return 1 end");
+
+        let err = format!("{:#}", call.run("`ld.on.diff`: `summary`", ()).unwrap_err());
+
+        assert!(err.contains("`ld.on.diff`: `summary` returned integer"));
+        assert!(err.contains("a string or nothing is expected"));
+    }
+
+    #[test]
+    fn a_failing_call_names_what_was_running() {
+        let lua = Lua::new();
+        let call = call(&lua, r#"return function() error("broken") end"#);
+
+        let err = format!("{:#}", call.run("`ld.on.diff`: `entry`", ()).unwrap_err());
+
+        assert!(err.contains("`ld.on.diff`: `entry` failed"));
+        assert!(err.contains("broken"));
+    }
+
+    #[test]
+    fn a_silent_customization_shows_nothing_and_a_text_shows_itself() {
+        assert_eq!(Custom::Silent.shown("a hook", ()).unwrap(), None);
+        assert_eq!(
+            Custom::Text("done".to_string())
+                .shown("a hook", ())
+                .unwrap(),
+            Some("done".to_string())
+        );
+    }
+}

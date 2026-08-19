@@ -1,0 +1,318 @@
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result, bail};
+
+use super::constants::DEFAULT_REPO_DIR;
+use super::paths::{data_dir, expand, home_dir, repo_path};
+use crate::crypt;
+use crate::files;
+use crate::state;
+
+pub fn destination(
+    command: &str,
+    home: &Path,
+    arg: Option<&str>,
+    configured: Option<&Path>,
+) -> Result<PathBuf> {
+    if let Some(arg) = arg {
+        return std::path::absolute(arg).with_context(|| format!("{command}: invalid path {arg}"));
+    }
+    if let Some(configured) = configured {
+        return Ok(expand(home, configured));
+    }
+
+    Ok(data_dir()?.join(DEFAULT_REPO_DIR))
+}
+
+pub fn require_repo(command: &str, configured: Option<&Path>) -> Result<PathBuf> {
+    let configured = match configured {
+        Some(dir) => Some(expand(&home_dir()?, dir)),
+        None => None,
+    };
+
+    resolve(command, configured, state::load()?.repo())
+}
+
+pub fn managed_path(command: &str, home: &Path, repo: &Path, arg: &str) -> Result<PathBuf> {
+    let target =
+        std::path::absolute(arg).with_context(|| format!("{command}: invalid path {arg}"))?;
+    let managed = repo_path(home, repo, &target)?;
+
+    if std::fs::symlink_metadata(&managed).is_ok() {
+        return Ok(managed);
+    }
+    if let Some(stored) = crypt::stored_variant(&managed) {
+        return Ok(stored);
+    }
+    if let Some(template) = template_variant(&managed) {
+        return Ok(template);
+    }
+
+    bail!(
+        "{command}: {} is not managed by the repository",
+        target.display()
+    )
+}
+
+fn template_variant(managed: &Path) -> Option<PathBuf> {
+    files::template_dir(managed).filter(|path| std::fs::symlink_metadata(path).is_ok())
+}
+
+fn resolve(
+    command: &str,
+    configured: Option<PathBuf>,
+    remembered: Option<&Path>,
+) -> Result<PathBuf> {
+    let Some(repo) = configured
+        .clone()
+        .or_else(|| remembered.map(Path::to_path_buf))
+    else {
+        bail!("{command}: no repository set; run `luadot clone <url>` or `luadot init` first");
+    };
+
+    if repo.is_dir() {
+        return Ok(repo);
+    }
+
+    if configured.is_some() {
+        bail!(
+            "{command}: repository {} does not exist; clone it there or fix `ld.opt.repo_dir`",
+            repo.display()
+        );
+    }
+
+    bail!(
+        "{command}: repository {} does not exist; run `luadot clone <url>` or `luadot init` first",
+        repo.display()
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_destination_argument_wins_over_everything_else() {
+        let dir = destination(
+            "clone",
+            Path::new("/home/u"),
+            Some("/data/dotfiles"),
+            Some(Path::new("~/configured")),
+        )
+        .unwrap();
+
+        assert_eq!(dir, PathBuf::from("/data/dotfiles"));
+    }
+
+    #[test]
+    fn the_configured_destination_is_used_when_no_argument_is_given() {
+        let dir = destination(
+            "clone",
+            Path::new("/home/u"),
+            None,
+            Some(Path::new("~/dotfiles")),
+        )
+        .unwrap();
+
+        assert_eq!(dir, PathBuf::from("/home/u/dotfiles"));
+    }
+
+    #[test]
+    fn without_either_the_destination_lands_where_luadot_keeps_its_data() {
+        let dir = destination("init", Path::new("/home/u"), None, None).unwrap();
+
+        assert_eq!(dir, data_dir().unwrap().join(DEFAULT_REPO_DIR));
+    }
+
+    #[test]
+    fn errors_when_no_repository_is_set() {
+        let err = resolve("add", None, None).unwrap_err().to_string();
+        assert_eq!(
+            err,
+            "add: no repository set; run `luadot clone <url>` or `luadot init` first"
+        );
+    }
+
+    #[test]
+    fn errors_when_the_repository_does_not_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("repo");
+
+        let err = resolve("git", None, Some(&missing))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            err,
+            format!(
+                "git: repository {} does not exist; run `luadot clone <url>` or `luadot init` first",
+                missing.display()
+            )
+        );
+    }
+
+    #[test]
+    fn errors_when_the_configured_repository_does_not_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("dotfiles");
+
+        let err = resolve("status", Some(missing.clone()), Some(dir.path()))
+            .unwrap_err()
+            .to_string();
+
+        assert_eq!(
+            err,
+            format!(
+                "status: repository {} does not exist; clone it there or fix `ld.opt.repo_dir`",
+                missing.display()
+            )
+        );
+    }
+
+    #[test]
+    fn errors_when_the_repository_is_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("repo");
+        std::fs::write(&file, "").unwrap();
+
+        assert!(resolve("cd", None, Some(&file)).is_err());
+    }
+
+    #[test]
+    fn returns_an_existing_repository() {
+        let dir = tempfile::tempdir().unwrap();
+
+        assert_eq!(
+            resolve("apply", None, Some(dir.path())).unwrap(),
+            dir.path()
+        );
+    }
+
+    #[test]
+    fn the_configured_repository_wins_over_the_remembered_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let configured = dir.path().join("dotfiles");
+        let remembered = dir.path().join("repo");
+        std::fs::create_dir_all(&configured).unwrap();
+        std::fs::create_dir_all(&remembered).unwrap();
+
+        assert_eq!(
+            resolve("apply", Some(configured.clone()), Some(&remembered)).unwrap(),
+            configured
+        );
+    }
+
+    #[test]
+    fn managed_path_maps_a_tracked_file_into_the_repository() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let tracked = repo.join("home/.bashrc");
+        std::fs::write(&tracked, "data").unwrap();
+
+        let arg = home.join(".bashrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("rm", &home, &repo, &arg).unwrap(), tracked);
+    }
+
+    #[test]
+    fn managed_path_errors_when_the_file_is_not_tracked() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+
+        let arg = home.join(".bashrc").to_string_lossy().into_owned();
+        let err = managed_path("rm", &home, &repo, &arg)
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("rm: "));
+        assert!(err.contains("is not managed by the repository"));
+    }
+
+    #[test]
+    fn managed_path_finds_the_encrypted_form_of_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let stored = repo.join("home/.netrc.age");
+        std::fs::write(&stored, "cipher").unwrap();
+
+        let arg = home.join(".netrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), stored);
+    }
+
+    #[test]
+    fn managed_path_prefers_the_plain_file_over_the_encrypted_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let plain = repo.join("home/.netrc");
+        std::fs::write(&plain, "plain").unwrap();
+        std::fs::write(repo.join("home/.netrc.age"), "cipher").unwrap();
+
+        let arg = home.join(".netrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), plain);
+    }
+
+    #[test]
+    fn managed_path_finds_the_template_producing_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let template = repo.join("home/.zshrc.luadot");
+        std::fs::create_dir_all(&template).unwrap();
+        std::fs::write(template.join("luadot.lua"), "return \"\"\n").unwrap();
+
+        let arg = home.join(".zshrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), template);
+    }
+
+    #[test]
+    fn managed_path_finds_the_standalone_template_producing_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let template = repo.join("home/.zprofile.luadot");
+        std::fs::write(&template, "export HOST=1\n").unwrap();
+
+        let arg = home.join(".zprofile").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("rm", &home, &repo, &arg).unwrap(), template);
+    }
+
+    #[test]
+    fn managed_path_prefers_the_managed_file_over_the_template() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home/.zshrc.luadot")).unwrap();
+        let plain = repo.join("home/.zshrc");
+        std::fs::write(&plain, "managed").unwrap();
+
+        let arg = home.join(".zshrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), plain);
+    }
+
+    #[test]
+    fn managed_path_accepts_a_dangling_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("home")).unwrap();
+        let tracked = repo.join("home/.bashrc");
+        std::os::unix::fs::symlink(home.join(".bashrc"), &tracked).unwrap();
+
+        let arg = home.join(".bashrc").to_string_lossy().into_owned();
+
+        assert_eq!(managed_path("rm", &home, &repo, &arg).unwrap(), tracked);
+    }
+}

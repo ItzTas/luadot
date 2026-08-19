@@ -1,0 +1,143 @@
+stages:
+  - test
+  - release
+  - mirror
+  - publish
+
+default:
+  tags:
+    - k8s
+
+test:
+  stage: test
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  image: rust:latest
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/
+      - target/
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends cmake
+    - rustup component add clippy
+  script:
+    - cargo build --verbose
+    - cargo clippy --all-targets -- -D warnings
+    - cargo test --verbose
+
+bump:
+  stage: release
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      variables:
+        BUMP_ARGS: --auto
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "nightly"'
+      variables:
+        BUMP_ARGS: --auto --pre
+  image: rust:latest
+  resource_group: release
+  variables:
+    COG_VERSION: 7.0.0
+    COG_TARGET: x86_64-unknown-linux-musl
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+    GIT_DEPTH: 0
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/
+    policy: pull
+  before_script:
+    - curl -sSfL "https://github.com/cocogitto/cocogitto/releases/download/${COG_VERSION}/cocogitto-${COG_VERSION}-${COG_TARGET}.tar.gz" | tar -xz -C /usr/local/bin --strip-components=1 "${COG_TARGET}/cog"
+    - git remote set-url origin "https://oauth2:${GITLAB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
+    - git fetch origin --tags --force
+    - git checkout -B "$CI_COMMIT_BRANCH" "$CI_COMMIT_SHA"
+    - git config user.name "$GITLAB_USER_NAME"
+    - git config user.email "$GITLAB_USER_EMAIL"
+  script:
+    - cog bump $BUMP_ARGS --skip-ci
+    - git push -o ci.skip origin "$CI_COMMIT_BRANCH"
+    - git push -o ci.skip origin --tags
+    - echo "LUADOT_TAG=$(git describe --tags --exact-match HEAD)" > bump.env
+  artifacts:
+    reports:
+      dotenv: bump.env
+
+push-to-github:
+  stage: mirror
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: always
+  image: alpine/git:latest
+  resource_group: mirror
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - git clone --mirror "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git" repo.git
+    - cd repo.git
+    - git push --force --all "https://x-access-token:${GITHUB_TOKEN}@github.com/ItzTas/luadot.git"
+    - git push --force --tags "https://x-access-token:${GITHUB_TOKEN}@github.com/ItzTas/luadot.git"
+
+.aur:
+  stage: publish
+  tags:
+    - k8s
+  image: archlinux:base-devel
+  resource_group: aur
+  needs:
+    - job: bump
+      artifacts: true
+    - job: push-to-github
+  before_script:
+    - pacman -Syu --noconfirm --needed git openssh
+    - install -d -m 700 ~/.ssh
+    - printf '%s' "$AUR_SSH_KEY_B64" | base64 -d > ~/.ssh/aur
+    - chmod 600 ~/.ssh/aur
+    - ssh-keyscan -t ed25519,rsa aur.archlinux.org >> ~/.ssh/known_hosts
+    - export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes"
+
+aur-stable:
+  extends: .aur
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  script:
+    - ./packaging/aur/publish.sh luadot "$LUADOT_TAG"
+
+aur-nightly:
+  extends: .aur
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "nightly"'
+  script:
+    - ./packaging/aur/publish.sh luadot-nightly "$LUADOT_TAG"
+
+sync-from-github:
+  stage: mirror
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  image: alpine/git:latest
+  resource_group: mirror
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - git clone --mirror https://github.com/ItzTas/luadot.git repo.git
+    - cd repo.git
+    - git push --force --all "https://oauth2:${GITLAB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
+    - git push --force --tags "https://oauth2:${GITLAB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"

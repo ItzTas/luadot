@@ -1,0 +1,689 @@
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use anyhow::{Context, Result, bail};
+use clap::Args;
+
+use crate::files::{self, Entry, FileStatus, Mirror, Side};
+use crate::lua::{Config, Content, Diff, DiffCounts, DiffFile, DiffState, Output};
+use crate::output::{self, Tone};
+use crate::state::{self, Classes};
+use crate::utils::{self, SYSTEM_TEXT_MODE, Workspace};
+
+use super::super::constants::{
+    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, DIFF_ARGUMENTS, DIFF_CUSTOM, DIFF_PROGRAM,
+    DIFF_SEPARATOR, GENERATED_FILES, MANAGED_FILES,
+};
+
+#[derive(Debug, Args)]
+pub struct DiffArgs {
+    #[arg(value_name = "PATH")]
+    pub path: Option<String>,
+    #[arg(
+        short,
+        long,
+        help = "Resolve the templates and diff the files they produce"
+    )]
+    pub templates: bool,
+}
+
+enum System {
+    Absent,
+    Other,
+    Holds(Vec<u8>, u32),
+}
+
+struct Item {
+    relative: PathBuf,
+    dest: PathBuf,
+    contents: Vec<u8>,
+    mode: Option<u32>,
+}
+
+pub fn diff_cmd(args: DiffArgs) -> Result<()> {
+    let Workspace { config, home, repo } = utils::workspace("diff")?;
+
+    let root = utils::managed_root("diff", &home, &repo, args.path.as_deref())?;
+
+    let (files, templates): (Vec<Entry>, Vec<Entry>) =
+        utils::managed_entries("diff", &repo, &root, |relative| config.is_ignored(relative))?
+            .into_iter()
+            .partition(|entry| matches!(entry, Entry::File(_)));
+
+    if files.is_empty() && templates.is_empty() {
+        output::note("nothing is managed");
+        return Ok(());
+    }
+
+    if !files.is_empty() {
+        let drifted = managed_items(&config, &home, &repo, &files)?;
+        let shown = drifted.len();
+        show(&config, Side::Repository, &drifted)?;
+        summary(&config, Side::Repository, shown, files.len())?;
+    }
+
+    if templates.is_empty() {
+        return Ok(());
+    }
+    if !args.templates {
+        output::note(format!(
+            "{} template(s) skipped (run with --templates)",
+            templates.len()
+        ));
+        return Ok(());
+    }
+
+    let classes = state::load()?.classes().clone();
+    let produced = resolve(&home, &repo, &templates, &classes)?;
+    let drifted = generated_items(&config, &home, &produced)?;
+    let shown = drifted.len();
+    show(&config, Side::Generated, &drifted)?;
+
+    summary(&config, Side::Generated, shown, produced.len())
+}
+
+fn managed_items(config: &Config, home: &Path, repo: &Path, files: &[Entry]) -> Result<Vec<Item>> {
+    let mut drifted = Vec::new();
+    for file in files.iter().map(Entry::path) {
+        let relative = utils::relative(repo, file);
+        let dest = utils::system_path(home, repo, file)?;
+        let status = match utils::is_root(relative) {
+            true => files::escalated_status(file, &dest, config.mode(relative)),
+            false => files::file_status(config.link_mode(relative), file, &dest),
+        }
+        .with_context(|| format!("diff: failed to inspect {}", dest.display()))?;
+
+        if !shows(status) {
+            continue;
+        }
+        drifted.push(Item {
+            relative: relative.to_path_buf(),
+            dest,
+            contents: files::read_contents("diff", file)?,
+            mode: Some(files::effective_mode(file, config.mode(relative))?),
+        });
+    }
+
+    Ok(drifted)
+}
+
+fn resolve(
+    home: &Path,
+    repo: &Path,
+    templates: &[Entry],
+    classes: &Classes,
+) -> Result<Vec<Output>> {
+    let mut produced = Vec::new();
+    for entry in templates {
+        produced.extend(utils::outputs("diff", home, repo, entry, classes)?);
+    }
+
+    Ok(produced)
+}
+
+fn generated_items(config: &Config, home: &Path, produced: &[Output]) -> Result<Vec<Item>> {
+    let mut drifted = Vec::new();
+    for output in produced {
+        let status = utils::escalated_output_status("diff", config, home, output)?;
+        if !shows(status) {
+            continue;
+        }
+
+        let relative = utils::output_relative("diff", home, output)?;
+        let (contents, mode) = expected(config, &relative, output)?;
+        drifted.push(Item {
+            relative,
+            dest: output.dest().to_path_buf(),
+            contents,
+            mode,
+        });
+    }
+
+    Ok(drifted)
+}
+
+fn expected(config: &Config, relative: &Path, output: &Output) -> Result<(Vec<u8>, Option<u32>)> {
+    match output.content() {
+        Content::Text(text) => Ok((
+            text.as_bytes().to_vec(),
+            utils::generated_mode(config, relative, output),
+        )),
+        Content::File(source) => Ok((
+            files::read_contents("diff", source)?,
+            Some(files::effective_mode(source, config.mode(relative))?),
+        )),
+    }
+}
+
+fn show(config: &Config, side: Side, drifted: &[Item]) -> Result<()> {
+    if drifted.is_empty() {
+        return Ok(());
+    }
+
+    let files = inspected(side, drifted)?;
+
+    if let Some(custom) = config.diff().render() {
+        utils::said(custom.shown(
+            &what(CUSTOM_RENDER),
+            files.iter().collect::<Vec<&DiffFile>>(),
+        )?);
+        return Ok(());
+    }
+
+    for file in &files {
+        announced(config, file)?;
+    }
+
+    staged(config, side, &files)
+}
+
+fn inspected(side: Side, drifted: &[Item]) -> Result<Vec<DiffFile>> {
+    let mut files = Vec::new();
+    for item in drifted {
+        let system = system_side(&item.dest)?;
+        let file = DiffFile::new(
+            item.relative.clone(),
+            item.dest.clone(),
+            side,
+            state(item, &system),
+        );
+
+        files.push(match system {
+            System::Absent | System::Other => {
+                file.with_source(item.contents.clone(), item.mode.unwrap_or(SYSTEM_TEXT_MODE))
+            }
+            System::Holds(found, mode) => file
+                .with_source(item.contents.clone(), item.mode.unwrap_or(mode))
+                .with_system(found, mode),
+        });
+    }
+
+    Ok(files)
+}
+
+fn state(item: &Item, system: &System) -> DiffState {
+    match system {
+        System::Absent => DiffState::Missing,
+        System::Other => DiffState::Other,
+        System::Holds(found, _) if *found == item.contents => DiffState::Mode,
+        System::Holds(_, _) => DiffState::Differs,
+    }
+}
+
+fn announced(config: &Config, file: &DiffFile) -> Result<()> {
+    let Some(custom) = config.diff().entry() else {
+        reported(file);
+        return Ok(());
+    };
+
+    utils::said(custom.shown(&what(CUSTOM_ENTRY), file)?);
+
+    Ok(())
+}
+
+fn reported(file: &DiffFile) {
+    let path = file.path().display();
+    match file.state() {
+        DiffState::Other => output::entry(Tone::Warning, "not a file", path),
+        DiffState::Mode => output::entry(
+            Tone::Warning,
+            "mode",
+            format!(
+                "{path} {:04o} -> {:04o}",
+                file.found_mode().unwrap_or(file.mode()),
+                file.mode()
+            ),
+        ),
+        DiffState::Missing | DiffState::Differs => {}
+    }
+}
+
+fn staged(config: &Config, side: Side, files: &[DiffFile]) -> Result<()> {
+    let staging: Vec<&DiffFile> = files.iter().filter(|file| file.state().staged()).collect();
+    if staging.is_empty() {
+        return Ok(());
+    }
+
+    let mirror = Mirror::open("diff")?;
+    for file in staging {
+        mirror.place(side, file.path(), file.content(), file.mode())?;
+        if let (Some(found), Some(mode)) = (file.found(), file.found_mode()) {
+            mirror.place(Side::System, file.path(), found, mode)?;
+        }
+    }
+
+    run(mirror.root(), side, config.diff())
+}
+
+fn summary(config: &Config, side: Side, drifted: usize, total: usize) -> Result<()> {
+    let default = format!("{drifted} of {total} {} file(s) differ", named(side));
+
+    let Some(custom) = config.diff().summary() else {
+        output::note(default);
+        return Ok(());
+    };
+
+    let counts = DiffCounts::new(side, drifted, total, default);
+
+    utils::said(custom.shown(&what(CUSTOM_SUMMARY), &counts)?);
+
+    Ok(())
+}
+
+fn named(side: Side) -> &'static str {
+    match side {
+        Side::Generated => GENERATED_FILES,
+        Side::Repository | Side::System => MANAGED_FILES,
+    }
+}
+
+fn what(key: &str) -> String {
+    utils::customized("diff", DIFF_CUSTOM, key)
+}
+
+fn system_side(dest: &Path) -> Result<System> {
+    let Ok(meta) = std::fs::metadata(dest) else {
+        return Ok(System::Absent);
+    };
+    if !meta.is_file() {
+        return Ok(System::Other);
+    }
+
+    let mode = files::effective_mode(dest, None)?;
+
+    Ok(System::Holds(files::read_contents("diff", dest)?, mode))
+}
+
+fn run(root: &Path, side: Side, diff: &Diff) -> Result<()> {
+    let (program, arguments) = invocation(diff);
+    let status = build_command(root, side, &program, &arguments)
+        .status()
+        .with_context(|| format!("diff: failed to run {program}; is it installed and on PATH?"))?;
+
+    match status.code() {
+        None | Some(0 | 1) => Ok(()),
+        Some(code) => bail!("diff: {program} exited with status {code}"),
+    }
+}
+
+fn invocation(diff: &Diff) -> (String, Vec<String>) {
+    let Some(tool) = diff.tool() else {
+        let mut arguments: Vec<String> =
+            DIFF_ARGUMENTS.iter().map(|word| word.to_string()).collect();
+        arguments.extend(diff.args().iter().cloned());
+        arguments.push(DIFF_SEPARATOR.to_string());
+
+        return (DIFF_PROGRAM.to_string(), arguments);
+    };
+
+    let mut arguments = tool.arguments().to_vec();
+    arguments.extend(diff.args().iter().cloned());
+
+    (tool.program().to_string(), arguments)
+}
+
+fn build_command(root: &Path, side: Side, program: &str, arguments: &[String]) -> Command {
+    let mut command = Command::new(program);
+    command.current_dir(root);
+    command.args(arguments);
+    command.args([side.dir(), Side::System.dir()]);
+    command
+}
+
+fn shows(status: FileStatus) -> bool {
+    matches!(
+        status,
+        FileStatus::Missing | FileStatus::Differs | FileStatus::Unreadable
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+    use std::os::unix::fs::PermissionsExt;
+
+    use crate::lua::{Custom, Tool, from_source};
+
+    use super::*;
+
+    fn arguments(command: &Command) -> Vec<String> {
+        command
+            .get_args()
+            .map(|argument| argument.to_string_lossy().to_string())
+            .collect()
+    }
+
+    fn commanded(diff: &Diff, side: Side) -> Command {
+        let (program, arguments) = invocation(diff);
+
+        build_command(
+            Path::new("/tmp/luadot-diff-1-0"),
+            side,
+            &program,
+            &arguments,
+        )
+    }
+
+    #[test]
+    fn only_the_states_with_something_to_show_are_diffed() {
+        assert!(shows(FileStatus::Missing));
+        assert!(shows(FileStatus::Differs));
+        assert!(shows(FileStatus::Unreadable));
+        assert!(!shows(FileStatus::Synced));
+        assert!(!shows(FileStatus::Unlinked));
+    }
+
+    #[test]
+    fn git_compares_the_two_sides_from_inside_the_mirror() {
+        let command = commanded(&Diff::default(), Side::Repository);
+
+        assert_eq!(command.get_program(), OsStr::new("git"));
+        assert_eq!(
+            command.get_current_dir(),
+            Some(Path::new("/tmp/luadot-diff-1-0"))
+        );
+        assert_eq!(
+            arguments(&command),
+            [
+                "diff",
+                "--no-index",
+                "--no-prefix",
+                "--",
+                "repository",
+                "system"
+            ]
+        );
+    }
+
+    #[test]
+    fn what_a_template_produces_is_compared_from_its_own_side() {
+        let command = commanded(&Diff::default(), Side::Generated);
+        let arguments = arguments(&command);
+
+        assert_eq!(arguments.last().unwrap(), "system");
+        assert_eq!(arguments[arguments.len() - 2], "generated");
+    }
+
+    #[test]
+    fn the_arguments_of_the_configuration_reach_git_before_the_two_sides() {
+        let diff = Diff::default().with_args(Some(vec!["--stat".to_string()]));
+
+        let command = commanded(&diff, Side::Repository);
+
+        assert_eq!(command.get_program(), OsStr::new("git"));
+        assert_eq!(
+            arguments(&command),
+            [
+                "diff",
+                "--no-index",
+                "--no-prefix",
+                "--stat",
+                "--",
+                "repository",
+                "system"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_tool_of_its_own_replaces_git_and_keeps_the_two_sides_last() {
+        let diff = Diff::default()
+            .with_tool(Some(Tool::new(
+                "difft".to_string(),
+                vec!["--color".to_string()],
+            )))
+            .with_args(Some(vec!["always".to_string()]));
+
+        let command = commanded(&diff, Side::Repository);
+
+        assert_eq!(command.get_program(), OsStr::new("difft"));
+        assert_eq!(
+            arguments(&command),
+            ["--color", "always", "repository", "system"]
+        );
+    }
+
+    #[test]
+    fn the_summary_names_the_side_it_counts() {
+        assert_eq!(named(Side::Repository), "managed");
+        assert_eq!(named(Side::Generated), "generated");
+    }
+
+    #[test]
+    fn a_customized_summary_reads_the_line_it_replaces() {
+        let config = from_source(
+            r#"ld.on.diff({ summary = function(counts)
+                 return counts.side .. " " .. counts.drifted .. "/" .. counts.total
+               end })"#,
+        )
+        .unwrap();
+
+        let counts = DiffCounts::new(Side::Generated, 1, 12, "unused".to_string());
+        let shown = config
+            .diff()
+            .summary()
+            .unwrap()
+            .shown(&what(CUSTOM_SUMMARY), &counts)
+            .unwrap();
+
+        assert_eq!(shown, Some("generated 1/12".to_string()));
+    }
+
+    #[test]
+    fn a_customized_entry_reads_both_sides_of_the_file() {
+        let config = from_source(
+            r#"ld.on.diff({ entry = function(file)
+                 return file.state .. " " .. file.path .. " " .. file.mode.source
+               end })"#,
+        )
+        .unwrap();
+
+        let file = DiffFile::new(
+            PathBuf::from("home/.bashrc"),
+            PathBuf::from("/home/u/.bashrc"),
+            Side::Repository,
+            DiffState::Differs,
+        )
+        .with_source(b"managed\n".to_vec(), 0o644);
+
+        let shown = config
+            .diff()
+            .entry()
+            .unwrap()
+            .shown(&what(CUSTOM_ENTRY), &file)
+            .unwrap();
+
+        assert_eq!(shown, Some("differs home/.bashrc 0644".to_string()));
+    }
+
+    #[test]
+    fn a_render_call_is_handed_every_drifted_file() {
+        let config = from_source(
+            r#"ld.on.diff({ render = function(files)
+                 local names = {}
+                 for _, file in ipairs(files) do names[#names + 1] = file.path end
+                 return table.concat(names, ",")
+               end })"#,
+        )
+        .unwrap();
+
+        let files = [
+            DiffFile::new(
+                PathBuf::from("home/.bashrc"),
+                PathBuf::from("/home/u/.bashrc"),
+                Side::Repository,
+                DiffState::Missing,
+            ),
+            DiffFile::new(
+                PathBuf::from("home/.vimrc"),
+                PathBuf::from("/home/u/.vimrc"),
+                Side::Repository,
+                DiffState::Differs,
+            ),
+        ];
+
+        let shown = config
+            .diff()
+            .render()
+            .unwrap()
+            .shown(
+                &what(CUSTOM_RENDER),
+                files.iter().collect::<Vec<&DiffFile>>(),
+            )
+            .unwrap();
+
+        assert_eq!(shown, Some("home/.bashrc,home/.vimrc".to_string()));
+    }
+
+    #[test]
+    fn a_customization_that_answers_with_nothing_prints_nothing() {
+        assert_eq!(
+            Custom::Silent.shown(&what(CUSTOM_SUMMARY), ()).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn the_system_side_is_read_only_when_it_is_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(".bashrc");
+        std::fs::write(&file, "handwritten\n").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+        let System::Holds(contents, mode) = system_side(&file).unwrap() else {
+            panic!("a regular file holds its contents");
+        };
+        assert_eq!(contents, b"handwritten\n");
+        assert_eq!(mode, 0o600);
+
+        assert!(matches!(
+            system_side(&dir.path().join("gone")).unwrap(),
+            System::Absent
+        ));
+        assert!(matches!(system_side(dir.path()).unwrap(), System::Other));
+
+        let dangling = dir.path().join(".zshrc");
+        std::os::unix::fs::symlink(dir.path().join("gone"), &dangling).unwrap();
+        assert!(matches!(system_side(&dangling).unwrap(), System::Absent));
+    }
+
+    #[test]
+    fn a_file_the_system_holds_the_same_way_only_drifted_in_its_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("app.conf");
+        std::fs::write(&dest, "conf\n").unwrap();
+        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+        let items = [Item {
+            relative: PathBuf::from("root/etc/app.conf"),
+            dest,
+            contents: b"conf\n".to_vec(),
+            mode: Some(0o644),
+        }];
+
+        let files = inspected(Side::Repository, &items).unwrap();
+
+        assert_eq!(files[0].state(), DiffState::Mode);
+        assert_eq!(files[0].mode(), 0o644);
+        assert_eq!(files[0].found_mode(), Some(0o600));
+        assert!(!files[0].state().staged());
+    }
+
+    #[test]
+    fn a_file_the_system_does_not_hold_carries_the_repository_side_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let items = [Item {
+            relative: PathBuf::from("home/.bashrc"),
+            dest: dir.path().join("gone"),
+            contents: b"managed\n".to_vec(),
+            mode: None,
+        }];
+
+        let files = inspected(Side::Repository, &items).unwrap();
+
+        assert_eq!(files[0].state(), DiffState::Missing);
+        assert_eq!(files[0].mode(), SYSTEM_TEXT_MODE);
+        assert_eq!(files[0].found(), None);
+        assert!(files[0].state().staged());
+    }
+
+    #[test]
+    fn generated_content_carries_the_mode_the_template_declares() {
+        let dest = PathBuf::from("/home/u/.netrc");
+        let output = Output::new(
+            dest.clone(),
+            Content::Text("machine example\n".to_string()),
+            None,
+            None,
+        );
+        let relative = Path::new("home/.netrc");
+
+        let (contents, mode) = expected(&Config::default(), relative, &output).unwrap();
+        assert_eq!(contents, b"machine example\n");
+        assert_eq!(mode, None);
+
+        let (_, mode) =
+            expected(&Config::default(), relative, &output.with_mode(Some(0o600))).unwrap();
+        assert_eq!(mode, Some(0o600));
+    }
+
+    #[test]
+    fn a_selected_file_is_read_from_the_repository_with_its_own_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("laptop.zsh");
+        std::fs::write(&source, "laptop\n").unwrap();
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o640)).unwrap();
+
+        let output = Output::new(
+            PathBuf::from("/home/u/.zshrc"),
+            Content::File(source),
+            None,
+            None,
+        );
+
+        let (contents, mode) =
+            expected(&Config::default(), Path::new("home/.zshrc"), &output).unwrap();
+
+        assert_eq!(contents, b"laptop\n");
+        assert_eq!(mode, Some(0o640));
+    }
+
+    #[test]
+    fn a_drifted_generated_file_is_staged_on_both_sides() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let dir = repo.join("home/.zshrc.luadot");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
+        std::fs::write(home.join(".zshrc"), "handwritten\n").unwrap();
+
+        let produced = resolve(&home, &repo, &[Entry::Template(dir)], &Classes::default()).unwrap();
+        let drifted = generated_items(&Config::default(), &home, &produced).unwrap();
+
+        assert_eq!(drifted.len(), 1);
+        assert_eq!(drifted[0].relative, Path::new("home/.zshrc"));
+        assert_eq!(drifted[0].contents, b"generated\n");
+    }
+
+    #[test]
+    fn a_generated_file_the_system_already_holds_is_left_out() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let repo = root.path().join("repo");
+        let dir = repo.join("home/.zshrc.luadot");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
+        std::fs::write(home.join(".zshrc"), "generated\n").unwrap();
+
+        let produced = resolve(&home, &repo, &[Entry::Template(dir)], &Classes::default()).unwrap();
+
+        assert!(
+            generated_items(&Config::default(), &home, &produced)
+                .unwrap()
+                .is_empty()
+        );
+    }
+}
