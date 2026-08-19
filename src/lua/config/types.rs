@@ -59,6 +59,7 @@ impl Default for Config {
 pub enum Matcher {
     Glob(Pattern),
     Regex(Regex),
+    Any(Vec<Matcher>),
 }
 
 #[derive(Debug, Clone)]
@@ -285,6 +286,7 @@ impl Matcher {
         match self {
             Self::Glob(pattern) => pattern.matches_path_with(relative, MATCH),
             Self::Regex(regex) => regex.is_match(&relative.to_string_lossy()),
+            Self::Any(matchers) => matchers.iter().any(|matcher| matcher.matches(relative)),
         }
     }
 }
@@ -294,6 +296,10 @@ impl fmt::Display for Matcher {
         match self {
             Self::Glob(pattern) => write!(formatter, "{pattern}"),
             Self::Regex(regex) => write!(formatter, "/{regex}/"),
+            Self::Any(matchers) => {
+                let joined: Vec<String> = matchers.iter().map(Self::to_string).collect();
+                write!(formatter, "{{{}}}", joined.join(", "))
+            }
         }
     }
 }
@@ -478,6 +484,26 @@ mod tests {
             Matcher::Regex(Regex::new(r"^\.ssh").unwrap()).to_string(),
             r"/^\.ssh/"
         );
+        assert_eq!(
+            Matcher::Any(vec![
+                Matcher::Glob(Pattern::new(".ssh/**").unwrap()),
+                Matcher::Regex(Regex::new(r"^\.gnupg").unwrap()),
+            ])
+            .to_string(),
+            r"{.ssh/**, /^\.gnupg/}"
+        );
+    }
+
+    #[test]
+    fn a_matcher_holding_alternatives_matches_any_of_them() {
+        let matcher = Matcher::Any(vec![
+            Matcher::Glob(Pattern::new("**/*.tmp").unwrap()),
+            Matcher::Regex(Regex::new(r"\.sw[po]$").unwrap()),
+        ]);
+
+        assert!(matcher.matches(Path::new(".cache/build.tmp")));
+        assert!(matcher.matches(Path::new(".vimrc.swp")));
+        assert!(!matcher.matches(Path::new(".vimrc")));
     }
 
     #[test]

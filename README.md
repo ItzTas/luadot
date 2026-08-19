@@ -499,6 +499,17 @@ match linear in the length of the path.
 
 [regex]: https://docs.rs/regex/latest/regex/#syntax
 
+Either key also takes a table of patterns instead of a single one, and the rule
+then covers whatever any of them matches — one rule where several identical ones
+would otherwise be written.
+
+```lua
+ld.rules({
+  { match = { "**/*.tmp", "home/.cache/**" }, ignore = true },
+  { regex = { "^home/\\.local/state/", "\\.sw[po]$" }, ignore = true },
+})
+```
+
 A rule carries seven more keys, all optional next to `match` or `regex`:
 
 | Key | Values | Effect |

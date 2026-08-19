@@ -5,6 +5,7 @@ use super::path::Paths;
 use super::surface::Surface;
 use super::{alt, argv, class, cmd, crypt, git, on, opt, path, pkg, print, root, setup, sys};
 use crate::lua::Config;
+use crate::lua::lpeg;
 use crate::state::Classes;
 
 type Namespace = fn(&Lua) -> mlua::Result<Table>;
@@ -34,6 +35,7 @@ pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) ->
     ld.set(git::NAMESPACE, git::table(lua, paths)?)?;
     ld.set(path::NAMESPACE, path::table(lua, paths)?)?;
     ld.set(setup::NAMESPACE, setup::table(lua, paths)?)?;
+    lpeg::install(lua, &ld)?;
 
     lua.globals().set(API, ld)
 }
@@ -91,6 +93,8 @@ mod tests {
         assert(type(ld.sys.has_battery()) == "boolean", "sys.has_battery is missing")
         assert(type(ld.path.home) == "string", "path.home is missing")
         assert(type(ld.path.config) == "string", "path.config is missing")
+        assert(type(ld.lpeg.P) == "function", "lpeg is missing")
+        assert(type(ld.re.match) == "function", "re is missing")
     "#;
 
     fn paths() -> Paths {

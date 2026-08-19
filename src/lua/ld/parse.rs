@@ -1,5 +1,5 @@
 use glob::Pattern;
-use mlua::Table;
+use mlua::{Table, Value};
 use regex::Regex;
 
 use super::constants::{CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX};
@@ -15,19 +15,53 @@ pub fn chain(err: anyhow::Error) -> mlua::Error {
 }
 
 pub fn matcher(entry: &Table) -> mlua::Result<Matcher> {
-    let glob: Option<String> = entry.get(MATCH)?;
-    let expression: Option<String> = entry.get(REGEX)?;
+    let glob: Option<Value> = entry.get(MATCH)?;
+    let expression: Option<Value> = entry.get(REGEX)?;
 
     match (glob, expression) {
         (Some(_), Some(_)) => Err(external(format!(
             "a rule takes `{MATCH}` or `{REGEX}`, not both"
         ))),
-        (Some(glob), None) => pattern(&glob),
-        (None, Some(expression)) => regex(&expression),
+        (Some(glob), None) => alternatives(&glob, MATCH, pattern),
+        (None, Some(expression)) => alternatives(&expression, REGEX, regex),
         (None, None) => Err(external(format!(
             "a rule needs a `{MATCH}` or `{REGEX}` pattern"
         ))),
     }
+}
+
+fn alternatives(
+    value: &Value,
+    field: &str,
+    build: fn(&str) -> mlua::Result<Matcher>,
+) -> mlua::Result<Matcher> {
+    if let Some(raw) = value.as_string() {
+        return build(&raw.to_str()?);
+    }
+
+    let list = value
+        .as_table()
+        .ok_or_else(|| external(format!("`{field}` takes a string or a table of strings")))?;
+
+    let mut matchers = list
+        .clone()
+        .sequence_values::<String>()
+        .enumerate()
+        .map(|(index, raw)| {
+            let raw = raw
+                .map_err(|_| external(format!("`{field}` entry {} is not a string", index + 1)))?;
+            build(&raw)
+        })
+        .collect::<mlua::Result<Vec<_>>>()?;
+
+    if matchers.is_empty() {
+        return Err(external(format!("`{field}` needs at least one pattern")));
+    }
+    if matchers.len() == 1 {
+        return Ok(matchers.remove(0));
+    }
+
+    Ok(Matcher::Any(matchers))
 }
 
 pub fn pattern(raw: &str) -> mlua::Result<Matcher> {

@@ -30,6 +30,14 @@ serde_json = "1"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
+[build-dependencies]
+cc = "1.2.63"
+flate2 = "1.1.9"
+lua-src = "550.0.0"
+sha2 = "0.11.0"
+tar = "0.4.46"
+ureq = "3.4.0"
+
 [dev-dependencies]
 assert_cmd = "2.2.2"
 criterion = "0.8.2"

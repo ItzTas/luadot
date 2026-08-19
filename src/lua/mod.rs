@@ -4,6 +4,7 @@ mod constants;
 mod embed;
 mod exec;
 mod ld;
+mod lpeg;
 mod runtime;
 mod script;
 mod setup;

@@ -3,9 +3,13 @@ use std::path::Path;
 use mlua::{Lua, Table, Value};
 
 use super::constants::MODULES_DIR;
+use super::lpeg;
 
 pub fn runtime() -> mlua::Result<Lua> {
-    Ok(Lua::new())
+    let lua = Lua::new();
+    lpeg::preload(&lua)?;
+
+    Ok(lua)
 }
 
 pub fn environment(lua: &Lua, vars: Option<Table>) -> mlua::Result<Table> {

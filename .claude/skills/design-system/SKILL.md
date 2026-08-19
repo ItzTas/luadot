@@ -38,6 +38,7 @@ Keep this file short. One line per rule.
 - Do not test what another test already covers, even indirectly: before adding one, look for a test reaching the same code through a wider path — a shared helper tested on its own, an end-to-end run, a sibling case funnelling into the same function.
 - One test per behavior, at the layer that owns it: each test must fail for a reason none of the others would.
 - Benchmarks reach the code through the library, one `benches/<area>.rs` per area with a `[[bench]]` entry carrying `harness = false`; shared fixtures go in `benches/support/`.
-- New capability for the configuration is added to the `ld` API, never by unlocking the runtime: `Lua::new()` stays safe (no `ffi`, no C modules) and the language stays PUC Lua 5.4.
+- New capability for the configuration is added to the `ld` API, never by unlocking the runtime: `Lua::new()` stays safe (no `ffi`, no loadable C modules) and the language stays PUC Lua 5.4.
+- The only C code linked into the runtime is lpeg: `lua/lpeg/` puts `lpeg` and `re` in `package.preload` and mirrors them as `ld.lpeg`/`ld.re` through the `ld` metatable, and `build.rs` fetches and compiles the upstream sources. Adding another one needs a decision, not a patch.
 - One `ld` function per file, one directory per group: `ld/root/` is `ld.<function>`, and a named group (`ld/git/`) owns its `NAMESPACE` and becomes `ld.<namespace>.<function>`. Each group has a `table.rs` listing its functions.
 - No comments anywhere.

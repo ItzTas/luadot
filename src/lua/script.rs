@@ -11,7 +11,7 @@ pub fn run_script(
     command: &str,
     surface: Surface,
     path: &Path,
-    modules: &Path,
+    modules: &[&Path],
     paths: &Paths,
     classes: &Classes,
 ) -> Result<()> {
@@ -34,7 +34,7 @@ pub fn run_source(
     surface: Surface,
     source: &str,
     name: &str,
-    modules: &Path,
+    modules: &[&Path],
     paths: &Paths,
     classes: &Classes,
 ) -> Result<()> {
@@ -42,8 +42,10 @@ pub fn run_source(
     install(&lua, surface, paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
 
-    add_module_path(&lua, modules)
-        .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
+    for dir in modules.iter().rev() {
+        add_module_path(&lua, dir)
+            .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
+    }
 
     lua.load(source)
         .set_name(name)

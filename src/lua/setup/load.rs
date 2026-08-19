@@ -6,7 +6,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use super::constants::{LUA_EXT, SETUP_DIR, SH_EXT};
+use super::constants::{INIT_STEM, LUA_EXT, SETUP_DIR, SH_EXT};
 use crate::lua::ld::{Paths, Surface};
 use crate::lua::script::run_script;
 use crate::state::{self, Classes};
@@ -47,7 +47,7 @@ pub fn run_one(
     };
 
     enter(command, name)?;
-    let result = run_path(command, &path, home, config, repo, classes);
+    let result = run_path(command, &dir, &path, home, config, repo, classes);
     leave(name);
     result
 }
@@ -72,11 +72,8 @@ pub fn list(command: &str, dir: &Path) -> Result<Vec<String>> {
         let path = entry
             .with_context(|| format!("{command}: failed to read {}", dir.display()))?
             .path();
-        if !path.is_file() || !known_extension(&path) {
-            continue;
-        }
-        if let Some(stem) = path.file_stem().and_then(OsStr::to_str) {
-            names.insert(stem.to_string());
+        if let Some(name) = setup_name(&path) {
+            names.insert(name);
         }
     }
     Ok(names.into_iter().collect())
@@ -97,10 +94,39 @@ pub fn ordered(command: &str, names: Vec<String>, order: &[String]) -> Result<Ve
 }
 
 fn find(dir: &Path, name: &str) -> Option<PathBuf> {
+    let entry = dir.join(name);
+    let candidates = [
+        dir.join(format!("{name}.{LUA_EXT}")),
+        dir.join(format!("{name}.{SH_EXT}")),
+        entry.join(format!("{INIT_STEM}.{LUA_EXT}")),
+        entry.join(format!("{INIT_STEM}.{SH_EXT}")),
+    ];
+
+    candidates.into_iter().find(|candidate| candidate.is_file())
+}
+
+fn setup_name(path: &Path) -> Option<String> {
+    if path.is_dir() {
+        return match has_init(path) {
+            true => file_part(path, Path::file_name),
+            false => None,
+        };
+    }
+    if !path.is_file() || !known_extension(path) {
+        return None;
+    }
+
+    file_part(path, Path::file_stem)
+}
+
+fn file_part(path: &Path, part: fn(&Path) -> Option<&OsStr>) -> Option<String> {
+    part(path).and_then(OsStr::to_str).map(str::to_string)
+}
+
+fn has_init(dir: &Path) -> bool {
     [LUA_EXT, SH_EXT]
         .into_iter()
-        .map(|ext| dir.join(format!("{name}.{ext}")))
-        .find(|candidate| candidate.is_file())
+        .any(|ext| dir.join(format!("{INIT_STEM}.{ext}")).is_file())
 }
 
 fn known_extension(path: &Path) -> bool {
@@ -111,22 +137,28 @@ fn known_extension(path: &Path) -> bool {
 
 fn run_path(
     command: &str,
+    root: &Path,
     path: &Path,
     home: &Path,
     config: &Path,
     repo: &Path,
     classes: &Classes,
 ) -> Result<()> {
-    if path.extension().is_some_and(|ext| ext == LUA_EXT) {
-        let modules = path
-            .parent()
-            .and_then(Path::parent)
-            .with_context(|| format!("{command}: {} has no parent directory", path.display()))?;
-        let paths = Paths::new(home, config).with_repo(Some(repo));
-        return run_script(command, Surface::Setup, path, modules, &paths, classes);
+    if path.extension().is_none_or(|ext| ext != LUA_EXT) {
+        return run_sh(command, path);
     }
 
-    run_sh(command, path)
+    let modules = root
+        .parent()
+        .with_context(|| format!("{command}: {} has no parent directory", root.display()))?;
+    let own = path.parent().filter(|parent| *parent != root);
+    let mut paths = Paths::new(home, config).with_repo(Some(repo));
+    if let Some(dir) = own {
+        paths = paths.with_dir(dir);
+    }
+    let roots: Vec<&Path> = own.into_iter().chain([modules]).collect();
+
+    run_script(command, Surface::Setup, path, &roots, &paths, classes)
 }
 
 fn run_sh(command: &str, path: &Path) -> Result<()> {
@@ -181,8 +213,8 @@ mod tests {
 
     fn write_setup(home: &Path, config: &Path, repo: &Path, file: &str, source: &str) -> PathBuf {
         let dir = setup_dir("test", home, config, repo).unwrap();
-        std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, source).unwrap();
         path
     }
@@ -244,6 +276,89 @@ mod tests {
 
         assert_eq!(find(&dir, "ufw").unwrap(), sh);
         assert!(find(&dir, "docker").is_none());
+    }
+
+    #[test]
+    fn list_names_a_directory_holding_an_init() {
+        let root = tempfile::tempdir().unwrap();
+        let (home, config, repo) = dirs(root.path());
+        write_setup(&home, &config, &repo, "ufw/init.lua", "");
+        write_setup(&home, &config, &repo, "docker/init.sh", "");
+        write_setup(&home, &config, &repo, "notes/readme.md", "");
+
+        let dir = setup_dir("test", &home, &config, &repo).unwrap();
+
+        assert_eq!(list("test", &dir).unwrap(), ["docker", "ufw"]);
+    }
+
+    #[test]
+    fn find_falls_back_to_a_directory_init() {
+        let root = tempfile::tempdir().unwrap();
+        let (home, config, repo) = dirs(root.path());
+        let init = write_setup(&home, &config, &repo, "ufw/init.sh", "");
+        let file = write_setup(&home, &config, &repo, "docker.sh", "");
+        write_setup(&home, &config, &repo, "docker/init.lua", "");
+        let dir = setup_dir("test", &home, &config, &repo).unwrap();
+
+        assert_eq!(find(&dir, "ufw").unwrap(), init);
+        assert_eq!(find(&dir, "docker").unwrap(), file);
+    }
+
+    #[test]
+    fn a_directory_setup_knows_its_own_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let (home, config, repo) = dirs(root.path());
+        write_setup(
+            &home,
+            &config,
+            &repo,
+            "ufw/init.lua",
+            r#"
+            local out = assert(io.open(ld.path.repo .. "/dir.txt", "w"))
+            out:write(ld.path.dir)
+            out:close()
+            "#,
+        );
+
+        run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap();
+
+        let dir = setup_dir("test", &home, &config, &repo).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(repo.join("dir.txt")).unwrap(),
+            dir.join("ufw").display().to_string()
+        );
+    }
+
+    #[test]
+    fn a_directory_setup_requires_its_own_modules_and_the_shared_ones() {
+        let root = tempfile::tempdir().unwrap();
+        let (home, config, repo) = dirs(root.path());
+        write_setup(&home, &config, &repo, "ufw/lua/own.lua", r#"return "own""#);
+        let shared = setup_dir("test", &home, &config, &repo)
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("lua/shared.lua");
+        std::fs::create_dir_all(shared.parent().unwrap()).unwrap();
+        std::fs::write(&shared, r#"return "shared""#).unwrap();
+        write_setup(
+            &home,
+            &config,
+            &repo,
+            "ufw/init.lua",
+            r#"
+            local out = assert(io.open(ld.path.repo .. "/modules.txt", "w"))
+            out:write(require("own") .. "/" .. require("shared"))
+            out:close()
+            "#,
+        );
+
+        run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(repo.join("modules.txt")).unwrap(),
+            "own/shared"
+        );
     }
 
     #[test]

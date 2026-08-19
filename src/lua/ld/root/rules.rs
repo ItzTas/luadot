@@ -389,6 +389,109 @@ mod tests {
     }
 
     #[test]
+    fn a_match_takes_a_table_of_patterns() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = { "**/*.tmp", "**/*.swp" }, ignore = true },
+            })
+            "#,
+        );
+
+        assert!(config.is_ignored(Path::new("home/.cache/build.tmp")));
+        assert!(config.is_ignored(Path::new("home/.vimrc.swp")));
+        assert!(!config.is_ignored(Path::new("home/.vimrc")));
+    }
+
+    #[test]
+    fn a_regex_takes_a_table_of_expressions() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { regex = { "^home/\\.local/state/", "\\.sw[po]$" }, ignore = true },
+            })
+            "#,
+        );
+
+        assert!(config.is_ignored(Path::new("home/.local/state/nvim/log")));
+        assert!(config.is_ignored(Path::new("home/.vimrc.swp")));
+        assert!(!config.is_ignored(Path::new("home/.local/share/list")));
+    }
+
+    #[test]
+    fn a_table_of_patterns_carries_every_key_a_single_one_carries() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = { "home/.ssh/**", "home/.gnupg/**" }, mode = "0600", encrypt = true },
+            })
+            "#,
+        );
+
+        for path in ["home/.ssh/id_ed25519", "home/.gnupg/private-keys"] {
+            assert_eq!(config.mode(Path::new(path)), Some(0o600), "{path}");
+            assert!(config.encrypt(Path::new(path)), "{path}");
+        }
+        assert_eq!(config.mode(Path::new("home/.bashrc")), None);
+    }
+
+    #[test]
+    fn a_later_rule_takes_a_file_back_from_a_table_of_patterns() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = { "home/.cache/**", "home/.config/**/Cache/**" }, ignore = true },
+              { match = "home/.cache/keep/**", ignore = false },
+            })
+            "#,
+        );
+
+        assert!(config.is_ignored(Path::new("home/.cache/nvim/log")));
+        assert!(config.is_ignored(Path::new("home/.config/chromium/Cache/data")));
+        assert!(!config.is_ignored(Path::new("home/.cache/keep/list")));
+    }
+
+    #[test]
+    fn rejects_an_empty_table_of_patterns() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = {}, ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("needs at least one pattern"));
+    }
+
+    #[test]
+    fn rejects_a_pattern_that_is_neither_a_string_nor_a_table() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = 7, ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("takes a string or a table of strings"));
+    }
+
+    #[test]
+    fn rejects_a_table_entry_that_is_not_a_string() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = { ".ssh/**", true }, ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("entry 2 is not a string"));
+    }
+
+    #[test]
+    fn rejects_an_invalid_pattern_inside_a_table() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = { ".ssh/**", "[" }, ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("invalid pattern `[`"));
+    }
+
+    #[test]
     fn rejects_a_rule_carrying_both_syntaxes() {
         let err = format!(
             "{:#}",
