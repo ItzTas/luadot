@@ -21,12 +21,43 @@ pub fn add_cmd(args: AddArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("add")?;
 
     let pairs = plan(&home, &repo, &args.paths, &config)?;
-    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
+    let lock = config.crypt_lock();
+    require_plugins(&config, lock, &repo, &pairs)?;
 
+    let mut added = Vec::with_capacity(pairs.len());
     for (source, dest) in pairs {
         link_into_repo(&config, lock, &repo, &source, &dest)?;
+        added.push(dest);
     }
-    Ok(())
+
+    git::stage("add", &repo, &added)?;
+
+    let automatic = utils::automatic(&config, &repo, &added);
+    git::auto("add", &repo, automatic.commits, automatic.pushes)
+}
+
+fn require_plugins(
+    config: &Config,
+    lock: crypt::Lock,
+    repo: &Path,
+    pairs: &[(PathBuf, PathBuf)],
+) -> Result<()> {
+    let encrypts = pairs.iter().any(|(_, dest)| {
+        matches!(
+            crypt::split(utils::relative(repo, dest)),
+            Some((stripped, crypt::Backend::Age)) if config.encrypt(&stripped)
+        )
+    });
+    if !encrypts {
+        return Ok(());
+    }
+
+    crypt::require_recipient_plugins(
+        "add",
+        crypt::Backend::Age,
+        lock,
+        config.crypt_secrets().recipients(),
+    )
 }
 
 fn plan(
@@ -210,7 +241,7 @@ fn link_into_repo(
             "add",
             backend,
             lock,
-            config.crypt_recipients(),
+            config.crypt_secrets().recipients(),
             &contents,
             dest,
         );

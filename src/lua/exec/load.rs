@@ -56,7 +56,7 @@ fn run(
             Surface::Exec,
             source,
             SOURCE_NAME,
-            config,
+            &[config],
             paths,
             classes,
         ),
@@ -64,7 +64,9 @@ fn run(
 }
 
 fn run_file(command: &str, path: &Path, paths: &Paths, classes: &Classes) -> Result<()> {
-    run_script(command, Surface::Exec, path, &modules(path), paths, classes)
+    let modules = modules(path);
+
+    run_script(command, Surface::Exec, path, &[&modules], paths, classes)
 }
 
 fn modules(path: &Path) -> PathBuf {

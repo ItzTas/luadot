@@ -1,10 +1,6 @@
 mod backend;
 mod constants;
-mod identity;
-mod identity_command;
-mod passphrase;
-mod passphrase_warn;
-mod recipients;
+mod lock;
 mod table;
 
 pub use constants::NAMESPACE;

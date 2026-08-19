@@ -1,11 +1,15 @@
 use std::io::Write;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
-use super::constants::{GENERATED_SIDE, MIRROR_MODE, MIRROR_PREFIX, REPOSITORY_SIDE, SYSTEM_SIDE};
+use super::constants::{
+    GENERATED_SIDE, MIRROR_ADD, MIRROR_GIT, MIRROR_INIT, MIRROR_MODE, MIRROR_PREFIX, MIRROR_TREE,
+    REPOSITORY_SIDE, SYSTEM_SIDE,
+};
 
 static MIRROR: AtomicU32 = AtomicU32::new(0);
 
@@ -19,6 +23,12 @@ pub enum Side {
 #[derive(Debug)]
 pub struct Mirror {
     command: String,
+    root: PathBuf,
+}
+
+#[derive(Debug)]
+pub struct Tracked<'a> {
+    mirror: &'a Mirror,
     root: PathBuf,
 }
 
@@ -65,32 +75,97 @@ impl Mirror {
     }
 
     pub fn place(&self, side: Side, relative: &Path, contents: &[u8], mode: u32) -> Result<()> {
-        let path = self.root.join(side.dir()).join(relative);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).with_context(|| {
-                format!("{}: failed to create {}", self.command, parent.display())
+        written(
+            &self.command,
+            &self.root.join(side.dir()).join(relative),
+            contents,
+            mode,
+        )
+    }
+
+    pub fn tracked(&self) -> Result<Tracked<'_>> {
+        let root = self.root.join(MIRROR_TREE);
+        std::fs::DirBuilder::new()
+            .mode(MIRROR_MODE)
+            .create(&root)
+            .with_context(|| format!("{}: failed to create {}", self.command, root.display()))?;
+
+        let tracked = Tracked { mirror: self, root };
+        tracked.git(&MIRROR_INIT)?;
+
+        Ok(tracked)
+    }
+}
+
+impl Tracked<'_> {
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub fn write(&self, relative: &Path, contents: &[u8], mode: u32) -> Result<()> {
+        written(
+            &self.mirror.command,
+            &self.root.join(relative),
+            contents,
+            mode,
+        )
+    }
+
+    pub fn erase(&self, relative: &Path) -> Result<()> {
+        let path = self.root.join(relative);
+        match std::fs::remove_file(&path) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            other => other.with_context(|| {
+                format!(
+                    "{}: failed to remove {}",
+                    self.mirror.command,
+                    path.display()
+                )
+            }),
+        }
+    }
+
+    pub fn stage(&self) -> Result<()> {
+        self.git(&MIRROR_ADD)
+    }
+
+    fn git(&self, arguments: &[&str]) -> Result<()> {
+        let command = &self.mirror.command;
+        let status = Command::new(MIRROR_GIT)
+            .current_dir(&self.root)
+            .args(arguments)
+            .status()
+            .with_context(|| {
+                format!("{command}: failed to run git; is it installed and on PATH?")
             })?;
+
+        if !status.success() {
+            bail!("{command}: git {} failed", arguments.join(" "));
         }
 
-        let failed = || format!("{}: failed to write {}", self.command, path.display());
-        std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(mode)
-            .open(&path)
-            .with_context(failed)?
-            .write_all(contents)
-            .with_context(failed)?;
-
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).with_context(|| {
-            format!(
-                "{}: failed to set the mode of {}",
-                self.command,
-                path.display()
-            )
-        })
+        Ok(())
     }
+}
+
+fn written(command: &str, path: &Path, contents: &[u8], mode: u32) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("{command}: failed to create {}", parent.display()))?;
+    }
+
+    let failed = || format!("{command}: failed to write {}", path.display());
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(mode)
+        .open(path)
+        .with_context(failed)?
+        .write_all(contents)
+        .with_context(failed)?;
+
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))
+        .with_context(|| format!("{command}: failed to set the mode of {}", path.display()))
 }
 
 impl Drop for Mirror {

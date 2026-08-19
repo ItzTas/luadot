@@ -1,0 +1,7 @@
+[lpeg]
+version = "1.1.0"
+url = "https://gitlab.digitalventura.com.br/luadot/deps/-/raw/d3dfdc67bf203e4b5c1fdc66c45dcdbf85ebf46e/opt/lpeg-{version}.tar.gz"
+upstream = "https://www.inf.puc-rio.br/~roberto/lpeg/lpeg-{version}.tar.gz"
+sha256 = "4b155d67d2246c1ffa7ad7bc466c1ea899bbc40fef0257cc9c03cecbaed4352a"
+files = ["*.c", "*.h", "re.lua", "README.md"]
+license = "lpeg.html#license"

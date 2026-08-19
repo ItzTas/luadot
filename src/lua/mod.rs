@@ -1,4 +1,5 @@
 mod bootstrap;
+mod bundled;
 mod config;
 mod constants;
 mod embed;

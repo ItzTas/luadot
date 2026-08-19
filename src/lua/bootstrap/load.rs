@@ -40,7 +40,14 @@ fn run_file(
         .with_context(|| format!("{command}: {} has no parent directory", path.display()))?;
     let paths = Paths::new(home, config).with_repo(Some(repo));
 
-    run_script(command, Surface::Bootstrap, path, modules, &paths, classes)
+    run_script(
+        command,
+        Surface::Bootstrap,
+        path,
+        &[modules],
+        &paths,
+        classes,
+    )
 }
 
 #[cfg(test)]

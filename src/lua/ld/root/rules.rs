@@ -49,6 +49,8 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
     let mode: Option<String> = entry.get("mode")?;
     let owner: Option<String> = entry.get("owner")?;
     let encrypt: Option<bool> = entry.get("encrypt")?;
+    let autocommit: Option<bool> = entry.get("autocommit")?;
+    let autopush: Option<bool> = entry.get("autopush")?;
 
     Ok(
         Rule::new(pattern, link_mode(link)?, conflict_policy(conflict)?)
@@ -56,7 +58,9 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
             .with_ignore(ignore)
             .with_mode(mode.map(|raw| mode_bits(&raw, "a rule")).transpose()?)
             .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?)
-            .with_encrypt(encrypt),
+            .with_encrypt(encrypt)
+            .with_autocommit(autocommit)
+            .with_autopush(autopush),
     )
 }
 
@@ -297,6 +301,73 @@ mod tests {
     }
 
     #[test]
+    fn a_rule_commits_and_pushes_the_files_it_matches_on_its_own() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = "home/.config/nvim/**", autocommit = true },
+              { match = "home/.ssh/**", autopush = true },
+            })
+            "#,
+        );
+
+        let nvim = Path::new("home/.config/nvim/init.lua");
+        assert!(config.autocommit(nvim));
+        assert!(!config.autopush(nvim));
+
+        let key = Path::new("home/.ssh/config");
+        assert!(config.autopush(key));
+        assert!(config.autocommit(key));
+
+        assert!(!config.autocommit(Path::new("home/.bashrc")));
+    }
+
+    #[test]
+    fn a_rule_takes_a_file_back_from_the_ones_committed_on_their_own() {
+        let config = configure(
+            r#"
+            ld.opt.autocommit(true)
+            ld.rules({ { match = "home/.ssh/**", autocommit = false } })
+            "#,
+        );
+
+        assert!(config.autocommit(Path::new("home/.bashrc")));
+        assert!(!config.autocommit(Path::new("home/.ssh/config")));
+    }
+
+    #[test]
+    fn a_rule_committing_nothing_pushes_nothing_either() {
+        let config = configure(
+            r#"
+            ld.opt.autopush(true)
+            ld.rules({ { match = "home/.netrc", autocommit = false } })
+            "#,
+        );
+
+        let netrc = Path::new("home/.netrc");
+        assert!(!config.autocommit(netrc));
+        assert!(!config.autopush(netrc));
+
+        let bashrc = Path::new("home/.bashrc");
+        assert!(config.autocommit(bashrc));
+        assert!(config.autopush(bashrc));
+    }
+
+    #[test]
+    fn a_rule_can_hold_the_push_back_and_keep_the_commit() {
+        let config = configure(
+            r#"
+            ld.opt.autopush(true)
+            ld.rules({ { match = "home/.netrc", autopush = false } })
+            "#,
+        );
+
+        let netrc = Path::new("home/.netrc");
+        assert!(config.autocommit(netrc));
+        assert!(!config.autopush(netrc));
+    }
+
+    #[test]
     fn rejects_an_invalid_mode() {
         let err = format!(
             "{:#}",
@@ -386,6 +457,109 @@ mod tests {
             config.link_mode(Path::new(".ssh/keys/id_ed25519")),
             LinkMode::Symbolic
         );
+    }
+
+    #[test]
+    fn a_match_takes_a_table_of_patterns() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = { "**/*.tmp", "**/*.swp" }, ignore = true },
+            })
+            "#,
+        );
+
+        assert!(config.is_ignored(Path::new("home/.cache/build.tmp")));
+        assert!(config.is_ignored(Path::new("home/.vimrc.swp")));
+        assert!(!config.is_ignored(Path::new("home/.vimrc")));
+    }
+
+    #[test]
+    fn a_regex_takes_a_table_of_expressions() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { regex = { "^home/\\.local/state/", "\\.sw[po]$" }, ignore = true },
+            })
+            "#,
+        );
+
+        assert!(config.is_ignored(Path::new("home/.local/state/nvim/log")));
+        assert!(config.is_ignored(Path::new("home/.vimrc.swp")));
+        assert!(!config.is_ignored(Path::new("home/.local/share/list")));
+    }
+
+    #[test]
+    fn a_table_of_patterns_carries_every_key_a_single_one_carries() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = { "home/.ssh/**", "home/.gnupg/**" }, mode = "0600", encrypt = true },
+            })
+            "#,
+        );
+
+        for path in ["home/.ssh/id_ed25519", "home/.gnupg/private-keys"] {
+            assert_eq!(config.mode(Path::new(path)), Some(0o600), "{path}");
+            assert!(config.encrypt(Path::new(path)), "{path}");
+        }
+        assert_eq!(config.mode(Path::new("home/.bashrc")), None);
+    }
+
+    #[test]
+    fn a_later_rule_takes_a_file_back_from_a_table_of_patterns() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = { "home/.cache/**", "home/.config/**/Cache/**" }, ignore = true },
+              { match = "home/.cache/keep/**", ignore = false },
+            })
+            "#,
+        );
+
+        assert!(config.is_ignored(Path::new("home/.cache/nvim/log")));
+        assert!(config.is_ignored(Path::new("home/.config/chromium/Cache/data")));
+        assert!(!config.is_ignored(Path::new("home/.cache/keep/list")));
+    }
+
+    #[test]
+    fn rejects_an_empty_table_of_patterns() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = {}, ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("needs at least one pattern"));
+    }
+
+    #[test]
+    fn rejects_a_pattern_that_is_neither_a_string_nor_a_table() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = 7, ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("takes a string or a table of strings"));
+    }
+
+    #[test]
+    fn rejects_a_table_entry_that_is_not_a_string() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = { ".ssh/**", true }, ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("entry 2 is not a string"));
+    }
+
+    #[test]
+    fn rejects_an_invalid_pattern_inside_a_table() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = { ".ssh/**", "[" }, ignore = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("invalid pattern `[`"));
     }
 
     #[test]

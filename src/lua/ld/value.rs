@@ -193,7 +193,7 @@ mod tests {
         let value = Value::String(lua.create_string("age1example").unwrap());
 
         assert_eq!(
-            keys("crypt", &value, "recipients").unwrap(),
+            keys("crypt.lock", &value, "recipients").unwrap(),
             ["age1example"]
         );
     }
@@ -206,7 +206,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            keys("crypt", &Value::Table(list), "recipients").unwrap(),
+            keys("crypt.lock", &Value::Table(list), "recipients").unwrap(),
             ["age1first", "age1second"]
         );
     }
@@ -216,11 +216,11 @@ mod tests {
         let lua = runtime().unwrap();
         let list = lua.create_table().unwrap();
 
-        let err = keys("crypt", &Value::Table(list), "recipients")
+        let err = keys("crypt.lock", &Value::Table(list), "recipients")
             .unwrap_err()
             .to_string();
 
-        assert!(err.contains("`ld.crypt.recipients` takes a key or a list of keys"));
+        assert!(err.contains("`ld.crypt.lock.recipients` takes a key or a list of keys"));
     }
 
     #[test]
@@ -228,11 +228,11 @@ mod tests {
         let lua = runtime().unwrap();
         let value = Value::String(lua.create_string("  ").unwrap());
 
-        assert!(keys("crypt", &value, "recipients").is_err());
+        assert!(keys("crypt.lock", &value, "recipients").is_err());
     }
 
     #[test]
     fn keys_rejects_anything_else() {
-        assert!(keys("crypt", &Value::Integer(1), "recipients").is_err());
+        assert!(keys("crypt.lock", &Value::Integer(1), "recipients").is_err());
     }
 }

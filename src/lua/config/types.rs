@@ -9,7 +9,7 @@ use super::constants::{CLASS_QUESTION, GIT_DIR, MATCH};
 use super::diff::Diff;
 use super::report::Report;
 use crate::backup::Retention;
-use crate::crypt::{Backend, Provider};
+use crate::crypt::{Backend, Identity, Lock, Secrets};
 use crate::files::{ConflictPolicy, LinkMode};
 
 #[derive(Debug, Clone)]
@@ -19,17 +19,16 @@ pub struct Config {
     rules: Vec<Rule>,
     classes: Vec<Class>,
     pkg_warn: bool,
+    passphrase_warn: bool,
+    autocommit: bool,
+    autopush: bool,
     backup: bool,
     backup_dir: Option<PathBuf>,
     backup_keep: Option<u32>,
     backup_age: Option<u64>,
     repo_dir: Option<PathBuf>,
     crypt_backend: Backend,
-    crypt_recipients: Vec<String>,
-    crypt_identity: Option<PathBuf>,
-    crypt_identity_command: Option<Provider>,
-    crypt_passphrase: bool,
-    crypt_passphrase_warn: bool,
+    crypt_secrets: Secrets,
     diff: Diff,
     status: Report,
     runtime: Option<Lua>,
@@ -43,17 +42,16 @@ impl Default for Config {
             rules: Vec::new(),
             classes: Vec::new(),
             pkg_warn: true,
+            passphrase_warn: true,
+            autocommit: false,
+            autopush: false,
             backup: true,
             backup_dir: None,
             backup_keep: None,
             backup_age: None,
             repo_dir: None,
             crypt_backend: Backend::default(),
-            crypt_recipients: Vec::new(),
-            crypt_identity: None,
-            crypt_identity_command: None,
-            crypt_passphrase: false,
-            crypt_passphrase_warn: true,
+            crypt_secrets: Secrets::default(),
             diff: Diff::default(),
             status: Report::default(),
             runtime: None,
@@ -65,6 +63,7 @@ impl Default for Config {
 pub enum Matcher {
     Glob(Pattern),
     Regex(Regex),
+    Any(Vec<Matcher>),
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +76,8 @@ pub struct Rule {
     mode: Option<u32>,
     owner: Option<String>,
     encrypt: Option<bool>,
+    autocommit: Option<bool>,
+    autopush: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,6 +139,14 @@ impl Config {
         self.pkg_warn
     }
 
+    pub fn set_autocommit(&mut self, autocommit: bool) {
+        self.autocommit = autocommit;
+    }
+
+    pub fn set_autopush(&mut self, autopush: bool) {
+        self.autopush = autopush;
+    }
+
     pub fn set_backup(&mut self, backup: bool) {
         self.backup = backup;
     }
@@ -190,44 +199,28 @@ impl Config {
         self.crypt_backend
     }
 
-    pub fn set_crypt_recipients(&mut self, recipients: Vec<String>) {
-        self.crypt_recipients = recipients;
+    pub fn set_crypt_secrets(&mut self, secrets: Secrets) {
+        self.crypt_secrets = secrets;
     }
 
-    pub fn crypt_recipients(&self) -> &[String] {
-        &self.crypt_recipients
+    pub fn crypt_secrets(&self) -> &Secrets {
+        &self.crypt_secrets
     }
 
-    pub fn set_crypt_identity(&mut self, identity: PathBuf) {
-        self.crypt_identity = Some(identity);
+    pub fn crypt_lock(&self) -> Lock {
+        self.crypt_secrets.lock(self.passphrase_warn)
     }
 
-    pub fn crypt_identity(&self) -> Option<&Path> {
-        self.crypt_identity.as_deref()
+    pub fn crypt_identity(&self, home: &Path) -> Identity {
+        self.crypt_secrets.identity(home)
     }
 
-    pub fn set_crypt_identity_command(&mut self, provider: Provider) {
-        self.crypt_identity_command = Some(provider);
+    pub fn set_passphrase_warn(&mut self, warn: bool) {
+        self.passphrase_warn = warn;
     }
 
-    pub fn crypt_identity_command(&self) -> Option<&Provider> {
-        self.crypt_identity_command.as_ref()
-    }
-
-    pub fn set_crypt_passphrase(&mut self, passphrase: bool) {
-        self.crypt_passphrase = passphrase;
-    }
-
-    pub fn crypt_passphrase(&self) -> bool {
-        self.crypt_passphrase
-    }
-
-    pub fn set_crypt_passphrase_warn(&mut self, warn: bool) {
-        self.crypt_passphrase_warn = warn;
-    }
-
-    pub fn crypt_passphrase_warn(&self) -> bool {
-        self.crypt_passphrase_warn
+    pub fn passphrase_warn(&self) -> bool {
+        self.passphrase_warn
     }
 
     pub fn link(&self) -> LinkMode {
@@ -288,6 +281,28 @@ impl Config {
         self.matching(relative).filter_map(Rule::owner).next_back()
     }
 
+    pub fn autocommit(&self, relative: &Path) -> bool {
+        match self
+            .matching(relative)
+            .filter_map(Rule::autocommit)
+            .next_back()
+        {
+            Some(autocommit) => autocommit,
+            None => self.autocommit || self.autopush || self.pushed(relative),
+        }
+    }
+
+    pub fn autopush(&self, relative: &Path) -> bool {
+        self.autocommit(relative) && self.pushed(relative)
+    }
+
+    fn pushed(&self, relative: &Path) -> bool {
+        self.matching(relative)
+            .filter_map(Rule::autopush)
+            .next_back()
+            .unwrap_or(self.autopush)
+    }
+
     pub fn encrypt(&self, relative: &Path) -> bool {
         self.matching(relative)
             .filter_map(Rule::encrypt)
@@ -307,6 +322,7 @@ impl Matcher {
         match self {
             Self::Glob(pattern) => pattern.matches_path_with(relative, MATCH),
             Self::Regex(regex) => regex.is_match(&relative.to_string_lossy()),
+            Self::Any(matchers) => matchers.iter().any(|matcher| matcher.matches(relative)),
         }
     }
 }
@@ -316,6 +332,10 @@ impl fmt::Display for Matcher {
         match self {
             Self::Glob(pattern) => write!(formatter, "{pattern}"),
             Self::Regex(regex) => write!(formatter, "/{regex}/"),
+            Self::Any(matchers) => {
+                let joined: Vec<String> = matchers.iter().map(Self::to_string).collect();
+                write!(formatter, "{{{}}}", joined.join(", "))
+            }
         }
     }
 }
@@ -331,6 +351,8 @@ impl Rule {
             mode: None,
             owner: None,
             encrypt: None,
+            autocommit: None,
+            autopush: None,
         }
     }
 
@@ -356,6 +378,16 @@ impl Rule {
 
     pub fn with_encrypt(mut self, encrypt: Option<bool>) -> Self {
         self.encrypt = encrypt;
+        self
+    }
+
+    pub fn with_autocommit(mut self, autocommit: Option<bool>) -> Self {
+        self.autocommit = autocommit;
+        self
+    }
+
+    pub fn with_autopush(mut self, autopush: Option<bool>) -> Self {
+        self.autopush = autopush;
         self
     }
 
@@ -389,6 +421,14 @@ impl Rule {
 
     pub fn encrypt(&self) -> Option<bool> {
         self.encrypt
+    }
+
+    pub fn autocommit(&self) -> Option<bool> {
+        self.autocommit
+    }
+
+    pub fn autopush(&self) -> Option<bool> {
+        self.autopush
     }
 }
 
@@ -453,6 +493,8 @@ mod tests {
         assert_eq!(config.mode(path), None);
         assert_eq!(config.owner(path), None);
         assert!(!config.encrypt(path));
+        assert!(!config.autocommit(path));
+        assert!(!config.autopush(path));
     }
 
     #[test]
@@ -500,6 +542,26 @@ mod tests {
             Matcher::Regex(Regex::new(r"^\.ssh").unwrap()).to_string(),
             r"/^\.ssh/"
         );
+        assert_eq!(
+            Matcher::Any(vec![
+                Matcher::Glob(Pattern::new(".ssh/**").unwrap()),
+                Matcher::Regex(Regex::new(r"^\.gnupg").unwrap()),
+            ])
+            .to_string(),
+            r"{.ssh/**, /^\.gnupg/}"
+        );
+    }
+
+    #[test]
+    fn a_matcher_holding_alternatives_matches_any_of_them() {
+        let matcher = Matcher::Any(vec![
+            Matcher::Glob(Pattern::new("**/*.tmp").unwrap()),
+            Matcher::Regex(Regex::new(r"\.sw[po]$").unwrap()),
+        ]);
+
+        assert!(matcher.matches(Path::new(".cache/build.tmp")));
+        assert!(matcher.matches(Path::new(".vimrc.swp")));
+        assert!(!matcher.matches(Path::new(".vimrc")));
     }
 
     #[test]

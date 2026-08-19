@@ -7,6 +7,7 @@ use clap::Args;
 use crate::backup::Backup;
 use crate::crypt;
 use crate::files::{self, Entry};
+use crate::git;
 use crate::lua::Config;
 use crate::output;
 use crate::state::{self, Classes};
@@ -57,13 +58,8 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         return foresee(&home, &repo, &entries, &classes);
     }
 
-    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
-    let mut identity = crypt::Identity::new(
-        config
-            .crypt_identity()
-            .map(|path| utils::expand(&home, path)),
-        config.crypt_identity_command().cloned(),
-    );
+    let lock = config.crypt_lock();
+    let mut identity = config.crypt_identity(&home);
 
     if !args.yes && !confirmed(&repo, &entries)? {
         output::warn("aborted");
@@ -98,6 +94,11 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         };
         counts.record(&detached);
     }
+    let removed = removed(&entries);
+    git::unstage("rm", &repo, &removed)?;
+
+    let automatic = utils::automatic(&config, &repo, &removed);
+    git::auto("rm", &repo, automatic.commits, automatic.pushes)?;
 
     output::note(summary("stopped managing", &entries, &counts));
     if let Some(backup) = backup.as_ref() {
@@ -105,6 +106,13 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn removed(entries: &[Entry]) -> Vec<PathBuf> {
+    entries
+        .iter()
+        .map(|entry| entry.path().to_path_buf())
+        .collect()
 }
 
 fn foresee(home: &Path, repo: &Path, entries: &[Entry], classes: &Classes) -> Result<()> {

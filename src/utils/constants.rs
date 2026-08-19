@@ -10,6 +10,10 @@ pub const DEFAULT_REPO_DIR: &str = "repo";
 
 pub const SYSTEM_TEXT_MODE: u32 = 0o644;
 
+pub const HOSTNAME_FILES: [&str; 2] = ["/proc/sys/kernel/hostname", "/etc/hostname"];
+
+pub const HOSTNAME_VAR: &str = "HOSTNAME";
+
 pub const SPAN_UNITS: [(u64, &str); 4] = [
     (86_400, "day"),
     (3_600, "hour"),

@@ -4,15 +4,15 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
-use crate::files::{self, Entry, FileStatus, Mirror, Side};
-use crate::lua::{Config, Content, Diff, DiffCounts, DiffFile, DiffState, Output};
+use crate::files::{self, Entry, FileStatus, Mirror, Side, Tracked};
+use crate::lua::{Config, Content, Diff, DiffCounts, DiffFile, DiffState, Output, Tool};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, SYSTEM_TEXT_MODE, Workspace};
 
 use super::super::constants::{
     CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, DIFF_ARGUMENTS, DIFF_CUSTOM, DIFF_PROGRAM,
-    DIFF_SEPARATOR, GENERATED_FILES, MANAGED_FILES,
+    GENERATED_FILES, MANAGED_FILES,
 };
 
 #[derive(Debug, Args)]
@@ -245,14 +245,62 @@ fn staged(config: &Config, side: Side, files: &[DiffFile]) -> Result<()> {
     }
 
     let mirror = Mirror::open("diff")?;
-    for file in staging {
+
+    let Some(tool) = config.diff().tool() else {
+        let tree = tracked_tree(&mirror, &staging)?;
+        return run(tree.root(), DIFF_PROGRAM, &asked(config.diff()));
+    };
+
+    for file in &staging {
         mirror.place(side, file.path(), file.content(), file.mode())?;
         if let (Some(found), Some(mode)) = (file.found(), file.found_mode()) {
             mirror.place(Side::System, file.path(), found, mode)?;
         }
     }
 
-    run(mirror.root(), side, config.diff())
+    run(
+        mirror.root(),
+        tool.program(),
+        &invocation(tool, config.diff(), side),
+    )
+}
+
+fn tracked_tree<'a>(mirror: &'a Mirror, staging: &[&DiffFile]) -> Result<Tracked<'a>> {
+    let tree = mirror.tracked()?;
+    for file in staging {
+        tree.write(file.path(), file.content(), file.mode())?;
+    }
+    tree.stage()?;
+
+    for file in staging {
+        held(&tree, file)?;
+    }
+
+    Ok(tree)
+}
+
+fn held(tree: &Tracked<'_>, file: &DiffFile) -> Result<()> {
+    let (Some(found), Some(mode)) = (file.found(), file.found_mode()) else {
+        return tree.erase(file.path());
+    };
+
+    tree.write(file.path(), found, mode)
+}
+
+fn asked(diff: &Diff) -> Vec<String> {
+    let mut arguments: Vec<String> = DIFF_ARGUMENTS.iter().map(|word| word.to_string()).collect();
+    arguments.extend(diff.args().iter().cloned());
+
+    arguments
+}
+
+fn invocation(tool: &Tool, diff: &Diff, side: Side) -> Vec<String> {
+    let mut arguments = tool.arguments().to_vec();
+    arguments.extend(diff.args().iter().cloned());
+    arguments.push(side.dir().to_string());
+    arguments.push(Side::System.dir().to_string());
+
+    arguments
 }
 
 fn summary(config: &Config, side: Side, drifted: usize, total: usize) -> Result<()> {
@@ -294,9 +342,8 @@ fn system_side(dest: &Path) -> Result<System> {
     Ok(System::Holds(files::read_contents("diff", dest)?, mode))
 }
 
-fn run(root: &Path, side: Side, diff: &Diff) -> Result<()> {
-    let (program, arguments) = invocation(diff);
-    let status = build_command(root, side, &program, &arguments)
+fn run(root: &Path, program: &str, arguments: &[String]) -> Result<()> {
+    let status = build_command(root, program, arguments)
         .status()
         .with_context(|| format!("diff: failed to run {program}; is it installed and on PATH?"))?;
 
@@ -306,27 +353,10 @@ fn run(root: &Path, side: Side, diff: &Diff) -> Result<()> {
     }
 }
 
-fn invocation(diff: &Diff) -> (String, Vec<String>) {
-    let Some(tool) = diff.tool() else {
-        let mut arguments: Vec<String> =
-            DIFF_ARGUMENTS.iter().map(|word| word.to_string()).collect();
-        arguments.extend(diff.args().iter().cloned());
-        arguments.push(DIFF_SEPARATOR.to_string());
-
-        return (DIFF_PROGRAM.to_string(), arguments);
-    };
-
-    let mut arguments = tool.arguments().to_vec();
-    arguments.extend(diff.args().iter().cloned());
-
-    (tool.program().to_string(), arguments)
-}
-
-fn build_command(root: &Path, side: Side, program: &str, arguments: &[String]) -> Command {
+fn build_command(root: &Path, program: &str, arguments: &[String]) -> Command {
     let mut command = Command::new(program);
     command.current_dir(root);
     command.args(arguments);
-    command.args([side.dir(), Side::System.dir()]);
     command
 }
 
@@ -342,7 +372,7 @@ mod tests {
     use std::ffi::OsStr;
     use std::os::unix::fs::PermissionsExt;
 
-    use crate::lua::{Custom, Tool, from_source};
+    use crate::lua::{Custom, from_source};
 
     use super::*;
 
@@ -353,15 +383,10 @@ mod tests {
             .collect()
     }
 
-    fn commanded(diff: &Diff, side: Side) -> Command {
-        let (program, arguments) = invocation(diff);
-
-        build_command(
-            Path::new("/tmp/luadot-diff-1-0"),
-            side,
-            &program,
-            &arguments,
-        )
+    fn tracked(name: &str) -> Command {
+        let mut command = Command::new("git");
+        command.args(["show", &format!(":{name}")]);
+        command
     }
 
     #[test]
@@ -374,67 +399,91 @@ mod tests {
     }
 
     #[test]
-    fn git_compares_the_two_sides_from_inside_the_mirror() {
-        let command = commanded(&Diff::default(), Side::Repository);
+    fn git_is_asked_for_the_diff_it_always_prints() {
+        let command = build_command(
+            Path::new("/tmp/luadot-diff-1-0/tree"),
+            DIFF_PROGRAM,
+            &asked(&Diff::default()),
+        );
 
         assert_eq!(command.get_program(), OsStr::new("git"));
         assert_eq!(
             command.get_current_dir(),
-            Some(Path::new("/tmp/luadot-diff-1-0"))
+            Some(Path::new("/tmp/luadot-diff-1-0/tree"))
         );
+        assert_eq!(arguments(&command), ["diff"]);
+    }
+
+    #[test]
+    fn the_arguments_of_the_configuration_reach_git_after_the_diff() {
+        let diff = Diff::default().with_args(Some(vec!["--stat".to_string()]));
+
+        assert_eq!(asked(&diff), ["diff", "--stat"]);
+    }
+
+    #[test]
+    fn the_repository_side_is_staged_and_the_system_side_is_what_the_tree_holds() {
+        let mirror = Mirror::open("diff").unwrap();
+        let files = [
+            DiffFile::new(
+                PathBuf::from("home/.bashrc"),
+                PathBuf::from("/home/u/.bashrc"),
+                Side::Repository,
+                DiffState::Differs,
+            )
+            .with_source(b"managed\n".to_vec(), 0o644)
+            .with_system(b"handwritten\n".to_vec(), 0o644),
+            DiffFile::new(
+                PathBuf::from("home/.vimrc"),
+                PathBuf::from("/home/u/.vimrc"),
+                Side::Repository,
+                DiffState::Missing,
+            )
+            .with_source(b"set number\n".to_vec(), 0o644),
+        ];
+
+        let tree = tracked_tree(&mirror, &files.iter().collect::<Vec<&DiffFile>>()).unwrap();
+
+        let staged = tracked("home/.bashrc")
+            .current_dir(tree.root())
+            .output()
+            .unwrap();
+        assert_eq!(staged.stdout, b"managed\n");
+
         assert_eq!(
-            arguments(&command),
-            [
-                "diff",
-                "--no-index",
-                "--no-prefix",
-                "--",
-                "repository",
-                "system"
-            ]
+            std::fs::read(tree.root().join("home/.bashrc")).unwrap(),
+            b"handwritten\n"
         );
+
+        let staged = tracked("home/.vimrc")
+            .current_dir(tree.root())
+            .output()
+            .unwrap();
+        assert_eq!(staged.stdout, b"set number\n");
+        assert!(!tree.root().join("home/.vimrc").exists());
     }
 
     #[test]
     fn what_a_template_produces_is_compared_from_its_own_side() {
-        let command = commanded(&Diff::default(), Side::Generated);
-        let arguments = arguments(&command);
+        let tool = Tool::new("difft".to_string(), Vec::new());
 
-        assert_eq!(arguments.last().unwrap(), "system");
-        assert_eq!(arguments[arguments.len() - 2], "generated");
-    }
+        let arguments = invocation(&tool, &Diff::default(), Side::Generated);
 
-    #[test]
-    fn the_arguments_of_the_configuration_reach_git_before_the_two_sides() {
-        let diff = Diff::default().with_args(Some(vec!["--stat".to_string()]));
-
-        let command = commanded(&diff, Side::Repository);
-
-        assert_eq!(command.get_program(), OsStr::new("git"));
-        assert_eq!(
-            arguments(&command),
-            [
-                "diff",
-                "--no-index",
-                "--no-prefix",
-                "--stat",
-                "--",
-                "repository",
-                "system"
-            ]
-        );
+        assert_eq!(arguments, ["generated", "system"]);
     }
 
     #[test]
     fn a_tool_of_its_own_replaces_git_and_keeps_the_two_sides_last() {
+        let tool = Tool::new("difft".to_string(), vec!["--color".to_string()]);
         let diff = Diff::default()
-            .with_tool(Some(Tool::new(
-                "difft".to_string(),
-                vec!["--color".to_string()],
-            )))
+            .with_tool(Some(tool.clone()))
             .with_args(Some(vec!["always".to_string()]));
 
-        let command = commanded(&diff, Side::Repository);
+        let command = build_command(
+            Path::new("/tmp/luadot-diff-1-0"),
+            tool.program(),
+            &invocation(&tool, &diff, Side::Repository),
+        );
 
         assert_eq!(command.get_program(), OsStr::new("difft"));
         assert_eq!(

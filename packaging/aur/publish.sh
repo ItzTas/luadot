@@ -3,9 +3,9 @@ set -euo pipefail
 
 aur_user_name='ItzTas'
 aur_user_email='ts.aur@imts.aleeas.com'
-github_url='https://github.com/ItzTas/luadot'
-tarball_attempts=30
-tarball_delay=20
+gitlab_registry='https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot'
+download_attempts=30
+download_delay=20
 
 die() {
 	echo "aur: $1" >&2
@@ -27,28 +27,39 @@ trap 'rm -rf "$work"' EXIT
 
 pkgver=${tag#v}
 pkgver=${pkgver//-/.}
-tarball="$github_url/archive/refs/tags/$tag.tar.gz"
+asset="$gitlab_registry/$pkgver/luadot-$pkgver"
 
-fetch_tarball() {
-	local attempt
-	for ((attempt = 1; attempt <= tarball_attempts; attempt++)); do
-		if curl -fsSL -o "$work/source.tar.gz" "$tarball"; then
+declare -A package_assets=(
+	["luadot"]="SHA256=$asset-src.tar.gz"
+	["luadot-nightly"]="SHA256=$asset-src.tar.gz"
+	["luadot-bin"]="SHA256_X86_64=$asset-x86_64.tar.gz
+SHA256_AARCH64=$asset-aarch64.tar.gz"
+)
+
+[ -n "${package_assets[$pkgname]+set}" ] || die "no assets declared for $pkgname"
+
+download() {
+	local url=$1 out=$2 attempt
+	for ((attempt = 1; attempt <= download_attempts; attempt++)); do
+		if curl -fsSL -o "$out" "$url"; then
 			return 0
 		fi
-		echo "aur: $tag not on GitHub yet ($attempt/$tarball_attempts)" >&2
-		sleep "$tarball_delay"
+		echo "aur: $url not published yet ($attempt/$download_attempts)" >&2
+		sleep "$download_delay"
 	done
-	die "$tarball never became available"
+	die "$url never became available"
 }
 
-fetch_tarball
-sha256=$(sha256sum "$work/source.tar.gz" | cut -d ' ' -f 1)
+sed_args=(-e "s|@PKGVER@|$pkgver|g" -e "s|@TAG@|$tag|g")
+index=0
+while IFS='=' read -r placeholder url; do
+	index=$((index + 1))
+	download "$url" "$work/asset-$index"
+	sha256=$(sha256sum "$work/asset-$index" | cut -d ' ' -f 1)
+	sed_args+=(-e "s|@$placeholder@|$sha256|g")
+done <<<"${package_assets[$pkgname]}"
 
-sed \
-	-e "s|@PKGVER@|$pkgver|g" \
-	-e "s|@TAG@|$tag|g" \
-	-e "s|@SHA256@|$sha256|g" \
-	"$templates/PKGBUILD.in" >"$work/PKGBUILD"
+sed "${sed_args[@]}" "$templates/PKGBUILD.in" >"$work/PKGBUILD"
 
 id -u builder >/dev/null 2>&1 || useradd -m builder
 chown -R builder "$work"

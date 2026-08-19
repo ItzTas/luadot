@@ -41,20 +41,27 @@ pub fn rekey_cmd(args: RekeyArgs) -> Result<()> {
         return Ok(());
     }
 
-    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
+    let lock = config.crypt_lock();
     let backend = config.crypt_backend();
-    crypt::require_recipients("rekey", lock, config.crypt_recipients())?;
+    crypt::require_recipients("rekey", lock, config.crypt_secrets().recipients())?;
+    crypt::require_recipient_plugins("rekey", backend, lock, config.crypt_secrets().recipients())?;
 
     if args.dry_run {
         return foresee(&repo, &secrets, backend);
     }
 
-    let mut identity = crypt::Identity::new(
-        config
-            .crypt_identity()
-            .map(|path| utils::expand(&home, path)),
-        config.crypt_identity_command().cloned(),
-    );
+    let mut identity = config.crypt_identity(&home);
+    if secrets
+        .iter()
+        .any(|secret| secret.backend == crypt::Backend::Age)
+    {
+        crypt::require_identity_plugins(
+            "rekey",
+            crypt::Backend::Age,
+            lock,
+            identity.path("rekey")?,
+        )?;
+    }
 
     for secret in &secrets {
         let target = target(&repo, secret, backend);
@@ -136,7 +143,7 @@ fn rekey(
         "rekey",
         config.crypt_backend(),
         lock,
-        config.crypt_recipients(),
+        config.crypt_secrets().recipients(),
         &contents,
         staging,
     )

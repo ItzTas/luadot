@@ -1,9 +1,6 @@
 use std::process::Command;
 
-fn main() {
-    println!("cargo::rerun-if-changed=build.rs");
-    println!("cargo::rerun-if-changed=.githooks");
-
+pub fn install() {
     let inside_work_tree = Command::new("git")
         .args(["rev-parse", "--is-inside-work-tree"])
         .output()

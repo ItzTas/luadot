@@ -3,6 +3,7 @@ name = "luadot"
 version = "0.1.0-nightly.4"
 edition = "2024"
 description = "A dotfiles manager configured in Lua"
+build = "build/main.rs"
 repository = "https://github.com/ItzTas/luadot"
 license = "MIT"
 
@@ -24,11 +25,21 @@ etcetera = "0.11.0"
 gix = { version = "0.84.0", features = ["blocking-network-client", "blocking-http-transport-reqwest-rust-tls"] }
 glob = "0.3.4"
 mlua = { version = "0.11.6", features = ["lua54", "vendored", "send"] }
+prodash = { version = "31.0.0", features = [
+  "progress-tree",
+  "render-line",
+  "render-line-crossterm",
+  "render-line-autoconfigure",
+] }
 regex = "1.13.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[build-dependencies]
+cc = "1.2.63"
+lua-src = "550.0.0"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"

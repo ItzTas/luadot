@@ -18,11 +18,19 @@ pub fn clone_cmd(args: CloneArgs) -> Result<()> {
     let configured = lua::load_config()?.repo_dir().map(Path::to_path_buf);
 
     let dir = utils::destination("clone", &home, args.dir.as_deref(), configured.as_deref())?;
-    git::clone(&dir, &args.url)?;
+
+    output::note(format!("cloning {} into {}", args.url, dir.display()));
+    let cloned = git::clone(&dir, &args.url)?;
 
     let mut current = state::load()?;
     current.set_repo(dir.clone());
     state::save(&current)?;
+
+    if cloned == git::Cloned::Empty {
+        output::warn("the cloned repository is empty");
+    }
+
+    output::note(format!("cloned {}", dir.display()));
 
     offer_bootstrap(&dir)
 }
