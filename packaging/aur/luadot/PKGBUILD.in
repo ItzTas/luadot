@@ -10,9 +10,9 @@ license=('MIT')
 depends=('gcc-libs' 'glibc')
 makedepends=('cargo' 'cmake')
 options=('!lto')
-_tag='@TAG@'
-_srcdir="luadot-${_tag#v}"
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/$_tag.tar.gz")
+_registry='https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot'
+_srcdir="luadot-$pkgver"
+source=("$pkgname-$pkgver.tar.gz::$_registry/$pkgver/luadot-$pkgver-src.tar.gz")
 sha256sums=('@SHA256@')
 
 prepare() {
@@ -32,6 +32,7 @@ package() {
 	cd "$_srcdir"
 	install -Dm0755 target/release/luadot "$pkgdir/usr/bin/luadot"
 	install -Dm0644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+	install -Dm0644 vendor/lpeg/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE.lpeg"
 
 	install -d "$pkgdir/usr/share/bash-completion/completions"
 	install -d "$pkgdir/usr/share/zsh/site-functions"

@@ -1,0 +1,33 @@
+# Maintainer: ItzTas <ts.aur@imts.aleeas.com>
+
+pkgname=luadot-bin
+_pkgname=luadot
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc='A dotfiles manager configured in Lua (prebuilt binary)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/ItzTas/luadot'
+license=('MIT')
+depends=('gcc-libs' 'glibc')
+provides=("$_pkgname=$pkgver")
+conflicts=("$_pkgname")
+options=('!strip' '!debug')
+_registry='https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot'
+source_x86_64=("$_registry/$pkgver/$_pkgname-$pkgver-x86_64.tar.gz")
+source_aarch64=("$_registry/$pkgver/$_pkgname-$pkgver-aarch64.tar.gz")
+sha256sums_x86_64=('@SHA256_X86_64@')
+sha256sums_aarch64=('@SHA256_AARCH64@')
+
+package() {
+	cd "$_pkgname-$pkgver-$CARCH"
+	install -Dm0755 "$_pkgname" "$pkgdir/usr/bin/$_pkgname"
+	install -Dm0644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+	install -Dm0644 LICENSE.lpeg "$pkgdir/usr/share/licenses/$pkgname/LICENSE.lpeg"
+
+	install -Dm0644 "completions/$_pkgname.bash" \
+		"$pkgdir/usr/share/bash-completion/completions/$_pkgname"
+	install -Dm0644 "completions/_$_pkgname" \
+		"$pkgdir/usr/share/zsh/site-functions/_$_pkgname"
+	install -Dm0644 "completions/$_pkgname.fish" \
+		"$pkgdir/usr/share/fish/vendor_completions.d/$_pkgname.fish"
+}

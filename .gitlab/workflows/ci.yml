@@ -2,6 +2,7 @@ stages:
   - test
   - release
   - mirror
+  - binaries
   - publish
 
 default:
@@ -100,6 +101,60 @@ push-to-github:
     - git push --force --all "https://x-access-token:${GITHUB_TOKEN}@github.com/ItzTas/luadot.git"
     - git push --force --tags "https://x-access-token:${GITHUB_TOKEN}@github.com/ItzTas/luadot.git"
 
+source-tarball:
+  stage: binaries
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "nightly"'
+  image: rust:latest
+  resource_group: release-assets
+  needs:
+    - job: bump
+      artifacts: true
+  variables:
+    GIT_DEPTH: 0
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends jq
+    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
+    - git fetch origin --tags --force
+  script:
+    - ./packaging/release/source.sh "$LUADOT_TAG"
+    - ./packaging/release/upload.sh "$LUADOT_TAG"
+
+binaries:
+  stage: binaries
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  image: rust:latest
+  resource_group: release-assets
+  needs:
+    - job: bump
+      artifacts: true
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+    GIT_DEPTH: 0
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/
+    policy: pull
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends cmake jq gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+    - rustup target add aarch64-unknown-linux-gnu
+    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
+    - git fetch origin --tags --force
+    - git checkout "$LUADOT_TAG"
+  script:
+    - ./packaging/release/build.sh "$LUADOT_TAG"
+    - ./packaging/release/deb.sh "$LUADOT_TAG"
+    - ./packaging/release/upload.sh "$LUADOT_TAG"
+
 .aur:
   stage: publish
   tags:
@@ -109,7 +164,7 @@ push-to-github:
   needs:
     - job: bump
       artifacts: true
-    - job: push-to-github
+    - job: source-tarball
   before_script:
     - pacman -Syu --noconfirm --needed git openssh
     - install -d -m 700 ~/.ssh
@@ -126,6 +181,19 @@ aur-stable:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
   script:
     - ./packaging/aur/publish.sh luadot "$LUADOT_TAG"
+
+aur-bin:
+  extends: .aur
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  needs:
+    - job: bump
+      artifacts: true
+    - job: binaries
+  script:
+    - ./packaging/aur/publish.sh luadot-bin "$LUADOT_TAG"
 
 aur-nightly:
   extends: .aur
