@@ -57,13 +57,8 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         return foresee(&home, &repo, &entries, &classes);
     }
 
-    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
-    let mut identity = crypt::Identity::new(
-        config
-            .crypt_identity()
-            .map(|path| utils::expand(&home, path)),
-        config.crypt_identity_command().cloned(),
-    );
+    let lock = config.crypt_lock();
+    let mut identity = config.crypt_identity(&home);
 
     if !args.yes && !confirmed(&repo, &entries)? {
         output::warn("aborted");

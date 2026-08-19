@@ -56,7 +56,7 @@ mod tests {
 
         assert!(err.contains("unknown option `lnik`"));
         assert!(err.contains(
-            "available: backup, backup_age, backup_dir, backup_keep, conflict, link, pkg_warn, repo_dir"
+            "available: backup, backup_age, backup_dir, backup_keep, conflict, link, passphrase_warn, pkg_warn, repo_dir"
         ));
     }
 

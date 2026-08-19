@@ -11,7 +11,7 @@ pub fn table(lua: &Lua) -> mlua::Result<Table> {
 mod tests {
     use std::path::Path;
 
-    use crate::crypt::Backend;
+    use crate::crypt::{Backend, Secrets};
     use crate::lua::from_source;
 
     #[test]
@@ -20,18 +20,23 @@ mod tests {
             r#"
             ld.crypt({
               backend = "gpg",
-              recipients = { "me@example.com" },
-              identity = "~/.keys/private.asc",
+              lock = {
+                recipients = { "me@example.com" },
+                identity = "~/.keys/private.asc",
+              },
             })
             "#,
         )
         .unwrap();
 
         assert_eq!(config.crypt_backend(), Backend::Gpg);
-        assert_eq!(config.crypt_recipients(), ["me@example.com"]);
         assert_eq!(
-            config.crypt_identity(),
-            Some(Path::new("~/.keys/private.asc"))
+            config.crypt_secrets(),
+            &Secrets::Keys {
+                recipients: vec!["me@example.com".to_string()],
+                identity: Some(Path::new("~/.keys/private.asc").to_path_buf()),
+                identity_command: None,
+            }
         );
     }
 
@@ -40,36 +45,13 @@ mod tests {
         let config = from_source(
             r#"
             ld.crypt.backend("gpg")
-            ld.crypt({ recipients = "me@example.com" })
+            ld.crypt({ lock = "passphrase" })
             "#,
         )
         .unwrap();
 
         assert_eq!(config.crypt_backend(), Backend::Gpg);
-        assert_eq!(config.crypt_recipients(), ["me@example.com"]);
-    }
-
-    #[test]
-    fn the_call_form_reaches_the_passphrase_and_the_provider() {
-        let config = from_source(
-            r#"
-            ld.crypt({
-              passphrase = true,
-              passphrase_warn = false,
-              identity_command = "pass show age/key",
-            })
-            "#,
-        )
-        .unwrap();
-
-        assert!(config.crypt_passphrase());
-        assert!(!config.crypt_passphrase_warn());
-        assert_eq!(
-            config.crypt_identity_command(),
-            Some(&crate::crypt::Provider::Line(
-                "pass show age/key".to_string()
-            ))
-        );
+        assert_eq!(config.crypt_secrets(), &Secrets::Passphrase);
     }
 
     #[test]
@@ -80,8 +62,6 @@ mod tests {
         );
 
         assert!(err.contains("unknown crypt option `secret`"));
-        assert!(err.contains(
-            "backend, identity, identity_command, passphrase, passphrase_warn, recipients"
-        ));
+        assert!(err.contains("backend, lock"));
     }
 }

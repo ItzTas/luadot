@@ -46,13 +46,8 @@ fn edit_encrypted(
     in_repo: &Path,
     stripped: &Path,
 ) -> Result<()> {
-    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
-    let mut identity = crypt::Identity::new(
-        config
-            .crypt_identity()
-            .map(|path| utils::expand(home, path)),
-        config.crypt_identity_command().cloned(),
-    );
+    let lock = config.crypt_lock();
+    let mut identity = config.crypt_identity(home);
     let name = stripped.file_name().unwrap_or(OsStr::new("plaintext"));
 
     let workspace = crypt::Workspace::create("edit")?;
@@ -96,7 +91,7 @@ fn reencrypt(
         "edit",
         backend,
         lock,
-        config.crypt_recipients(),
+        config.crypt_secrets().recipients(),
         plain,
         staging,
     )

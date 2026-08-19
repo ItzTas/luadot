@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn the_warning_names_the_way_out() {
-        assert!(PASSPHRASE_WARNING.contains("`ld.crypt.passphrase_warn(false)`"));
+        assert!(PASSPHRASE_WARNING.contains("`ld.opt.passphrase_warn(false)`"));
     }
 
     #[test]

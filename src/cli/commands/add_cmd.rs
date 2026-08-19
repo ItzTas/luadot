@@ -21,7 +21,7 @@ pub fn add_cmd(args: AddArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("add")?;
 
     let pairs = plan(&home, &repo, &args.paths, &config)?;
-    let lock = crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn());
+    let lock = config.crypt_lock();
 
     for (source, dest) in pairs {
         link_into_repo(&config, lock, &repo, &source, &dest)?;
@@ -210,7 +210,7 @@ fn link_into_repo(
             "add",
             backend,
             lock,
-            config.crypt_recipients(),
+            config.crypt_secrets().recipients(),
             &contents,
             dest,
         );

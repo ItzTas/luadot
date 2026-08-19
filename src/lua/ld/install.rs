@@ -54,11 +54,11 @@ mod tests {
           assert(type(ld.alt[name]) == "function", "alt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.git).__call) == "function", "git is not callable")
-        for _, name in ipairs({ "backup", "backup_age", "backup_dir", "backup_keep", "conflict", "link", "pkg_warn", "repo_dir" }) do
+        for _, name in ipairs({ "backup", "backup_age", "backup_dir", "backup_keep", "conflict", "link", "passphrase_warn", "pkg_warn", "repo_dir" }) do
           assert(type(ld.opt[name]) == "function", "opt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.opt).__call) == "function", "opt is not callable")
-        for _, name in ipairs({ "backend", "recipients", "identity", "identity_command", "passphrase", "passphrase_warn" }) do
+        for _, name in ipairs({ "backend", "lock" }) do
           assert(type(ld.crypt[name]) == "function", "crypt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.crypt).__call) == "function", "crypt is not callable")
@@ -155,11 +155,8 @@ mod tests {
             ld.opt.conflict("skip")
             ld.class({ name = "form-factor" })
             ld.crypt.backend("gpg")
-            ld.crypt.recipients("age1example")
-            ld.crypt.identity("~/.keys/age.txt")
-            ld.crypt.identity_command("pass show age/key")
-            ld.crypt.passphrase(false)
-            ld.crypt.passphrase_warn(false)
+            ld.crypt.lock({ recipients = "age1example", identity = "~/.keys/age.txt" })
+            ld.crypt.lock("passphrase")
             ld.crypt({ backend = "age" })
             ld.on.diff({ summary = false })
             ld.on.status({ summary = false })

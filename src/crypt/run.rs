@@ -80,7 +80,9 @@ pub fn require_recipients(command: &str, lock: Lock, recipients: &[String]) -> R
         return Ok(());
     }
     if recipients.is_empty() {
-        bail!("{command}: no recipients set; call `ld.crypt.recipients` in the configuration");
+        bail!(
+            "{command}: no recipients set; call `ld.crypt.lock` with `recipients` in the configuration"
+        );
     }
     Ok(())
 }
@@ -95,7 +97,9 @@ fn require_identity(
         return Ok(());
     }
     if backend == Backend::Age && identity.is_none() {
-        bail!("{command}: decrypting with age needs `ld.crypt.identity` in the configuration");
+        bail!(
+            "{command}: decrypting with age needs `ld.crypt.lock` with `identity` in the configuration"
+        );
     }
     Ok(())
 }
@@ -457,7 +461,7 @@ mod tests {
         .to_string();
 
         assert!(err.contains("add: no recipients set"));
-        assert!(err.contains("ld.crypt.recipients"));
+        assert!(err.contains("`ld.crypt.lock` with `recipients`"));
     }
 
     #[test]
@@ -472,7 +476,7 @@ mod tests {
         .unwrap_err()
         .to_string();
 
-        assert!(err.contains("apply: decrypting with age needs `ld.crypt.identity`"));
+        assert!(err.contains("apply: decrypting with age needs `ld.crypt.lock` with `identity`"));
     }
 
     #[test]

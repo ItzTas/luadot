@@ -9,7 +9,7 @@ use super::constants::{CLASS_QUESTION, GIT_DIR, MATCH};
 use super::diff::Diff;
 use super::report::Report;
 use crate::backup::Retention;
-use crate::crypt::{Backend, Provider};
+use crate::crypt::{Backend, Identity, Lock, Secrets};
 use crate::files::{ConflictPolicy, LinkMode};
 
 #[derive(Debug, Clone)]
@@ -19,17 +19,14 @@ pub struct Config {
     rules: Vec<Rule>,
     classes: Vec<Class>,
     pkg_warn: bool,
+    passphrase_warn: bool,
     backup: bool,
     backup_dir: Option<PathBuf>,
     backup_keep: Option<u32>,
     backup_age: Option<u64>,
     repo_dir: Option<PathBuf>,
     crypt_backend: Backend,
-    crypt_recipients: Vec<String>,
-    crypt_identity: Option<PathBuf>,
-    crypt_identity_command: Option<Provider>,
-    crypt_passphrase: bool,
-    crypt_passphrase_warn: bool,
+    crypt_secrets: Secrets,
     diff: Diff,
     status: Report,
     runtime: Option<Lua>,
@@ -43,17 +40,14 @@ impl Default for Config {
             rules: Vec::new(),
             classes: Vec::new(),
             pkg_warn: true,
+            passphrase_warn: true,
             backup: true,
             backup_dir: None,
             backup_keep: None,
             backup_age: None,
             repo_dir: None,
             crypt_backend: Backend::default(),
-            crypt_recipients: Vec::new(),
-            crypt_identity: None,
-            crypt_identity_command: None,
-            crypt_passphrase: false,
-            crypt_passphrase_warn: true,
+            crypt_secrets: Secrets::default(),
             diff: Diff::default(),
             status: Report::default(),
             runtime: None,
@@ -190,44 +184,28 @@ impl Config {
         self.crypt_backend
     }
 
-    pub fn set_crypt_recipients(&mut self, recipients: Vec<String>) {
-        self.crypt_recipients = recipients;
+    pub fn set_crypt_secrets(&mut self, secrets: Secrets) {
+        self.crypt_secrets = secrets;
     }
 
-    pub fn crypt_recipients(&self) -> &[String] {
-        &self.crypt_recipients
+    pub fn crypt_secrets(&self) -> &Secrets {
+        &self.crypt_secrets
     }
 
-    pub fn set_crypt_identity(&mut self, identity: PathBuf) {
-        self.crypt_identity = Some(identity);
+    pub fn crypt_lock(&self) -> Lock {
+        self.crypt_secrets.lock(self.passphrase_warn)
     }
 
-    pub fn crypt_identity(&self) -> Option<&Path> {
-        self.crypt_identity.as_deref()
+    pub fn crypt_identity(&self, home: &Path) -> Identity {
+        self.crypt_secrets.identity(home)
     }
 
-    pub fn set_crypt_identity_command(&mut self, provider: Provider) {
-        self.crypt_identity_command = Some(provider);
+    pub fn set_passphrase_warn(&mut self, warn: bool) {
+        self.passphrase_warn = warn;
     }
 
-    pub fn crypt_identity_command(&self) -> Option<&Provider> {
-        self.crypt_identity_command.as_ref()
-    }
-
-    pub fn set_crypt_passphrase(&mut self, passphrase: bool) {
-        self.crypt_passphrase = passphrase;
-    }
-
-    pub fn crypt_passphrase(&self) -> bool {
-        self.crypt_passphrase
-    }
-
-    pub fn set_crypt_passphrase_warn(&mut self, warn: bool) {
-        self.crypt_passphrase_warn = warn;
-    }
-
-    pub fn crypt_passphrase_warn(&self) -> bool {
-        self.crypt_passphrase_warn
+    pub fn passphrase_warn(&self) -> bool {
+        self.passphrase_warn
     }
 
     pub fn link(&self) -> LinkMode {

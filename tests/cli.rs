@@ -1132,8 +1132,7 @@ fn crypt_config(home: &Path) {
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
-        ld.crypt.recipients("age1example")
-        ld.crypt.identity("~/key.txt")
+        ld.crypt.lock({ recipients = "age1example", identity = "~/key.txt" })
         ld.rules({ match = "home/.netrc", encrypt = true })
         "#,
     );
@@ -1240,7 +1239,7 @@ fn decrypting_with_age_asks_for_an_identity() {
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
-        ld.crypt.recipients("age1example")
+        ld.crypt.lock({ recipients = "age1example" })
         ld.rules({ match = "home/.netrc", encrypt = true })
         "#,
     );
@@ -1258,7 +1257,7 @@ fn decrypting_with_age_asks_for_an_identity() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "decrypting with age needs `ld.crypt.identity`",
+            "decrypting with age needs `ld.crypt.lock` with `identity`",
         ));
 }
 
@@ -1297,8 +1296,7 @@ fn system_secret_config(home: &Path, rule: &str) {
         &home.join(".config/luadot/config.lua"),
         &format!(
             r#"
-        ld.crypt.recipients("age1example")
-        ld.crypt.identity("~/key.txt")
+        ld.crypt.lock({{ recipients = "age1example", identity = "~/key.txt" }})
         ld.rules({{ match = "root/**", encrypt = true, {rule} }})
         "#
         ),
@@ -1438,8 +1436,7 @@ fn rekey_re_encrypts_every_secret_for_the_recipients_set_now() {
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
-        ld.crypt.recipients({ "age1example", "age1second" })
-        ld.crypt.identity("~/key.txt")
+        ld.crypt.lock({ recipients = { "age1example", "age1second" }, identity = "~/key.txt" })
         ld.rules({ match = "home/.netrc", encrypt = true })
         "#,
     );
@@ -1503,7 +1500,7 @@ fn passphrase_mode_says_it_is_weaker_and_the_warning_can_be_silenced() {
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
-        ld.crypt.passphrase(true)
+        ld.crypt.lock("passphrase")
         ld.rules({ match = "home/.netrc", encrypt = true })
         "#,
     );
@@ -1538,8 +1535,8 @@ fn passphrase_mode_says_it_is_weaker_and_the_warning_can_be_silenced() {
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
-        ld.crypt.passphrase(true)
-        ld.crypt.passphrase_warn(false)
+        ld.crypt.lock("passphrase")
+        ld.opt.passphrase_warn(false)
         ld.rules({ match = "home/.netrc", encrypt = true })
         "#,
     );
@@ -1560,8 +1557,7 @@ fn an_identity_command_hands_the_key_over_without_a_file() {
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
-        ld.crypt.recipients("age1example")
-        ld.crypt.identity_command("printf 'AGE-SECRET-KEY-FAKE\n'")
+        ld.crypt.lock({ recipients = "age1example", identity_command = "printf 'AGE-SECRET-KEY-FAKE\n'" })
         ld.rules({ match = "home/.netrc", encrypt = true })
         "#,
     );
@@ -1608,8 +1604,7 @@ fn a_failing_identity_command_stops_the_command() {
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
-        ld.crypt.recipients("age1example")
-        ld.crypt.identity_command("echo locked >&2; exit 1")
+        ld.crypt.lock({ recipients = "age1example", identity_command = "echo locked >&2; exit 1" })
         ld.rules({ match = "home/.netrc", encrypt = true })
         "#,
     );

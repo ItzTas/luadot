@@ -43,13 +43,8 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     let mut run = Run::open("apply", args.dry_run, &home, &config)?;
     let mut secrets = Secrets {
         config: &config,
-        lock: crypt::lock(config.crypt_passphrase(), config.crypt_passphrase_warn()),
-        identity: crypt::Identity::new(
-            config
-                .crypt_identity()
-                .map(|path| utils::expand(&home, path)),
-            config.crypt_identity_command().cloned(),
-        ),
+        lock: config.crypt_lock(),
+        identity: config.crypt_identity(&home),
     };
 
     let mut created = 0u32;

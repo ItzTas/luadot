@@ -5,6 +5,7 @@ mod backup_keep;
 mod conflict;
 mod constants;
 mod link;
+mod passphrase_warn;
 mod pkg_warn;
 mod repo_dir;
 mod table;
