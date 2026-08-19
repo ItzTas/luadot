@@ -1,8 +1,12 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Args, CommandFactory};
 use clap_complete::Shell;
 
 use crate::cli::Cli;
+
+use super::super::constants::{
+    BASH_GIT_COMPLETION, FISH_GIT_COMPLETION, ZSH_DISPATCH, ZSH_GIT_COMPLETION,
+};
 
 #[derive(Debug, Args)]
 pub struct CompletionsArgs {
@@ -11,11 +15,77 @@ pub struct CompletionsArgs {
 }
 
 pub fn completions_cmd(args: CompletionsArgs) -> Result<()> {
-    clap_complete::generate(
-        args.shell,
-        &mut Cli::command(),
-        "luadot",
-        &mut std::io::stdout(),
-    );
+    print!("{}", script(args.shell)?);
     Ok(())
+}
+
+fn script(shell: Shell) -> Result<String> {
+    let generated = generated(shell)?;
+
+    match shell {
+        Shell::Bash => Ok(format!("{generated}{BASH_GIT_COMPLETION}")),
+        Shell::Fish => Ok(format!("{generated}{FISH_GIT_COMPLETION}")),
+        Shell::Zsh => zsh(&generated),
+        _ => Ok(generated),
+    }
+}
+
+fn generated(shell: Shell) -> Result<String> {
+    let mut command = Cli::command();
+    let name = command.get_name().to_string();
+
+    let mut script = Vec::new();
+    clap_complete::generate(shell, &mut command, name, &mut script);
+
+    String::from_utf8(script).context("completions: the generated script is not valid UTF-8")
+}
+
+fn zsh(generated: &str) -> Result<String> {
+    let (body, _) = generated
+        .rsplit_once(ZSH_DISPATCH)
+        .context("completions: the generated zsh script has no dispatch to replace")?;
+
+    Ok(format!("{body}{ZSH_GIT_COMPLETION}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bash_carries_the_git_and_setup_delegations() {
+        let script = script(Shell::Bash).unwrap();
+
+        assert!(script.contains("_luadot_git_load"));
+        assert!(script.contains("setup --list"));
+        assert!(
+            script.ends_with("complete -F _luadot_complete -o bashdefault -o default luadot\nfi\n")
+        );
+    }
+
+    #[test]
+    fn zsh_replaces_the_generated_dispatch() {
+        let script = script(Shell::Zsh).unwrap();
+
+        assert_eq!(script.matches(ZSH_DISPATCH).count(), 1);
+        assert!(script.contains("functions[_luadot_clap]=$functions[_luadot]"));
+        assert!(script.contains("setup --list"));
+        assert!(script.ends_with("compdef _luadot luadot\nfi\n"));
+    }
+
+    #[test]
+    fn fish_carries_the_git_and_setup_delegations() {
+        let script = script(Shell::Fish).unwrap();
+
+        assert!(script.contains("complete --do-complete"));
+        assert!(script.contains("__fish_seen_subcommand_from git push"));
+        assert!(script.contains("__fish_seen_subcommand_from setup"));
+    }
+
+    #[test]
+    fn another_shell_keeps_the_generated_script() {
+        let script = script(Shell::Elvish).unwrap();
+
+        assert!(!script.contains("_luadot_git"));
+    }
 }

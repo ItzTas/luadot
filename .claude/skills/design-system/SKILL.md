@@ -25,6 +25,7 @@ Keep this file short. One line per rule.
 | `src/utils/` | shared helpers used across modules |
 | `benches/` | one criterion bench per area, fixtures in `benches/support/` |
 | `tests/` | integration tests driving the built binary through `assert_cmd` |
+| `vendor/` | third-party sources compiled into the binary, one directory per library, declared in `vendor/sources.toml` |
 
 ## Rules
 
@@ -39,6 +40,6 @@ Keep this file short. One line per rule.
 - One test per behavior, at the layer that owns it: each test must fail for a reason none of the others would.
 - Benchmarks reach the code through the library, one `benches/<area>.rs` per area with a `[[bench]]` entry carrying `harness = false`; shared fixtures go in `benches/support/`.
 - New capability for the configuration is added to the `ld` API, never by unlocking the runtime: `Lua::new()` stays safe (no `ffi`, no loadable C modules) and the language stays PUC Lua 5.4.
-- The only C code linked into the runtime is lpeg: `lua/lpeg/` puts `lpeg` and `re` in `package.preload` and mirrors them as `ld.lpeg`/`ld.re` through the `ld` metatable, and `build.rs` fetches and compiles the upstream sources. Adding another one needs a decision, not a patch.
+- The only C code linked into the runtime is lpeg: `lua/bundled/lpeg/` puts `lpeg` and `re` in `package.preload` and mirrors them as `ld.lpeg`/`ld.re` through the `ld` metatable, and `build/lpeg/` compiles the sources vendored in `vendor/lpeg/`. Adding another one needs a decision, not a patch: declare it in `vendor/sources.toml`, vendor it with `packaging/vendor/update.sh`, compile it from a `build/<name>/`.
 - One `ld` function per file, one directory per group: `ld/root/` is `ld.<function>`, and a named group (`ld/git/`) owns its `NAMESPACE` and becomes `ld.<namespace>.<function>`. Each group has a `table.rs` listing its functions.
 - No comments anywhere.

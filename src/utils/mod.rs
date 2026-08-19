@@ -1,7 +1,9 @@
+mod automatic;
 mod classes;
 mod constants;
 mod custom;
 mod editor;
+mod host;
 mod outputs;
 mod paths;
 mod repo;
@@ -9,10 +11,12 @@ mod run;
 mod span;
 mod workspace;
 
+pub use automatic::{Automatic, automatic};
 pub use classes::{ask, ask_missing};
 pub use constants::SYSTEM_TEXT_MODE;
 pub use custom::{customized, said};
 pub use editor::{launch, open};
+pub use host::host_name;
 pub use outputs::{
     escalated_output_status, generated_mode, output_relative, output_status, outputs,
 };

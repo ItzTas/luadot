@@ -59,6 +59,7 @@ impl Run {
         }
 
         let outcome = sync()?;
+        output::report(outcome, relative.display());
         self.hooks.record(outcome, on_change);
 
         Ok(outcome)

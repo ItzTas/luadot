@@ -34,7 +34,6 @@ fn filter(verbose: u8) -> EnvFilter {
 fn dispatch(cli: Cli) -> Result<()> {
     match cli.command {
         Cmd::Add(args) => commands::add_cmd(args),
-        Cmd::Alt(args) => commands::alt_cmd(args),
         Cmd::Restore(args) => commands::restore_cmd(args),
         Cmd::Apply(args) => commands::apply_cmd(args),
         Cmd::Bootstrap => commands::bootstrap_cmd(),
@@ -48,12 +47,13 @@ fn dispatch(cli: Cli) -> Result<()> {
         Cmd::Exec(args) => commands::exec_cmd(args),
         Cmd::Git(args) => commands::git_cmd(args),
         Cmd::Init(args) => commands::init_cmd(args),
-        Cmd::New(args) => commands::new_cmd(args),
         Cmd::Push(args) => commands::push_cmd(args),
         Cmd::Rekey(args) => commands::rekey_cmd(args),
         Cmd::Rm(args) => commands::rm_cmd(args),
         Cmd::Setup(args) => commands::setup_cmd(args),
         Cmd::Status(args) => commands::status_cmd(args),
+        Cmd::Sync(args) => commands::sync_cmd(args),
+        Cmd::Tmpl(args) => commands::tmpl_cmd(args),
     }
 }
 

@@ -50,6 +50,9 @@ fn edit_encrypted(
     let mut identity = config.crypt_identity(home);
     let name = stripped.file_name().unwrap_or(OsStr::new("plaintext"));
 
+    crypt::require_identity_plugins("edit", backend, lock, identity.path("edit")?)?;
+    crypt::require_recipient_plugins("edit", backend, lock, config.crypt_secrets().recipients())?;
+
     let workspace = crypt::Workspace::create("edit")?;
     let plain = workspace.file(name);
     crypt::decrypt_into(

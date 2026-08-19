@@ -23,12 +23,15 @@ pub fn load_template(
     let source = std::fs::read_to_string(&path)
         .with_context(|| format!("{command}: failed to read {}", path.display()))?;
     let dest = destination(command, home, repo, dir)?;
+    let config = utils::config_dir()
+        .with_context(|| format!("{command}: failed to locate the configuration"))?;
 
     run(
         command,
         &source,
         &path,
         repo,
+        &config,
         Template::new(dir.to_path_buf(), home.to_path_buf(), dest),
         classes,
     )
@@ -41,6 +44,13 @@ pub fn from_source(dir: &Path, source: &str) -> Result<Vec<Output>> {
 
 #[cfg(test)]
 pub fn from_classes(dir: &Path, source: &str, classes: &Classes) -> Result<Vec<Output>> {
+    let config = utils::config_dir().context("test: failed to locate the configuration")?;
+
+    from_config(dir, source, &config, classes)
+}
+
+#[cfg(test)]
+fn from_config(dir: &Path, source: &str, config: &Path, classes: &Classes) -> Result<Vec<Output>> {
     let root = dir.parent().unwrap_or(dir);
     let Some(dest) = template_target(dir) else {
         bail!("test: {} is not a template directory", dir.display());
@@ -51,6 +61,7 @@ pub fn from_classes(dir: &Path, source: &str, classes: &Classes) -> Result<Vec<O
         source,
         &dir.join(TEMPLATE_FILE),
         root,
+        config,
         Template::new(dir.to_path_buf(), root.to_path_buf(), dest),
         classes,
     )
@@ -70,23 +81,24 @@ fn run(
     source: &str,
     path: &Path,
     repo: &Path,
+    config: &Path,
     template: Template,
     classes: &Classes,
 ) -> Result<Vec<Output>> {
     let dir = template.dir().to_path_buf();
     let home = template.home().to_path_buf();
-    let config = utils::config_dir()
-        .with_context(|| format!("{command}: failed to locate the configuration"))?;
 
     let lua = runtime().with_context(|| format!("{command}: failed to start the Lua runtime"))?;
     lua.set_app_data(template);
-    let paths = Paths::new(&home, &config)
+    let paths = Paths::new(&home, config)
         .with_repo(Some(repo))
         .with_dir(&dir);
     install(&lua, Surface::Template, &paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
-    add_module_path(&lua, &dir)
-        .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
+    for modules in [dir.as_path(), config].into_iter().rev() {
+        add_module_path(&lua, modules)
+            .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
+    }
 
     let returned: Value = lua
         .load(source)
@@ -285,6 +297,61 @@ mod tests {
             outputs[0].content(),
             &Content::Text("alias ll='ls -l'\n".to_string())
         );
+    }
+
+    #[test]
+    fn modules_of_the_configuration_are_requirable() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("config");
+        std::fs::create_dir_all(config.join(MODULES_DIR)).unwrap();
+        std::fs::write(
+            config.join(MODULES_DIR).join("shell.lua"),
+            r#"return "export EDITOR=nvim\n""#,
+        )
+        .unwrap();
+        let dir = template_dir(root.path(), ".zshrc.luadot");
+
+        let outputs = from_config(
+            &dir,
+            r#"return require("shell")"#,
+            &config,
+            &Classes::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            outputs[0].content(),
+            &Content::Text("export EDITOR=nvim\n".to_string())
+        );
+    }
+
+    #[test]
+    fn a_module_of_the_template_shadows_the_one_of_the_configuration() {
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("config");
+        std::fs::create_dir_all(config.join(MODULES_DIR)).unwrap();
+        std::fs::write(
+            config.join(MODULES_DIR).join("shell.lua"),
+            r#"return "configuration""#,
+        )
+        .unwrap();
+        let dir = template_dir(root.path(), ".zshrc.luadot");
+        std::fs::create_dir_all(dir.join(MODULES_DIR)).unwrap();
+        std::fs::write(
+            dir.join(MODULES_DIR).join("shell.lua"),
+            r#"return "template""#,
+        )
+        .unwrap();
+
+        let outputs = from_config(
+            &dir,
+            r#"return require("shell")"#,
+            &config,
+            &Classes::default(),
+        )
+        .unwrap();
+
+        assert_eq!(outputs[0].content(), &Content::Text("template".to_string()));
     }
 
     #[test]

@@ -1,4 +1,3 @@
-use std::fmt::{self, Display};
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -12,7 +11,8 @@ use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
 
 use super::super::constants::{
-    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, STATUS_CUSTOM, STATUS_LABELS,
+    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, STATUS_CLEAN, STATUS_CUSTOM,
+    STATUS_GENERATED_CLEAN, STATUS_GENERATED_HEAD, STATUS_HEAD, STATUS_LABELS, STATUS_SECTIONS,
 };
 
 #[derive(Debug, Args)]
@@ -47,28 +47,49 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
         return Ok(());
     }
 
-    if !files.is_empty() {
-        let reported = managed_files(&config, &home, &repo, &files)?;
-        show(&config, &reported)?;
-        summary(&config, Side::Repository, &reported, 0)?;
-    }
+    let skipped = match args.templates {
+        true => 0,
+        false => templates.len(),
+    };
 
-    if templates.is_empty() {
-        return Ok(());
-    }
-    if !args.templates {
-        output::note(format!(
-            "{} template(s) skipped (run with --templates)",
-            templates.len()
-        ));
+    output::title(format!("{STATUS_HEAD} {}", repo.display()));
+    managed_side(&config, &home, &repo, &files, skipped)?;
+
+    if skipped > 0 || templates.is_empty() {
         return Ok(());
     }
 
+    generated_side(&config, &home, &repo, &templates)
+}
+
+fn managed_side(
+    config: &Config,
+    home: &Path,
+    repo: &Path,
+    files: &[Entry],
+    skipped: usize,
+) -> Result<()> {
+    if files.is_empty() {
+        if skipped > 0 {
+            output::line(unresolved(skipped));
+        }
+        return Ok(());
+    }
+
+    let reported = managed_files(config, home, repo, files)?;
+    summary(config, Side::Repository, &reported, skipped)?;
+
+    show(config, &reported)
+}
+
+fn generated_side(config: &Config, home: &Path, repo: &Path, templates: &[Entry]) -> Result<()> {
     let classes = state::load()?.classes().clone();
-    let reported = generated_files(&config, &home, &repo, &templates, &classes)?;
-    show(&config, &reported)?;
+    let reported = generated_files(config, home, repo, templates, &classes)?;
 
-    summary(&config, Side::Generated, &reported, templates.len())
+    output::section(STATUS_GENERATED_HEAD);
+    summary(config, Side::Generated, &reported, templates.len())?;
+
+    show(config, &reported)
 }
 
 fn managed_files(
@@ -161,31 +182,35 @@ fn show(config: &Config, reported: &[StatusFile]) -> Result<()> {
         return Ok(());
     }
 
-    for file in reported {
-        announced(config, file)?;
-    }
-
-    Ok(())
-}
-
-fn announced(config: &Config, file: &StatusFile) -> Result<()> {
     let Some(custom) = config.status().entry() else {
-        reported(file);
+        grouped(reported);
         return Ok(());
     };
 
-    utils::said(custom.shown(&what(CUSTOM_ENTRY), file)?);
+    for file in reported {
+        utils::said(custom.shown(&what(CUSTOM_ENTRY), file)?);
+    }
 
     Ok(())
 }
 
-fn reported(file: &StatusFile) {
-    if file.state() == FileStatus::Synced {
-        return;
-    }
+fn grouped(reported: &[StatusFile]) {
+    for (state, title, hint) in STATUS_SECTIONS {
+        let listed: Vec<&StatusFile> = reported
+            .iter()
+            .filter(|file| file.state() == state)
+            .collect();
+        if listed.is_empty() {
+            continue;
+        }
 
-    let (tone, label) = display(file.state());
-    output::entry(tone, label, file.path().display());
+        let (tone, label) = display(state);
+        output::section(title);
+        output::hint(hint);
+        for file in listed {
+            output::item(tone, format!("{label}:"), file.path().display());
+        }
+    }
 }
 
 fn summary(config: &Config, side: Side, reported: &[StatusFile], templates: usize) -> Result<()> {
@@ -193,7 +218,7 @@ fn summary(config: &Config, side: Side, reported: &[StatusFile], templates: usiz
     let default = line(side, reported.len(), templates, &counted);
 
     let Some(custom) = config.status().summary() else {
-        output::note(default);
+        output::line(default);
         return Ok(());
     };
 
@@ -208,9 +233,33 @@ fn summary(config: &Config, side: Side, reported: &[StatusFile], templates: usiz
 
 fn line(side: Side, total: usize, templates: usize, counts: &Counts) -> String {
     match side {
-        Side::Generated => format!("{templates} template(s) into {total} file(s) ({counts})"),
-        Side::Repository | Side::System => format!("{total} managed file(s) ({counts})"),
+        Side::Generated => generated_line(total, templates, counts),
+        Side::Repository | Side::System => managed_line(total, templates, counts),
     }
+}
+
+fn managed_line(total: usize, skipped: usize, counts: &Counts) -> String {
+    let head = match counts.clean() {
+        true => STATUS_CLEAN.to_string(),
+        false => format!("{total} managed file(s)"),
+    };
+
+    match skipped {
+        0 => head,
+        _ => format!("{head}, {}", unresolved(skipped)),
+    }
+}
+
+fn generated_line(total: usize, templates: usize, counts: &Counts) -> String {
+    if counts.clean() {
+        return STATUS_GENERATED_CLEAN.to_string();
+    }
+
+    format!("{templates} template(s) into {total} file(s)")
+}
+
+fn unresolved(templates: usize) -> String {
+    format!("{templates} template(s) not resolved")
 }
 
 fn counted(reported: &[StatusFile]) -> Counts {
@@ -253,18 +302,12 @@ impl Counts {
             .map(|((kind, _, _), count)| (*kind, count))
             .collect()
     }
-}
 
-impl Display for Counts {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let counted: Vec<String> = STATUS_LABELS
+    fn clean(&self) -> bool {
+        STATUS_LABELS
             .iter()
             .zip(self.0)
-            .filter(|((kind, _, _), count)| *kind != FileStatus::Unreadable || *count > 0)
-            .map(|((_, label, _), count)| format!("{count} {label}"))
-            .collect();
-
-        formatter.write_str(&counted.join(", "))
+            .all(|((kind, _, _), count)| *kind == FileStatus::Synced || count == 0)
     }
 }
 
@@ -273,6 +316,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::lua::from_source;
+    use crate::output::ITEM_WIDTH;
 
     use super::*;
 
@@ -309,28 +353,19 @@ mod tests {
     #[test]
     fn labels_fit_the_printed_column() {
         for (_, text, _) in STATUS_LABELS {
-            assert!(text.len() < 11);
+            assert!(text.len() + 1 < ITEM_WIDTH);
         }
     }
 
     #[test]
-    fn the_counts_name_every_state_a_file_can_be_in() {
-        let counts = counts(&[FileStatus::Synced, FileStatus::Synced, FileStatus::Differs]);
+    fn every_state_a_file_can_be_reported_in_has_a_section() {
+        for (status, _, _) in STATUS_LABELS {
+            if status == FileStatus::Synced {
+                continue;
+            }
 
-        assert_eq!(
-            counts.to_string(),
-            "2 synced, 0 missing, 0 unlinked, 1 differs"
-        );
-    }
-
-    #[test]
-    fn an_unreadable_file_is_counted_only_when_there_is_one() {
-        let counts = counts(&[FileStatus::Unreadable]);
-
-        assert_eq!(
-            counts.to_string(),
-            "0 synced, 0 missing, 0 unlinked, 0 differs, 1 unreadable"
-        );
+            assert!(STATUS_SECTIONS.iter().any(|(state, _, _)| *state == status));
+        }
     }
 
     #[test]
@@ -344,16 +379,31 @@ mod tests {
     }
 
     #[test]
-    fn each_side_counts_what_it_reports() {
+    fn each_side_says_what_it_reports() {
         let counts = counts(&[FileStatus::Synced, FileStatus::Missing]);
 
-        assert_eq!(
-            line(Side::Repository, 2, 0, &counts),
-            "2 managed file(s) (1 synced, 1 missing, 0 unlinked, 0 differs)"
-        );
+        assert_eq!(line(Side::Repository, 2, 0, &counts), "2 managed file(s)");
         assert_eq!(
             line(Side::Generated, 2, 1, &counts),
-            "1 template(s) into 2 file(s) (1 synced, 1 missing, 0 unlinked, 0 differs)"
+            "1 template(s) into 2 file(s)"
+        );
+    }
+
+    #[test]
+    fn a_side_with_nothing_to_apply_says_so() {
+        let counts = counts(&[FileStatus::Synced, FileStatus::Synced]);
+
+        assert_eq!(line(Side::Repository, 2, 0, &counts), STATUS_CLEAN);
+        assert_eq!(line(Side::Generated, 2, 1, &counts), STATUS_GENERATED_CLEAN);
+    }
+
+    #[test]
+    fn the_templates_left_alone_close_the_managed_line() {
+        let counts = counts(&[FileStatus::Synced]);
+
+        assert_eq!(
+            line(Side::Repository, 1, 2, &counts),
+            "nothing to apply, every managed file is synced, 2 template(s) not resolved"
         );
     }
 

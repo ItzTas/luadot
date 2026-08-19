@@ -21,7 +21,7 @@ a private temporary mirror and hands the two directories to `git diff
 
 ## Backups and restore
 
-`apply`, `alt` and `rm` save every file they destroy, into
+`apply`, `tmpl alt` and `rm` save every file they destroy, into
 `~/.local/share/luadot/backups/<unix-millisecond>/`, under the same `home/` and
 `root/` layout the repository uses; `ld.opt.backup(false)` turns it off,
 `ld.opt.backup_dir(path)` moves the directory elsewhere,

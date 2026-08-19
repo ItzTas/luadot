@@ -13,7 +13,7 @@ luadot is a small Rust CLI; the toolchain is pinned with proto (`.prototools`).
 ## Commits
 
 - Messages follow Conventional Commits, enforced by `.githooks/commit-msg`
-  (installed automatically by `build.rs`).
+  (installed automatically by the build script in `build/`).
 
 ## Comments
 

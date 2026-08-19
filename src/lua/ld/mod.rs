@@ -13,6 +13,7 @@ mod parse;
 mod path;
 mod pkg;
 mod print;
+mod regex;
 mod repo;
 mod root;
 mod setup;

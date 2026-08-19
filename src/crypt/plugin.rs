@@ -1,12 +1,20 @@
+use std::borrow::Borrow;
+use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use anyhow::{Result, bail};
 
 use super::backend::Backend;
-use super::constants::{PLUGIN_BINARY, PLUGIN_IDENTITY, PLUGIN_RECIPIENT};
+use super::constants::{EXECUTABLE, PLUGIN_BINARY, PLUGIN_IDENTITY, PLUGIN_RECIPIENT};
 use super::lock::Lock;
+
+static CHECKED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
+
+static CLEARED: Mutex<BTreeSet<PathBuf>> = Mutex::new(BTreeSet::new());
 
 pub fn for_recipients(
     command: &str,
@@ -40,27 +48,48 @@ pub fn for_identity(
     let Some(identity) = identity else {
         return Ok(());
     };
+    if seen(&CLEARED, identity) {
+        return Ok(());
+    }
     let Ok(contents) = std::fs::read_to_string(identity) else {
         return Ok(());
     };
-    let Some(name) = from_identity(&contents) else {
-        return Ok(());
-    };
 
-    require(
-        command,
-        &name,
-        &format!("the identity {}", identity.display()),
-    )
+    let what = format!("the identity {}", identity.display());
+    for name in from_identity(&contents) {
+        require(command, &name, &what)?;
+    }
+    remember(&CLEARED, identity.to_path_buf());
+
+    Ok(())
 }
 
 fn require(command: &str, name: &str, what: &str) -> Result<()> {
-    let binary = binary(name);
-    if in_path(&binary, env::var_os("PATH").as_deref()).is_some() {
+    if seen(&CHECKED, name) {
         return Ok(());
     }
 
-    bail!("{command}: {what} needs `{binary}`, which is not on your PATH")
+    let binary = binary(name);
+    if in_path(&binary, env::var_os("PATH").as_deref()).is_none() {
+        bail!("{command}: {what} needs `{binary}`, which is not on your PATH");
+    }
+    remember(&CHECKED, name.to_string());
+
+    Ok(())
+}
+
+fn seen<T, Q>(memo: &Mutex<BTreeSet<T>>, key: &Q) -> bool
+where
+    T: Ord + Borrow<Q>,
+    Q: Ord + ?Sized,
+{
+    memo.lock().is_ok_and(|memo| memo.contains(key))
+}
+
+fn remember<T: Ord>(memo: &Mutex<BTreeSet<T>>, key: T) {
+    if let Ok(mut memo) = memo.lock() {
+        memo.insert(key);
+    }
 }
 
 fn binary(name: &str) -> String {
@@ -68,35 +97,65 @@ fn binary(name: &str) -> String {
 }
 
 fn from_recipient(recipient: &str) -> Option<String> {
-    let name = recipient
-        .rsplit_once('1')?
-        .0
-        .strip_prefix(PLUGIN_RECIPIENT)?;
+    let lowered = recipient.to_lowercase();
+    let name = lowered.rsplit_once('1')?.0.strip_prefix(PLUGIN_RECIPIENT)?;
     match name.is_empty() {
         true => None,
-        false => Some(name.to_lowercase()),
+        false => Some(name.to_string()),
     }
 }
 
-fn from_identity(contents: &str) -> Option<String> {
-    contents
-        .lines()
-        .map(str::trim)
-        .filter_map(|line| line.strip_prefix(PLUGIN_IDENTITY))
-        .find_map(|rest| rest.rsplit_once('-'))
-        .map(|(name, _)| name.to_lowercase())
-        .filter(|name| !name.is_empty())
+fn from_identity(contents: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in contents.lines().map(str::trim) {
+        let Some(name) = named(line) else {
+            continue;
+        };
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+fn named(line: &str) -> Option<String> {
+    let name = line
+        .strip_prefix(PLUGIN_IDENTITY)?
+        .rsplit_once('-')?
+        .0
+        .to_lowercase();
+
+    match name.is_empty() {
+        true => None,
+        false => Some(name),
+    }
 }
 
 fn in_path(program: &str, path: Option<&OsStr>) -> Option<PathBuf> {
     env::split_paths(path?)
         .map(|dir| dir.join(program))
-        .find(|candidate| candidate.is_file())
+        .find(|candidate| runnable(candidate))
+}
+
+fn runnable(candidate: &Path) -> bool {
+    let Ok(metadata) = candidate.metadata() else {
+        return false;
+    };
+
+    metadata.is_file() && metadata.permissions().mode() & EXECUTABLE != 0
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn install(dir: &Path, name: &str, mode: u32) -> PathBuf {
+        let binary = dir.join(name);
+        std::fs::write(&binary, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(mode)).unwrap();
+
+        binary
+    }
 
     #[test]
     fn a_plugin_recipient_names_its_binary() {
@@ -107,6 +166,14 @@ mod tests {
             Some("yubikey".to_string())
         );
         assert_eq!(binary("yubikey"), "age-plugin-yubikey");
+    }
+
+    #[test]
+    fn an_uppercase_recipient_names_the_same_binary() {
+        assert_eq!(
+            from_recipient("AGE1YUBIKEY1QWQVURUPQ2FZHAEG38G4HKYRFCYVPUHRJCNR6DTCXZFTZMXTD8J7F"),
+            Some("yubikey".to_string())
+        );
     }
 
     #[test]
@@ -122,32 +189,50 @@ mod tests {
     fn a_plugin_identity_names_its_binary() {
         assert_eq!(
             from_identity("AGE-PLUGIN-YUBIKEY-1QQQPQ8UEZQ\n"),
-            Some("yubikey".to_string())
+            ["yubikey"]
         );
         assert_eq!(
             from_identity("# created by age-plugin-tpm\nAGE-PLUGIN-TPM-EK-1QQQPQ\n"),
-            Some("tpm-ek".to_string())
+            ["tpm-ek"]
         );
     }
 
     #[test]
-    fn a_native_identity_needs_no_plugin() {
-        assert_eq!(
-            from_identity("# public key: age1ql3z7\nAGE-SECRET-KEY-1QQQPQ\n"),
-            None
+    fn an_identity_file_names_every_plugin_once() {
+        let contents = concat!(
+            "AGE-PLUGIN--1QQQPQ\n",
+            "AGE-SECRET-KEY-1QQQPQ\n",
+            "AGE-PLUGIN-YUBIKEY-1QQQPQ\n",
+            "AGE-PLUGIN-TPM-1QQQPQ\n",
+            "AGE-PLUGIN-YUBIKEY-1QQQPZ\n",
         );
+
+        assert_eq!(from_identity(contents), ["yubikey", "tpm"]);
+    }
+
+    #[test]
+    fn a_native_identity_needs_no_plugin() {
+        assert!(from_identity("# public key: age1ql3z7\nAGE-SECRET-KEY-1QQQPQ\n").is_empty());
     }
 
     #[test]
     fn a_binary_is_looked_up_along_the_path() {
         let dir = tempfile::tempdir().unwrap();
-        let binary = dir.path().join("age-plugin-luadot");
-        std::fs::write(&binary, "#!/bin/sh\n").unwrap();
+        let binary = install(dir.path(), "age-plugin-luadot", 0o755);
         let path = env::join_paths([dir.path()]).unwrap();
 
         assert_eq!(in_path("age-plugin-luadot", Some(&path)), Some(binary));
         assert_eq!(in_path("age-plugin-missing", Some(&path)), None);
         assert_eq!(in_path("age-plugin-luadot", None), None);
+    }
+
+    #[test]
+    fn a_binary_nothing_can_run_is_not_one() {
+        let dir = tempfile::tempdir().unwrap();
+        install(dir.path(), "age-plugin-luadot", 0o644);
+        let path = env::join_paths([dir.path()]).unwrap();
+
+        assert_eq!(in_path("age-plugin-luadot", Some(&path)), None);
     }
 
     #[test]
