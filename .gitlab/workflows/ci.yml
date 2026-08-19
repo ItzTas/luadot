@@ -32,6 +32,16 @@ test:
     - cargo clippy --all-targets -- -D warnings
     - cargo test --verbose
 
+vendor:
+  stage: test
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  image: rust:latest
+  script:
+    - ./packaging/vendor/update.sh --check
+
 bump:
   stage: release
   tags:
