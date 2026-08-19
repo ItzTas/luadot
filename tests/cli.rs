@@ -1557,7 +1557,7 @@ fn an_identity_command_hands_the_key_over_without_a_file() {
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
-        ld.crypt.lock({ recipients = "age1example", identity_command = "printf 'AGE-SECRET-KEY-FAKE\n'" })
+        ld.crypt.lock({ recipients = "age1example", identity = "printf 'AGE-SECRET-KEY-FAKE\n'" })
         ld.rules({ match = "home/.netrc", encrypt = true })
         "#,
     );
@@ -1604,7 +1604,7 @@ fn a_failing_identity_command_stops_the_command() {
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
-        ld.crypt.lock({ recipients = "age1example", identity_command = "echo locked >&2; exit 1" })
+        ld.crypt.lock({ recipients = "age1example", identity = { type = "command", "echo locked >&2; exit 1" } })
         ld.rules({ match = "home/.netrc", encrypt = true })
         "#,
     );

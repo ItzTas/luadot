@@ -14,10 +14,15 @@ pub enum Provider {
     Program(Vec<String>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Key {
+    File(PathBuf),
+    Command(Provider),
+}
+
 #[derive(Debug, Default)]
 pub struct Identity {
-    file: Option<PathBuf>,
-    provider: Option<Provider>,
+    key: Option<Key>,
     workspace: Option<Workspace>,
     provided: Option<PathBuf>,
 }
@@ -47,18 +52,19 @@ impl Provider {
 }
 
 impl Identity {
-    pub fn new(file: Option<PathBuf>, provider: Option<Provider>) -> Self {
+    pub fn new(key: Option<Key>) -> Self {
         Self {
-            file,
-            provider,
+            key,
             workspace: None,
             provided: None,
         }
     }
 
     pub fn path(&mut self, command: &str) -> Result<Option<&Path>> {
-        let Some(provider) = &self.provider else {
-            return Ok(self.file.as_deref());
+        let provider = match &self.key {
+            None => return Ok(None),
+            Some(Key::File(file)) => return Ok(Some(file)),
+            Some(Key::Command(provider)) => provider,
         };
         if self.provided.is_none() {
             let (workspace, path) = provide(command, provider)?;
@@ -134,7 +140,7 @@ mod tests {
 
     #[test]
     fn without_a_provider_the_identity_is_the_configured_file() {
-        let mut identity = Identity::new(Some(PathBuf::from("/home/u/key.txt")), None);
+        let mut identity = Identity::new(Some(Key::File(PathBuf::from("/home/u/key.txt"))));
 
         assert_eq!(
             identity.path("apply").unwrap(),
@@ -148,13 +154,10 @@ mod tests {
     }
 
     #[test]
-    fn the_provider_wins_over_the_file_and_lands_in_a_private_file() {
-        let mut identity = Identity::new(
-            Some(PathBuf::from("/home/u/key.txt")),
-            Some(Provider::Line(
-                "printf 'AGE-SECRET-KEY-1TEST\n'".to_string(),
-            )),
-        );
+    fn a_provided_identity_lands_in_a_private_file() {
+        let mut identity = Identity::new(Some(Key::Command(Provider::Line(
+            "printf 'AGE-SECRET-KEY-1TEST\n'".to_string(),
+        ))));
 
         let path = identity.path("apply").unwrap().unwrap().to_path_buf();
 
@@ -172,13 +175,10 @@ mod tests {
     fn the_provider_runs_once_for_the_whole_command() {
         let dir = tempfile::tempdir().unwrap();
         let counter = dir.path().join("runs");
-        let mut identity = Identity::new(
-            None,
-            Some(Provider::Line(format!(
-                "printf x >> {}; printf 'AGE-SECRET-KEY-1TEST\n'",
-                counter.display()
-            ))),
-        );
+        let mut identity = Identity::new(Some(Key::Command(Provider::Line(format!(
+            "printf x >> {}; printf 'AGE-SECRET-KEY-1TEST\n'",
+            counter.display()
+        )))));
 
         let first = identity.path("apply").unwrap().unwrap().to_path_buf();
         let second = identity.path("apply").unwrap().unwrap().to_path_buf();
@@ -190,12 +190,9 @@ mod tests {
     #[test]
     fn dropping_the_identity_takes_the_provided_file_along() {
         let path = {
-            let mut identity = Identity::new(
-                None,
-                Some(Provider::Line(
-                    "printf 'AGE-SECRET-KEY-1TEST\n'".to_string(),
-                )),
-            );
+            let mut identity = Identity::new(Some(Key::Command(Provider::Line(
+                "printf 'AGE-SECRET-KEY-1TEST\n'".to_string(),
+            ))));
             identity.path("apply").unwrap().unwrap().to_path_buf()
         };
 
@@ -204,10 +201,9 @@ mod tests {
 
     #[test]
     fn a_failing_provider_reports_its_stderr() {
-        let mut identity = Identity::new(
-            None,
-            Some(Provider::Line("echo locked >&2; exit 1".to_string())),
-        );
+        let mut identity = Identity::new(Some(Key::Command(Provider::Line(
+            "echo locked >&2; exit 1".to_string(),
+        ))));
 
         let err = identity.path("apply").unwrap_err().to_string();
 
@@ -216,7 +212,8 @@ mod tests {
 
     #[test]
     fn a_silent_provider_is_refused() {
-        let mut identity = Identity::new(None, Some(Provider::Line("printf ' '".to_string())));
+        let mut identity =
+            Identity::new(Some(Key::Command(Provider::Line("printf ' '".to_string()))));
 
         let err = identity.path("apply").unwrap_err().to_string();
 
@@ -225,7 +222,7 @@ mod tests {
 
     #[test]
     fn a_provider_that_cannot_run_says_so() {
-        let mut identity = Identity::new(None, Some(program(&["luadot-no-such-provider"])));
+        let mut identity = Identity::new(Some(Key::Command(program(&["luadot-no-such-provider"]))));
 
         let err = format!("{:#}", identity.path("apply").unwrap_err());
 

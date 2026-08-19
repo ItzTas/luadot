@@ -1,13 +1,15 @@
+use std::path::PathBuf;
+
 use mlua::{Lua, Table, Value};
 
 use super::super::parse::external;
 use super::super::surface::{self, Surface};
-use super::super::value::{expected, flag, keys, path, text};
+use super::super::value::{choice, expected, flag, keys, text};
 use super::constants::{
-    IDENTITY, IDENTITY_COMMAND, LOCK, LOCK_CONFLICT, LOCK_KEYS, LOCK_KIND, NAMESPACE, PASSPHRASE,
-    RECIPIENTS,
+    FILE_ALONE, IDENTITY, IDENTITY_KEYS, IDENTITY_KIND, IDENTITY_TYPE, IDENTITY_TYPES, Kind, LOCK,
+    LOCK_CONFLICT, LOCK_KEYS, LOCK_KIND, NAMESPACE, PASSPHRASE, RECIPIENTS, TYPE,
 };
-use crate::crypt::{Provider, Secrets};
+use crate::crypt::{Key, Provider, Secrets};
 use crate::lua::Config;
 
 pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
@@ -45,12 +47,7 @@ fn keyed(options: &Table) -> mlua::Result<Secrets> {
 
     let identity = match options.get::<Value>(IDENTITY)? {
         Value::Nil => None,
-        value => Some(path(LOCK_KEYS, &value, IDENTITY, "a path")?),
-    };
-
-    let identity_command = match options.get::<Value>(IDENTITY_COMMAND)? {
-        Value::Nil => None,
-        value => Some(provider(&value)?),
+        value => Some(key(&value)?),
     };
 
     let passphrase = match options.get::<Value>(PASSPHRASE)? {
@@ -62,42 +59,76 @@ fn keyed(options: &Table) -> mlua::Result<Secrets> {
         return Ok(Secrets::Keys {
             recipients,
             identity,
-            identity_command,
         });
     }
-    if !recipients.is_empty() || identity.is_some() || identity_command.is_some() {
+    if !recipients.is_empty() || identity.is_some() {
         return Err(external(LOCK_CONFLICT.to_string()));
     }
 
     Ok(Secrets::Passphrase)
 }
 
-fn provider(value: &Value) -> mlua::Result<Provider> {
-    let kind = "a command line or a list of a program and its arguments";
+fn key(value: &Value) -> mlua::Result<Key> {
     match value {
-        Value::String(_) => line(value, kind),
-        Value::Table(_) => keys(LOCK_KEYS, value, IDENTITY_COMMAND)
-            .map(Provider::Program)
-            .map_err(|_| expected(LOCK_KEYS, IDENTITY_COMMAND, kind)),
-        _ => Err(expected(LOCK_KEYS, IDENTITY_COMMAND, kind)),
+        Value::String(_) => Ok(guessed(text(LOCK_KEYS, value, IDENTITY)?)),
+        Value::Table(options) => keyed_identity(options),
+        _ => Err(expected(LOCK_KEYS, IDENTITY, IDENTITY_KIND)),
     }
 }
 
-fn line(value: &Value, kind: &str) -> mlua::Result<Provider> {
-    let line = text(LOCK_KEYS, value, IDENTITY_COMMAND)?;
-    if line.trim().is_empty() {
-        return Err(expected(LOCK_KEYS, IDENTITY_COMMAND, kind));
+fn guessed(written: String) -> Key {
+    match written.trim().contains(char::is_whitespace) {
+        true => Key::Command(Provider::Line(written)),
+        false => Key::File(PathBuf::from(written)),
+    }
+}
+
+fn keyed_identity(options: &Table) -> mlua::Result<Key> {
+    let words = keys(IDENTITY_KEYS, &Value::Table(options.clone()), IDENTITY)
+        .map_err(|_| expected(LOCK_KEYS, IDENTITY, IDENTITY_KIND))?;
+
+    match options.get::<Value>(TYPE)? {
+        Value::Nil => Ok(program(words)),
+        value => typed(
+            choice(IDENTITY_KEYS, &value, TYPE, &IDENTITY_TYPES, IDENTITY_TYPE)?,
+            words,
+        ),
+    }
+}
+
+fn typed(kind: Kind, mut words: Vec<String>) -> mlua::Result<Key> {
+    if kind == Kind::Command {
+        return Ok(program(words));
+    }
+    if words.len() != 1 {
+        return Err(external(FILE_ALONE.to_string()));
     }
 
-    Ok(Provider::Line(line))
+    Ok(Key::File(PathBuf::from(words.remove(0))))
+}
+
+fn program(mut words: Vec<String>) -> Key {
+    match words.len() {
+        1 => Key::Command(Provider::Line(words.remove(0))),
+        _ => Key::Command(Provider::Program(words)),
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::PathBuf;
 
-    use crate::crypt::{Provider, Secrets};
+    use crate::crypt::{Key, Provider, Secrets};
     use crate::lua::from_source;
+
+    fn identity(source: &str) -> Key {
+        let config = from_source(source).unwrap();
+        let Secrets::Keys { identity, .. } = config.crypt_secrets() else {
+            panic!("expected the key form");
+        };
+
+        identity.clone().expect("expected an identity")
+    }
 
     #[test]
     fn defaults_to_keys_without_any() {
@@ -114,13 +145,12 @@ mod tests {
     }
 
     #[test]
-    fn a_table_carries_the_keys_the_lock_needs() {
+    fn a_table_carries_the_recipients_and_the_identity() {
         let config = from_source(
             r#"
             ld.crypt.lock({
               recipients = { "age1first", "age1second" },
               identity = "~/.keys/age.txt",
-              identity_command = "pass show age/key",
             })
             "#,
         )
@@ -130,8 +160,7 @@ mod tests {
             config.crypt_secrets(),
             &Secrets::Keys {
                 recipients: vec!["age1first".to_string(), "age1second".to_string()],
-                identity: Some(Path::new("~/.keys/age.txt").to_path_buf()),
-                identity_command: Some(Provider::Line("pass show age/key".to_string())),
+                identity: Some(Key::File(PathBuf::from("~/.keys/age.txt"))),
             }
         );
     }
@@ -171,27 +200,73 @@ mod tests {
     }
 
     #[test]
-    fn an_identity_command_takes_a_program_and_its_arguments() {
-        let config = from_source(
-            r#"ld.crypt.lock({ identity_command = { "op", "read", "op://vault/age/key" } })"#,
-        )
-        .unwrap();
+    fn a_written_identity_without_a_space_is_a_path() {
+        assert_eq!(
+            identity(r#"ld.crypt.lock({ identity = "~/.keys/age.txt" })"#),
+            Key::File(PathBuf::from("~/.keys/age.txt"))
+        );
+    }
 
-        let Secrets::Keys {
-            identity_command, ..
-        } = config.crypt_secrets()
-        else {
-            panic!("expected the key form");
-        };
+    #[test]
+    fn a_written_identity_carrying_a_space_is_a_command() {
+        assert_eq!(
+            identity(r#"ld.crypt.lock({ identity = "pass show age/key" })"#),
+            Key::Command(Provider::Line("pass show age/key".to_string()))
+        );
+    }
+
+    #[test]
+    fn a_type_names_what_the_guess_would_have_missed() {
+        assert_eq!(
+            identity(r#"ld.crypt.lock({ identity = { type = "file", "/mnt/my key.txt" } })"#),
+            Key::File(PathBuf::from("/mnt/my key.txt"))
+        );
+        assert_eq!(
+            identity(r#"ld.crypt.lock({ identity = { type = "command", "unlock-key" } })"#),
+            Key::Command(Provider::Line("unlock-key".to_string()))
+        );
+    }
+
+    #[test]
+    fn several_words_are_a_program_and_its_arguments() {
+        let expected = Key::Command(Provider::Program(vec![
+            "op".to_string(),
+            "read".to_string(),
+            "op://vault/age/key".to_string(),
+        ]));
 
         assert_eq!(
-            identity_command.as_ref(),
-            Some(&Provider::Program(vec![
-                "op".to_string(),
-                "read".to_string(),
-                "op://vault/age/key".to_string(),
-            ]))
+            identity(r#"ld.crypt.lock({ identity = { "op", "read", "op://vault/age/key" } })"#),
+            expected
         );
+        assert_eq!(
+            identity(
+                r#"ld.crypt.lock({ identity = { type = "command", "op", "read", "op://vault/age/key" } })"#
+            ),
+            expected
+        );
+    }
+
+    #[test]
+    fn a_file_takes_one_path_and_no_more() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.crypt.lock({ identity = { type = "file", "a", "b" } })"#)
+                .unwrap_err()
+        );
+
+        assert!(err.contains("identity of type `file` takes one path"));
+    }
+
+    #[test]
+    fn rejects_a_type_that_names_nothing() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.crypt.lock({ identity = { type = "keyring", "x" } })"#).unwrap_err()
+        );
+
+        assert!(err.contains("unknown identity type `keyring`"));
+        assert!(err.contains("command, file"));
     }
 
     #[test]

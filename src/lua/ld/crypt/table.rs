@@ -11,7 +11,7 @@ pub fn table(lua: &Lua) -> mlua::Result<Table> {
 mod tests {
     use std::path::Path;
 
-    use crate::crypt::{Backend, Secrets};
+    use crate::crypt::{Backend, Key, Secrets};
     use crate::lua::from_source;
 
     #[test]
@@ -34,8 +34,7 @@ mod tests {
             config.crypt_secrets(),
             &Secrets::Keys {
                 recipients: vec!["me@example.com".to_string()],
-                identity: Some(Path::new("~/.keys/private.asc").to_path_buf()),
-                identity_command: None,
+                identity: Some(Key::File(Path::new("~/.keys/private.asc").to_path_buf())),
             }
         );
     }

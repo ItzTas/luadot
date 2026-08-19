@@ -11,7 +11,7 @@ mod sync;
 
 pub use backend::Backend;
 pub use edit::Workspace;
-pub use identity::{Identity, Provider};
+pub use identity::{Identity, Key, Provider};
 pub use lock::Lock;
 pub use path::{logical, split, stored, stored_variant};
 pub use run::{decrypt, decrypt_into, encrypt, encrypt_contents, require_recipients};
