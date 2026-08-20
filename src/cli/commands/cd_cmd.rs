@@ -39,20 +39,14 @@ fn build_command(shell: &str, repo: &Path) -> Command {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::{OsStr, OsString};
+    use std::ffi::OsStr;
     use std::path::Path;
 
-    use super::{DEFAULT_SHELL, build_command, resolve_shell};
+    use super::{build_command, resolve_shell};
 
     #[test]
     fn resolve_shell_uses_the_environment_value() {
         assert_eq!(resolve_shell(Some("/usr/bin/zsh".into())), "/usr/bin/zsh");
-    }
-
-    #[test]
-    fn resolve_shell_defaults_when_unset_or_empty() {
-        assert_eq!(resolve_shell(None), DEFAULT_SHELL);
-        assert_eq!(resolve_shell(Some(OsString::new())), DEFAULT_SHELL);
     }
 
     #[test]

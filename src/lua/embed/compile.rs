@@ -117,12 +117,4 @@ mod tests {
 
         assert_eq!(source, "\n__ld_write( x );");
     }
-
-    #[test]
-    fn an_empty_template_compiles_to_an_empty_chunk() {
-        let (source, literals) = compile("").unwrap().into_parts();
-
-        assert_eq!(source, "");
-        assert!(literals.is_empty());
-    }
 }

@@ -1,0 +1,53 @@
+source-tarball:
+  stage: binaries
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "nightly"'
+  image: rust:latest
+  resource_group: release-assets
+  needs:
+    - job: bump
+      artifacts: true
+  variables:
+    GIT_DEPTH: 0
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends jq
+    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
+    - git fetch origin --tags --force
+  script:
+    - ./packaging/release/source.sh "$LUADOT_TAG"
+    - ./packaging/release/upload.sh "$LUADOT_TAG"
+
+binaries:
+  stage: binaries
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  image: rust:latest
+  resource_group: release-assets
+  needs:
+    - job: bump
+      artifacts: true
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+    GIT_DEPTH: 0
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/
+    policy: pull
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends cmake jq gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+    - rustup target add aarch64-unknown-linux-gnu
+    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
+    - git fetch origin --tags --force
+    - git checkout "$LUADOT_TAG"
+  script:
+    - ./packaging/release/build.sh "$LUADOT_TAG"
+    - ./packaging/release/deb.sh "$LUADOT_TAG"
+    - ./packaging/release/upload.sh "$LUADOT_TAG"

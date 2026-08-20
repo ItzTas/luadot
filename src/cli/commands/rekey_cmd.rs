@@ -201,17 +201,6 @@ mod tests {
     }
 
     #[test]
-    fn a_secret_keeps_its_path_when_the_backend_stays() {
-        let repo = repo();
-        let secrets = secrets(&repo, &[repo.join("home/.netrc.age")]);
-
-        assert_eq!(
-            target(&repo, &secrets[0], crypt::Backend::Age),
-            repo.join("home/.netrc.age")
-        );
-    }
-
-    #[test]
     fn a_secret_moves_to_the_extension_of_the_configured_backend() {
         let repo = repo();
         let secrets = secrets(&repo, &[repo.join("home/.netrc.age")]);

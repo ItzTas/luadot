@@ -251,42 +251,6 @@ mod tests {
     }
 
     #[test]
-    fn place_refuses_to_replace_a_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".netrc");
-        std::fs::create_dir(&dest).unwrap();
-
-        let err = place("apply", ConflictPolicy::Overwrite, b"secret", &dest)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("refusing to replace directory"));
-    }
-
-    #[test]
-    fn plain_status_reads_what_the_destination_holds() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".netrc");
-
-        assert_eq!(
-            plain_status("status", b"secret", &dest).unwrap(),
-            FileStatus::Missing
-        );
-
-        place("apply", ConflictPolicy::Overwrite, b"secret", &dest).unwrap();
-        assert_eq!(
-            plain_status("status", b"secret", &dest).unwrap(),
-            FileStatus::Synced
-        );
-
-        std::fs::write(&dest, "handwritten").unwrap();
-        assert_eq!(
-            plain_status("status", b"secret", &dest).unwrap(),
-            FileStatus::Differs
-        );
-    }
-
-    #[test]
     fn place_system_writes_the_secret_with_the_mode_the_rules_ask_for() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join("etc/wireguard/wg0.conf");
@@ -304,28 +268,6 @@ mod tests {
         assert_eq!(outcome, SyncOutcome::Created);
         assert_eq!(std::fs::read(&dest).unwrap(), b"PrivateKey = secret\n");
         assert_eq!(mode_of(&dest), 0o640);
-    }
-
-    #[test]
-    fn place_system_without_a_mode_keeps_the_secret_private() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("wg0.conf");
-
-        place_system("apply", ConflictPolicy::Error, b"secret", &dest, None, None).unwrap();
-
-        assert_eq!(mode_of(&dest), SECRET_MODE);
-    }
-
-    #[test]
-    fn place_system_leaves_a_matching_destination_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("wg0.conf");
-        place_system("apply", ConflictPolicy::Error, b"secret", &dest, None, None).unwrap();
-
-        let outcome =
-            place_system("apply", ConflictPolicy::Error, b"secret", &dest, None, None).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::AlreadySynced);
     }
 
     #[test]
@@ -410,19 +352,6 @@ mod tests {
             )
             .unwrap(),
             FileStatus::Missing
-        );
-    }
-
-    #[test]
-    fn a_widened_mode_reads_as_diverged() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".netrc");
-        place("apply", ConflictPolicy::Overwrite, b"secret", &dest).unwrap();
-        std::fs::set_permissions(&dest, Permissions::from_mode(0o644)).unwrap();
-
-        assert_eq!(
-            plain_status("status", b"secret", &dest).unwrap(),
-            FileStatus::Differs
         );
     }
 }

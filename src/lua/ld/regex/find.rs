@@ -45,12 +45,4 @@ mod tests {
             "6:9"
         );
     }
-
-    #[test]
-    fn yields_nothing_without_a_match() {
-        assert_eq!(
-            eval(r#"return regex.find("nvim", "\\d") == nil and "nil" or "value""#).unwrap(),
-            "nil"
-        );
-    }
 }

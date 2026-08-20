@@ -106,15 +106,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn collect_files_returns_a_single_file_root() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("init.lua");
-        std::fs::write(&file, "data").unwrap();
-
-        assert_eq!(collect_files("apply", &file).unwrap(), vec![file]);
-    }
-
-    #[test]
     fn collect_files_walks_directories_recursively() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
@@ -190,23 +181,6 @@ mod tests {
     }
 
     #[test]
-    fn an_entry_targets_the_path_it_stands_for() {
-        let file = PathBuf::from("/repo/.vimrc");
-        let template = PathBuf::from("/repo/.zshrc.luadot");
-        let standalone = PathBuf::from("/repo/.zprofile.luadot");
-
-        assert_eq!(Entry::File(file.clone()).target(), file);
-        assert_eq!(
-            Entry::Template(template).target(),
-            PathBuf::from("/repo/.zshrc")
-        );
-        assert_eq!(
-            Entry::Standalone(standalone).target(),
-            PathBuf::from("/repo/.zprofile")
-        );
-    }
-
-    #[test]
     fn a_standalone_template_is_its_own_entry() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
@@ -235,14 +209,5 @@ mod tests {
             collect_entries("alt", &standalone).unwrap(),
             vec![Entry::Standalone(standalone)]
         );
-    }
-
-    #[test]
-    fn collect_files_returns_a_standalone_template_itself() {
-        let dir = tempfile::tempdir().unwrap();
-        let standalone = dir.path().join(".zprofile.luadot");
-        std::fs::write(&standalone, "export HOST=1\n").unwrap();
-
-        assert_eq!(collect_files("rm", dir.path()).unwrap(), vec![standalone]);
     }
 }

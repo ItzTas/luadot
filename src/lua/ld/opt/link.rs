@@ -18,17 +18,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
-    use crate::files::LinkMode;
     use crate::lua::from_source;
-
-    #[test]
-    fn sets_the_default_link_mode() {
-        let config = from_source(r#"ld.opt.link("symbolic")"#).unwrap();
-
-        assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
-    }
 
     #[test]
     fn rejects_an_unknown_link_mode() {

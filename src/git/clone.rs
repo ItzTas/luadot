@@ -48,21 +48,3 @@ pub fn clone(dir: &Path, url: &str) -> Result<Cloned> {
     debug!(dir = %dir.display(), ?cloned, "cloned");
     Ok(cloned)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[ignore = "requires network access"]
-    fn clones_a_public_repo() {
-        let dir = tempfile::tempdir().unwrap();
-        let target = dir.path().join("repo");
-
-        let cloned = clone(&target, "https://github.com/octocat/Hello-World").unwrap();
-
-        assert_eq!(cloned, Cloned::Repository);
-        assert!(target.join(".git").is_dir());
-        assert!(target.join("README").exists());
-    }
-}

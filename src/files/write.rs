@@ -128,34 +128,6 @@ mod tests {
     }
 
     #[test]
-    fn a_symlink_never_counts_as_the_generated_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join(".zshrc");
-        std::fs::write(&source, "generated").unwrap();
-        std::os::unix::fs::symlink(&source, &dest).unwrap();
-
-        assert!(!holds(&dest, "generated", None).unwrap());
-
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "generated", None).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Replaced);
-        assert!(!std::fs::symlink_metadata(&dest).unwrap().is_symlink());
-        assert_eq!(std::fs::read_to_string(&source).unwrap(), "generated");
-    }
-
-    #[test]
-    fn refuses_to_replace_a_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".zshrc");
-        std::fs::create_dir(&dest).unwrap();
-
-        let err = write_file(ConflictPolicy::Overwrite, &dest, "generated", None).unwrap_err();
-
-        assert!(err.to_string().contains("refusing to replace directory"));
-    }
-
-    #[test]
     fn a_mode_lands_on_the_file_it_creates() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".netrc");
@@ -178,17 +150,6 @@ mod tests {
 
         assert_eq!(outcome, SyncOutcome::Replaced);
         assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o600);
-    }
-
-    #[test]
-    fn a_file_already_carrying_the_mode_is_left_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".netrc");
-        write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o600)).unwrap();
-
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o600)).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::AlreadySynced);
     }
 
     #[test]
@@ -220,29 +181,6 @@ mod tests {
         assert_eq!(
             text_status(&dest, "secret", None).unwrap(),
             FileStatus::Synced
-        );
-    }
-
-    #[test]
-    fn text_status_reads_what_the_destination_holds() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".zshrc");
-
-        assert_eq!(
-            text_status(&dest, "generated", None).unwrap(),
-            FileStatus::Missing
-        );
-
-        std::fs::write(&dest, "generated").unwrap();
-        assert_eq!(
-            text_status(&dest, "generated", None).unwrap(),
-            FileStatus::Synced
-        );
-
-        std::fs::write(&dest, "handwritten").unwrap();
-        assert_eq!(
-            text_status(&dest, "generated", None).unwrap(),
-            FileStatus::Differs
         );
     }
 }

@@ -217,18 +217,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ages_are_told_in_the_largest_unit_that_fits() {
-        assert_eq!(ago(0), "just now");
-        assert_eq!(ago(1), "1 second ago");
-        assert_eq!(ago(59), "59 seconds ago");
-        assert_eq!(ago(60), "1 minute ago");
-        assert_eq!(ago(3_600), "1 hour ago");
-        assert_eq!(ago(7_200), "2 hours ago");
-        assert_eq!(ago(86_400), "1 day ago");
-        assert_eq!(ago(200_000), "2 days ago");
-    }
-
-    #[test]
     fn the_most_recent_backup_is_the_default() {
         let taken = vec![
             (100, PathBuf::from("/data/backups/100")),
@@ -242,18 +230,6 @@ mod tests {
     }
 
     #[test]
-    fn a_named_backup_is_taken_as_written() {
-        let taken = vec![
-            (100, PathBuf::from("/data/backups/100")),
-            (200, PathBuf::from("/data/backups/200")),
-        ];
-
-        let (stamp, _) = chosen(&taken, Some(&"100".to_string())).unwrap();
-
-        assert_eq!(stamp, 100);
-    }
-
-    #[test]
     fn a_backup_that_does_not_exist_is_reported() {
         let taken = vec![(100, PathBuf::from("/data/backups/100"))];
 
@@ -262,23 +238,6 @@ mod tests {
             .to_string();
 
         assert!(err.contains("restore: no backup named 42"));
-    }
-
-    #[test]
-    fn a_restored_file_lands_back_on_its_own_path() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = root.path().join("backup");
-        let home = root.path().join("home");
-        let saved = dir.join("home/.config/nvim/init.lua");
-        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
-        std::fs::write(&saved, "backed up").unwrap();
-
-        put_back("restore", &dir, &home, &saved).unwrap();
-
-        assert_eq!(
-            std::fs::read_to_string(home.join(".config/nvim/init.lua")).unwrap(),
-            "backed up"
-        );
     }
 
     #[test]

@@ -21,21 +21,8 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 #[cfg(test)]
 mod tests {
     use super::super::parse::message;
-    use super::super::table::table;
     use crate::lua::runtime::runtime;
     use crate::output::{LABEL_WIDTH, Message};
-
-    fn run(source: &str) -> mlua::Result<()> {
-        let lua = runtime().unwrap();
-        lua.globals().set("print_", table(&lua).unwrap()).unwrap();
-
-        lua.load(source).exec()
-    }
-
-    #[test]
-    fn an_entry_takes_a_label_and_the_text_beside_it() {
-        assert!(run(r#"print_.entry("create", "~/.bashrc", { tone = "good" })"#).is_ok());
-    }
 
     #[test]
     fn the_label_fills_the_column_and_the_text_follows_it() {

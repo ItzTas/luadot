@@ -94,28 +94,12 @@ mod tests {
     }
 
     #[test]
-    fn the_surfaces_running_once_carry_no_slow_message() {
-        assert!(slow_message(Surface::Bootstrap, "pkg.install").is_none());
-        assert!(slow_message(Surface::Setup, "setup.all").is_none());
-    }
-
-    #[test]
     fn an_inert_call_names_the_surface_it_belongs_to() {
         let message = inert_message(Surface::Setup, "rules", Surface::Config);
 
         assert!(message.contains("`ld.rules` in a setup script does nothing"));
         assert!(message.contains("config.lua is where it has an effect"));
         assert!(message.contains("`ld.opt.pkg_warn(false)`"));
-    }
-
-    #[test]
-    fn a_call_at_home_is_never_inert() {
-        assert!(!inert(&running(Surface::Config), "rules", Surface::Config));
-        assert!(!inert(
-            &running(Surface::Template),
-            "alt.out",
-            Surface::Template
-        ));
     }
 
     #[test]

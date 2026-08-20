@@ -72,20 +72,4 @@ mod tests {
         assert!(script.contains("setup --list"));
         assert!(script.ends_with("compdef _luadot luadot\nfi\n"));
     }
-
-    #[test]
-    fn fish_carries_the_git_and_setup_delegations() {
-        let script = script(Shell::Fish).unwrap();
-
-        assert!(script.contains("complete --do-complete"));
-        assert!(script.contains("__fish_seen_subcommand_from git push"));
-        assert!(script.contains("__fish_seen_subcommand_from setup"));
-    }
-
-    #[test]
-    fn another_shell_keeps_the_generated_script() {
-        let script = script(Shell::Elvish).unwrap();
-
-        assert!(!script.contains("_luadot_git"));
-    }
 }

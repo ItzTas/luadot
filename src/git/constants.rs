@@ -6,6 +6,8 @@ pub const PROGRAM: &str = "git";
 
 pub const GIT_DIR: &str = ".git";
 
+pub const HEAD: &str = "HEAD";
+
 pub const SEPARATOR: &str = "--";
 
 pub const ADD: [&str; 1] = ["add"];

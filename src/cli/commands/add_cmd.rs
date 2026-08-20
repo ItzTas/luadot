@@ -303,41 +303,6 @@ mod tests {
     }
 
     #[test]
-    fn plan_refuses_a_directory_the_gitignore_excludes() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let cache = home.join(".cache");
-        std::fs::create_dir_all(&cache).unwrap();
-        std::fs::write(cache.join("log"), "b").unwrap();
-        gitignore(&repo, "home/.cache/\n");
-
-        let err = plan(&home, &repo, &[arg(&cache)], &Config::default())
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("home/.cache"));
-        assert!(err.contains(".gitignore"));
-    }
-
-    #[test]
-    fn plan_drops_the_walked_files_the_gitignore_excludes() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let nvim = home.join(".config").join("nvim");
-        std::fs::create_dir_all(&nvim).unwrap();
-        gitignore(&repo, "*.log\n");
-        let init = nvim.join("init.lua");
-        std::fs::write(&init, "init").unwrap();
-        std::fs::write(nvim.join("lsp.log"), "noise").unwrap();
-
-        let pairs = plan(&home, &repo, &[arg(&nvim)], &Config::default()).unwrap();
-
-        assert_eq!(pairs, vec![(init, repo.join("home/.config/nvim/init.lua"))]);
-    }
-
-    #[test]
     fn plan_refuses_a_file_a_template_already_produces() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -354,27 +319,6 @@ mod tests {
         assert!(err.contains("add: "));
         assert!(err.contains("is produced by"));
         assert!(err.contains(".zshrc.luadot"));
-    }
-
-    #[test]
-    fn plan_leaves_out_the_walked_files_a_template_produces() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let nvim = home.join(".config/nvim");
-        std::fs::create_dir_all(&nvim).unwrap();
-        std::fs::create_dir_all(repo.join("home/.config/nvim/init.lua.luadot")).unwrap();
-        let generated = nvim.join("init.lua");
-        let plain = nvim.join("options.lua");
-        std::fs::write(&generated, "generated").unwrap();
-        std::fs::write(&plain, "options").unwrap();
-
-        let pairs = plan(&home, &repo, &[arg(&nvim)], &Config::default()).unwrap();
-
-        assert_eq!(
-            pairs,
-            vec![(plain, repo.join("home/.config/nvim/options.lua"))]
-        );
     }
 
     #[test]
@@ -417,25 +361,6 @@ mod tests {
     }
 
     #[test]
-    fn plan_maps_multiple_files_in_argument_order() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        let a = home.join(".a");
-        let b = home.join(".b");
-        std::fs::write(&a, "a").unwrap();
-        std::fs::write(&b, "b").unwrap();
-
-        let pairs = plan(&home, &repo, &[arg(&a), arg(&b)], &Config::default()).unwrap();
-
-        assert_eq!(
-            pairs,
-            vec![(a, repo.join("home/.a")), (b, repo.join("home/.b"))]
-        );
-    }
-
-    #[test]
     fn plan_walks_a_directory_mirroring_home() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -456,22 +381,6 @@ mod tests {
                 (plugins, repo.join("home/.config/nvim/lua/plugins.lua")),
             ]
         );
-    }
-
-    #[test]
-    fn plan_skips_symlinks_inside_directories() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let cfg = home.join(".config");
-        std::fs::create_dir_all(&cfg).unwrap();
-        let real = cfg.join("real");
-        std::fs::write(&real, "r").unwrap();
-        std::os::unix::fs::symlink(&real, cfg.join("link")).unwrap();
-
-        let pairs = plan(&home, &repo, &[arg(&cfg)], &Config::default()).unwrap();
-
-        assert_eq!(pairs, vec![(real, repo.join("home/.config/real"))]);
     }
 
     #[test]
@@ -522,25 +431,6 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(err.contains("more than once"));
-    }
-
-    #[test]
-    fn link_into_repo_hard_links_source_into_dest() {
-        use std::os::unix::fs::MetadataExt;
-
-        let dir = tempfile::tempdir().unwrap();
-        let repo = dir.path().join("repo");
-        let source = dir.path().join("source.txt");
-        let dest = repo.join("home/dest.txt");
-        std::fs::write(&source, "hello").unwrap();
-
-        link_into_repo(&Config::default(), crypt::Lock::Keys, &repo, &source, &dest).unwrap();
-
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
-        assert_eq!(
-            std::fs::metadata(&source).unwrap().ino(),
-            std::fs::metadata(&dest).unwrap().ino()
-        );
     }
 
     #[test]

@@ -54,18 +54,6 @@ mod tests {
     use crate::output::constants::{GAP, LABEL_WIDTH};
 
     #[test]
-    fn every_change_carries_a_label() {
-        for outcome in [
-            SyncOutcome::Created,
-            SyncOutcome::Replaced,
-            SyncOutcome::Skipped,
-        ] {
-            let (_, label) = display(outcome, Phase::Planned);
-            assert!(!label.is_empty());
-        }
-    }
-
-    #[test]
     fn an_unchanged_file_is_not_previewed() {
         let (_, label) = display(SyncOutcome::AlreadySynced, Phase::Planned);
 

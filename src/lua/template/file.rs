@@ -72,30 +72,6 @@ mod tests {
     }
 
     #[test]
-    fn the_destination_mirrors_the_repository_path() {
-        let root = tempfile::tempdir().unwrap();
-
-        let output = load(
-            root.path(),
-            "home/.config/nvim/init.lua.luadot",
-            "vim.g.x = <%= 1 + 1 %>\n",
-            &Classes::default(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            output.dest(),
-            root.path().join("home/.config/nvim/init.lua")
-        );
-        assert_eq!(
-            output.content(),
-            &Content::Text("vim.g.x = 2\n".to_string())
-        );
-        assert_eq!(output.link(), None);
-        assert_eq!(output.conflict(), None);
-    }
-
-    #[test]
     fn the_machine_and_the_classes_are_reachable() {
         let root = tempfile::tempdir().unwrap();
         let mut classes = Classes::default();

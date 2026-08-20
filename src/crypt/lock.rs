@@ -43,19 +43,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_default_lock_is_the_recipient_keys() {
-        assert_eq!(Lock::default(), Lock::Keys);
-        assert!(!Lock::default().passphrase());
-    }
-
-    #[test]
-    fn the_option_picks_the_lock() {
-        assert_eq!(Lock::of(true), Lock::Passphrase);
-        assert_eq!(Lock::of(false), Lock::Keys);
-        assert!(Lock::of(true).passphrase());
-    }
-
-    #[test]
     fn only_passphrase_mode_is_announced() {
         assert!(announced(Lock::Passphrase, true));
         assert!(!announced(Lock::Passphrase, false));

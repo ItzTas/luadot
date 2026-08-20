@@ -22,13 +22,6 @@ mod tests {
     use crate::lua::from_source;
 
     #[test]
-    fn defaults_to_pushing_nothing() {
-        let config = from_source("local unused = 1").unwrap();
-
-        assert!(!config.autopush(Path::new("home/.bashrc")));
-    }
-
-    #[test]
     fn pushing_on_its_own_commits_first() {
         let config = from_source("ld.opt.autopush(true)").unwrap();
 

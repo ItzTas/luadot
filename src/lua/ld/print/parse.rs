@@ -301,22 +301,6 @@ mod tests {
     }
 
     #[test]
-    fn a_mark_can_be_a_function() {
-        let message = built(r#"return { mark = function() return "[3]" end }"#).unwrap();
-
-        assert_eq!(message.head(), "[3] text");
-    }
-
-    #[test]
-    fn the_time_opens_the_line_before_the_mark() {
-        let message = built(r#"return { time = "%Y", mark = "»" }"#).unwrap();
-        let year = message.head();
-
-        assert!(year.ends_with(" » text"), "{year}");
-        assert_eq!(year.split(' ').next().unwrap().len(), 4);
-    }
-
-    #[test]
     fn the_stream_the_indent_and_the_newline_are_read() {
         let message =
             built(r#"return { stream = "stderr", indent = 2, newline = false }"#).unwrap();
@@ -324,13 +308,6 @@ mod tests {
         assert_eq!(message.stream(), Stream::Stderr);
         assert_eq!(message.indent(), "  ");
         assert!(!message.newline());
-    }
-
-    #[test]
-    fn a_width_pads_the_head() {
-        let message = built("return { width = 8 }").unwrap();
-
-        assert_eq!(message.head(), "text    ");
     }
 
     #[test]

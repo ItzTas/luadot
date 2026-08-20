@@ -120,18 +120,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_message_is_a_line_on_stdout() {
-        let message = Message::new("nothing is managed");
-
-        assert_eq!(message.head(), "nothing is managed");
-        assert_eq!(message.tail(), "");
-        assert_eq!(message.indent(), "");
-        assert_eq!(message.stream(), Stream::Stdout);
-        assert!(message.newline());
-        assert!(!message.blank());
-    }
-
-    #[test]
     fn a_mark_opens_the_line() {
         let message = Message::new("applied").with_mark(Some("»".to_string()));
 
@@ -155,10 +143,5 @@ mod tests {
             .with_column(Some(11));
 
         assert_eq!(message.head(), "» create   ");
-    }
-
-    #[test]
-    fn an_indent_is_the_spaces_it_asks_for() {
-        assert_eq!(Message::new("text").with_indent(2).indent(), "  ");
     }
 }

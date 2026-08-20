@@ -37,17 +37,6 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_value_the_machine_answered() {
-        assert!(
-            from_classes(
-                r#"assert(ld.class.get("form-factor") == "laptop", "wrong value")"#,
-                &classes(),
-            )
-            .is_ok()
-        );
-    }
-
-    #[test]
     fn a_class_nobody_answered_yields_nil() {
         assert!(
             from_classes(

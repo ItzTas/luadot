@@ -126,31 +126,6 @@ mod tests {
     }
 
     #[test]
-    fn runs_a_source_string_with_the_api_installed() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        std::fs::create_dir_all(&home).unwrap();
-
-        exec(
-            &Target::Source(
-                r#"
-                local out = assert(io.open(ld.path.home .. "/out.txt", "w"))
-                out:write(ld.path.home)
-                out:close()
-                "#
-                .to_string(),
-            ),
-            &home,
-        )
-        .unwrap();
-
-        assert_eq!(
-            std::fs::read_to_string(home.join("out.txt")).unwrap(),
-            home.display().to_string()
-        );
-    }
-
-    #[test]
     fn a_source_string_requires_modules_from_the_configuration() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");

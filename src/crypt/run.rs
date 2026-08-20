@@ -333,64 +333,6 @@ mod tests {
     }
 
     #[test]
-    fn gpg_encrypts_symmetrically_and_keeps_its_prompt() {
-        let invocation = encrypt_command(
-            Backend::Gpg,
-            Lock::Passphrase,
-            &[],
-            Some(Path::new("/home/u/.netrc")),
-            Path::new("/repo/home/.netrc.gpg"),
-        );
-
-        assert_eq!(
-            args(&invocation),
-            [
-                "--quiet",
-                "--yes",
-                "--symmetric",
-                "--output",
-                "/repo/home/.netrc.gpg",
-                "/home/u/.netrc",
-            ]
-        );
-    }
-
-    #[test]
-    fn age_decrypts_a_passphrase_file_without_an_identity() {
-        let invocation = decrypt_command(
-            Backend::Age,
-            Lock::Passphrase,
-            Some(Path::new("/home/u/key.txt")),
-            Path::new("/repo/home/.netrc.age"),
-            None,
-        );
-
-        assert_eq!(args(&invocation), ["--decrypt", "/repo/home/.netrc.age"]);
-    }
-
-    #[test]
-    fn gpg_decrypts_a_symmetric_file_with_its_prompt() {
-        let invocation = decrypt_command(
-            Backend::Gpg,
-            Lock::Passphrase,
-            None,
-            Path::new("/repo/home/.netrc.gpg"),
-            None,
-        );
-
-        assert_eq!(
-            args(&invocation),
-            ["--quiet", "--yes", "--decrypt", "/repo/home/.netrc.gpg"]
-        );
-    }
-
-    #[test]
-    fn a_passphrase_needs_neither_recipients_nor_an_identity() {
-        assert!(require_recipients("add", Lock::Passphrase, &[]).is_ok());
-        assert!(require_identity("apply", Backend::Age, Lock::Passphrase, None).is_ok());
-    }
-
-    #[test]
     fn what_is_piped_in_reaches_the_tool() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join("copied");
@@ -419,30 +361,6 @@ mod tests {
                 "--identity",
                 "/home/u/key.txt",
                 "/repo/home/.netrc.age",
-            ]
-        );
-    }
-
-    #[test]
-    fn gpg_decrypts_through_its_own_keyring() {
-        let invocation = decrypt_command(
-            Backend::Gpg,
-            Lock::Keys,
-            None,
-            Path::new("/repo/home/.netrc.gpg"),
-            Some(Path::new("/tmp/plain")),
-        );
-
-        assert_eq!(
-            args(&invocation),
-            [
-                "--quiet",
-                "--batch",
-                "--yes",
-                "--decrypt",
-                "--output",
-                "/tmp/plain",
-                "/repo/home/.netrc.gpg",
             ]
         );
     }

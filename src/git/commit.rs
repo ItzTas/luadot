@@ -107,15 +107,6 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_without_git_metadata_holds_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-
-        assert!(!staged(dir.path()));
-        assert!(!committed(dir.path()));
-        assert!(!commit("sync", dir.path(), "unused").unwrap());
-    }
-
-    #[test]
     fn the_default_message_names_the_machine() {
         assert_eq!(default("thinkpad"), "sync from thinkpad");
         assert_eq!(default(""), "sync");

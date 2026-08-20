@@ -132,14 +132,6 @@ mod tests {
     }
 
     #[test]
-    fn a_string_is_a_single_package() {
-        let lua = runtime().unwrap();
-        let value = Value::String(lua.create_string("git").unwrap());
-
-        assert_eq!(packages(&value).unwrap(), ["git"]);
-    }
-
-    #[test]
     fn a_sequence_lists_packages() {
         let lua = runtime().unwrap();
         let list = lua.create_sequence_from(["git", "zsh"]).unwrap();

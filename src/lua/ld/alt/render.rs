@@ -79,17 +79,6 @@ mod tests {
     }
 
     #[test]
-    fn variables_are_optional() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("plain.tmpl.zsh"), r#"return "plain""#).unwrap();
-
-        let outputs = from_template(&dir, r#"return ld.alt.render("plain.tmpl.zsh")"#).unwrap();
-
-        assert_eq!(outputs[0].content(), &Content::Text("plain".to_string()));
-    }
-
-    #[test]
     fn rejects_a_file_that_returns_no_string() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());

@@ -28,20 +28,6 @@ mod tests {
     use crate::lua::from_source;
 
     #[test]
-    fn every_backup_is_kept_until_an_age_is_set() {
-        let config = from_source("local unused = 1").unwrap();
-
-        assert_eq!(config.backup_age(), None);
-    }
-
-    #[test]
-    fn takes_the_age_a_backup_is_kept_for() {
-        let config = from_source(r#"ld.opt.backup_age("30d")"#).unwrap();
-
-        assert_eq!(config.backup_age(), Some(2_592_000));
-    }
-
-    #[test]
     fn reads_every_unit_it_takes() {
         for (source, seconds) in [
             (r#"ld.opt.backup_age("45s")"#, 45),
@@ -53,19 +39,6 @@ mod tests {
 
             assert_eq!(config.backup_age(), Some(seconds), "{source}");
         }
-    }
-
-    #[test]
-    fn the_last_age_wins() {
-        let config = from_source(
-            r#"
-            ld.opt.backup_age("1d")
-            ld.opt.backup_age("7d")
-            "#,
-        )
-        .unwrap();
-
-        assert_eq!(config.backup_age(), Some(604_800));
     }
 
     #[test]

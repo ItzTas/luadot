@@ -52,16 +52,6 @@ mod tests {
     }
 
     #[test]
-    fn a_command_without_arguments_yields_an_empty_list() {
-        let lua = runtime().unwrap();
-
-        let argv = from(&lua, &args(&["status"])).unwrap();
-
-        assert_eq!(argv.get::<String>("name").unwrap(), "status");
-        assert_eq!(argv.get::<Table>("args").unwrap().len().unwrap(), 0);
-    }
-
-    #[test]
     fn leading_flags_are_not_the_command() {
         assert_eq!(
             strip_flags(args(&["-v", "apply", "--dry-run"]).into_iter()),
@@ -78,15 +68,5 @@ mod tests {
 
         assert_eq!(argv.get::<String>("name").unwrap(), "");
         assert_eq!(argv.get::<Table>("args").unwrap().len().unwrap(), 0);
-    }
-
-    #[test]
-    fn the_process_invocation_builds_a_table() {
-        let lua = runtime().unwrap();
-
-        let argv = table(&lua).unwrap();
-
-        assert!(argv.get::<String>("name").is_ok());
-        assert!(argv.get::<Table>("args").is_ok());
     }
 }

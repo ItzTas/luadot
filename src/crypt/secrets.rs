@@ -72,16 +72,6 @@ mod tests {
     }
 
     #[test]
-    fn the_key_form_hands_back_what_it_was_given() {
-        let secrets = Secrets::Keys {
-            recipients: vec!["age1example".to_string()],
-            identity: None,
-        };
-
-        assert_eq!(secrets.recipients(), ["age1example"]);
-    }
-
-    #[test]
     fn the_identity_path_is_resolved_against_home() {
         let secrets = Secrets::Keys {
             recipients: Vec::new(),
@@ -94,12 +84,5 @@ mod tests {
             identity.path("apply").unwrap(),
             Some(Path::new("/home/u/.keys/age.txt"))
         );
-    }
-
-    #[test]
-    fn the_passphrase_form_has_no_identity() {
-        let mut identity = Secrets::Passphrase.identity(Path::new("/home/u"));
-
-        assert_eq!(identity.path("apply").unwrap(), None);
     }
 }

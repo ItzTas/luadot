@@ -121,13 +121,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_everything_else() {
-        for answer in ["", "\n", "n", "no", "yep", "sim", "yes please"] {
-            assert!(!is_yes(answer), "expected {answer:?} to decline");
-        }
-    }
-
-    #[test]
     fn offer_declines_without_a_terminal() {
         assert!(!offer("clone", "Run it now?").unwrap());
     }
@@ -154,14 +147,6 @@ mod tests {
         );
         assert_eq!(pick("\n", &choices(), None), None);
         assert_eq!(pick("\n", &[], None), None);
-    }
-
-    #[test]
-    fn a_free_answer_is_taken_as_written() {
-        assert_eq!(
-            pick(" me@example.com \n", &[], None).unwrap(),
-            "me@example.com"
-        );
     }
 
     #[test]

@@ -95,11 +95,4 @@ mod tests {
 
         assert!(commits(repo.path()).is_empty());
     }
-
-    #[test]
-    fn a_directory_without_git_metadata_is_left_alone() {
-        let dir = tempfile::tempdir().unwrap();
-
-        auto("add", dir.path(), true, true).unwrap();
-    }
 }

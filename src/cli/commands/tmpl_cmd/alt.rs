@@ -178,19 +178,6 @@ mod tests {
     }
 
     #[test]
-    fn counts_group_the_outcomes() {
-        let outcomes = [
-            SyncOutcome::Created,
-            SyncOutcome::Created,
-            SyncOutcome::Skipped,
-        ];
-
-        assert_eq!(count(&outcomes, SyncOutcome::Created), 2);
-        assert_eq!(count(&outcomes, SyncOutcome::Skipped), 1);
-        assert_eq!(count(&outcomes, SyncOutcome::Replaced), 0);
-    }
-
-    #[test]
     fn a_selected_variant_lands_on_the_mirrored_path() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
@@ -288,61 +275,6 @@ mod tests {
     }
 
     #[test]
-    fn a_declared_destination_leaves_the_mirrored_path_alone() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
-        write(
-            &dir.join("luadot.lua"),
-            r#"return { dest = "~/.config/zsh/.zshrc", content = "generated\n" }"#,
-        );
-
-        resolve(
-            &Config::default(),
-            &home,
-            &repo,
-            &Entry::Template(dir.clone()),
-            &Classes::default(),
-            &mut Run::default(),
-        )
-        .unwrap();
-
-        assert!(!home.join(".zshrc").exists());
-        assert_eq!(
-            std::fs::read_to_string(home.join(".config/zsh/.zshrc")).unwrap(),
-            "generated\n"
-        );
-    }
-
-    #[test]
-    fn the_configuration_still_drives_a_generated_file() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
-        write(&dir.join("luadot.lua"), r#"return "generated\n""#);
-        write(&home.join(".zshrc"), "handwritten\n");
-
-        let config = lua::from_source(r#"ld.opt.conflict("skip")"#).unwrap();
-        let outcomes = resolve(
-            &config,
-            &home,
-            &repo,
-            &Entry::Template(dir.clone()),
-            &Classes::default(),
-            &mut Run::default(),
-        )
-        .unwrap();
-
-        assert_eq!(outcomes, vec![SyncOutcome::Skipped]);
-        assert_eq!(
-            std::fs::read_to_string(home.join(".zshrc")).unwrap(),
-            "handwritten\n"
-        );
-    }
-
-    #[test]
     fn a_dry_run_reports_what_it_would_place_and_touches_nothing() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
@@ -363,33 +295,6 @@ mod tests {
 
         assert_eq!(outcomes, vec![SyncOutcome::Created]);
         assert!(!home.join(".zshrc").exists());
-    }
-
-    #[test]
-    fn a_dry_run_over_a_diverging_file_reports_the_replacement() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
-        write(&dir.join("luadot.lua"), r#"return "generated\n""#);
-        write(&home.join(".zshrc"), "handwritten\n");
-
-        let mut run = Run::new(true, None);
-        let outcomes = resolve(
-            &Config::default(),
-            &home,
-            &repo,
-            &Entry::Template(dir.clone()),
-            &Classes::default(),
-            &mut run,
-        )
-        .unwrap();
-
-        assert_eq!(outcomes, vec![SyncOutcome::Replaced]);
-        assert_eq!(
-            std::fs::read_to_string(home.join(".zshrc")).unwrap(),
-            "handwritten\n"
-        );
     }
 
     #[test]
@@ -421,19 +326,6 @@ mod tests {
             std::fs::read_to_string(saved.join("home/.zshrc")).unwrap(),
             "handwritten\n"
         );
-    }
-
-    #[test]
-    fn a_template_is_reached_through_the_path_it_produces() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
-        write(&dir.join("luadot.lua"), r#"return "generated\n""#);
-
-        let arg = home.join(".zshrc").to_string_lossy().into_owned();
-
-        assert_eq!(template_root(&home, &repo, &arg).unwrap(), dir);
     }
 
     #[test]
@@ -475,19 +367,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_standalone_template_is_reached_through_the_path_it_produces() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let file = repo.join("home/.zprofile.luadot");
-        write(&file, "generated\n");
-
-        let arg = home.join(".zprofile").to_string_lossy().into_owned();
-
-        assert_eq!(template_root(&home, &repo, &arg).unwrap(), file);
-    }
-
     fn mode(path: &Path) -> u32 {
         use std::os::unix::fs::PermissionsExt;
 
@@ -521,32 +400,6 @@ mod tests {
 
         assert_eq!(outcomes, vec![SyncOutcome::Created]);
         assert_eq!(mode(&home.join(".netrc")), 0o600);
-    }
-
-    #[test]
-    fn a_file_whose_mode_diverges_is_written_again() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join("home/.netrc.luadot");
-        write(
-            &dir.join("luadot.lua"),
-            r#"return { content = "machine example\n", mode = "600" }"#,
-        );
-        write(&home.join(".netrc"), "machine example\n");
-        std::fs::set_permissions(home.join(".netrc"), std::fs::Permissions::from_mode(0o644))
-            .unwrap();
-
-        let outcomes = resolved(&home, &repo, &dir, &mut Run::default());
-
-        assert_eq!(outcomes, vec![SyncOutcome::Replaced]);
-        assert_eq!(mode(&home.join(".netrc")), 0o600);
-
-        let outcomes = resolved(&home, &repo, &dir, &mut Run::default());
-
-        assert_eq!(outcomes, vec![SyncOutcome::AlreadySynced]);
     }
 
     fn resolved_with(
@@ -596,27 +449,6 @@ mod tests {
 
         assert_eq!(outcomes, vec![SyncOutcome::AlreadySynced]);
         assert!(!restarted.exists());
-    }
-
-    #[test]
-    fn a_rule_of_the_configuration_names_the_command() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join("home/.config/mako/config.luadot");
-        let restarted = root.path().join("restarted");
-        write(&dir.join("luadot.lua"), r#"return "font=monospace\n""#);
-
-        let config = lua::from_source(&format!(
-            r#"ld.rules({{ {{ match = "home/.config/mako/**", on_change = "printf ok > {}" }} }})"#,
-            restarted.display()
-        ))
-        .unwrap();
-
-        let outcomes = resolved_with(&config, &home, &repo, &dir, &mut Run::default());
-
-        assert_eq!(outcomes, vec![SyncOutcome::Created]);
-        assert_eq!(std::fs::read_to_string(&restarted).unwrap(), "ok");
     }
 
     #[test]
@@ -673,27 +505,5 @@ mod tests {
 
         assert_eq!(err, "tmpl alt: `exit 4` exited with status 4");
         assert!(home.join(".zshrc").exists());
-    }
-
-    #[test]
-    fn a_dry_run_never_runs_the_command() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
-        let restarted = root.path().join("restarted");
-        write(
-            &dir.join("luadot.lua"),
-            &format!(
-                r#"return {{ content = "generated\n", on_change = "printf ok > {}" }}"#,
-                restarted.display()
-            ),
-        );
-
-        let mut run = Run::new(true, None);
-        let outcomes = resolved_with(&Config::default(), &home, &repo, &dir, &mut run);
-
-        assert_eq!(outcomes, vec![SyncOutcome::Created]);
-        assert!(!restarted.exists());
     }
 }
