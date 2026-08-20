@@ -14,8 +14,9 @@ provides=("$_pkgname=$pkgver")
 conflicts=("$_pkgname")
 options=('!lto')
 _registry='https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot'
+_version=@VERSION@
 _srcdir="$_pkgname-$pkgver"
-source=("$pkgname-$pkgver.tar.gz::$_registry/$pkgver/$_pkgname-$pkgver-src.tar.gz")
+source=("$pkgname-$pkgver.tar.gz::$_registry/$_version/$_pkgname-$pkgver-src.tar.gz")
 sha256sums=('@SHA256@')
 
 prepare() {

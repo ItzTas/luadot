@@ -18,6 +18,11 @@ A `pkgver` cannot hold a `-`, so every `-` in the tag becomes a `.`. This makes
 `0.2.0.nightly.1` sort *above* `0.2.0` for pacman, which is why the nightly
 lives in a package of its own rather than in the stable one.
 
+The package registry keeps the tag's own spelling, `<version>` —
+`0.2.0-nightly.1` — as the path segment, while the file inside it is named with
+`<pkgver>`. Both spellings appear in the same URL; a stable tag has no `-`, so
+there they are the same string.
+
 ## What runs, and when
 
 The pipeline in `.gitlab/workflows/ci.yml` does it, in this order:
@@ -37,7 +42,8 @@ The pipeline in `.gitlab/workflows/ci.yml` does it, in this order:
      hashes it: the source tarball for `luadot` and `luadot-nightly`, the two
      binary tarballs for `luadot-bin`;
    - renders `packaging/aur/<pkgname>/PKGBUILD.in`, replacing `@PKGVER@`,
-     `@TAG@` and the `@SHA256*@` placeholders that package declares;
+     `@VERSION@`, `@TAG@` and the `@SHA256*@` placeholders that package
+     declares;
    - generates `.SRCINFO` with `makepkg --printsrcinfo`, as a non-root user;
    - clones `ssh://aur@aur.archlinux.org/<pkgname>.git`, commits both files and
      pushes. Nothing is committed when the rendered files are unchanged.
@@ -83,7 +89,7 @@ imports), so the dependency follows whatever image built it. No packaging
 tooling beyond `dpkg-deb` and `readelf`.
 
 `packaging/release/upload.sh <tag>` then `PUT`s every `dist/` asset into the
-GitLab generic package registry, under `luadot/<pkgver>/`, and points the
+GitLab generic package registry, under `luadot/<version>/`, and points the
 GitLab release for the tag at them as asset links — creating the release when it
 does not exist yet, and replacing links of the same name when it does, so a
 re-run is safe. It needs `CI_JOB_TOKEN` and `jq`.
@@ -92,7 +98,7 @@ The project is public, so those URLs are anonymous downloads, which is what the
 three packages fetch:
 
 ```
-https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot/<pkgver>/<file>
+https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot/<version>/<file>
 ```
 
 ## Setup
@@ -121,7 +127,8 @@ only what the pipeline renders, and a change made directly there is overwritten
 by the next release. To test one by hand:
 
 ```
-sed -e 's|@PKGVER@|0.2.0|g' -e 's|@TAG@|v0.2.0|g' -e "s|@SHA256@|$(sha256sum tarball | cut -d' ' -f1)|g" \
+sed -e 's|@PKGVER@|0.2.0|g' -e 's|@VERSION@|0.2.0|g' -e 's|@TAG@|v0.2.0|g' \
+  -e "s|@SHA256@|$(sha256sum tarball | cut -d' ' -f1)|g" \
   packaging/aur/luadot/PKGBUILD.in > PKGBUILD
 makepkg --printsrcinfo
 ```

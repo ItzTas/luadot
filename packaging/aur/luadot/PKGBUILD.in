@@ -11,8 +11,9 @@ depends=('gcc-libs' 'glibc')
 makedepends=('cargo' 'cmake')
 options=('!lto')
 _registry='https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot'
+_version=@VERSION@
 _srcdir="luadot-$pkgver"
-source=("$pkgname-$pkgver.tar.gz::$_registry/$pkgver/luadot-$pkgver-src.tar.gz")
+source=("$pkgname-$pkgver.tar.gz::$_registry/$_version/luadot-$pkgver-src.tar.gz")
 sha256sums=('@SHA256@')
 
 prepare() {
