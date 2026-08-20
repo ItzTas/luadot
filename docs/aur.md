@@ -86,7 +86,7 @@ tooling beyond `dpkg-deb` and `readelf`.
 GitLab generic package registry, under `luadot/<pkgver>/`, and points the
 GitLab release for the tag at them as asset links — creating the release when it
 does not exist yet, and replacing links of the same name when it does, so a
-re-run is safe. It needs `GITLAB_TOKEN` and `jq`.
+re-run is safe. It needs `CI_JOB_TOKEN` and `jq`.
 
 The project is public, so those URLs are anonymous downloads, which is what the
 three packages fetch:
@@ -107,8 +107,8 @@ https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/ge
   base64 -w0 < ~/.ssh/aur
   ```
 
-- The existing `GITLAB_TOKEN` variable, which `binaries` reuses to write to the
-  package registry and to the release.
+- No extra variable for the release assets: `binaries` writes to the package
+  registry and to the release with the job's own `CI_JOB_TOKEN`.
 
 The host key of `aur.archlinux.org` is fetched with `ssh-keyscan` at job time,
 which trusts it on first use. Pin it in the job instead if that is not good
