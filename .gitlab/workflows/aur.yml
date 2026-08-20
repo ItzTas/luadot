@@ -1,0 +1,48 @@
+.aur:
+  stage: publish
+  tags:
+    - k8s
+  image: archlinux:base-devel
+  resource_group: aur
+  needs:
+    - job: bump
+      artifacts: true
+    - job: source-tarball
+  before_script:
+    - pacman -Syu --noconfirm --needed git openssh
+    - install -d -m 700 ~/.ssh
+    - printf '%s' "$AUR_SSH_KEY_B64" | base64 -d > ~/.ssh/aur
+    - chmod 600 ~/.ssh/aur
+    - ssh-keyscan -t ed25519,rsa aur.archlinux.org >> ~/.ssh/known_hosts
+    - export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes"
+
+aur-stable:
+  extends: .aur
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  script:
+    - ./packaging/aur/publish.sh luadot "$LUADOT_TAG"
+
+aur-bin:
+  extends: .aur
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  needs:
+    - job: bump
+      artifacts: true
+    - job: binaries
+  script:
+    - ./packaging/aur/publish.sh luadot-bin "$LUADOT_TAG"
+
+aur-nightly:
+  extends: .aur
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "nightly"'
+  script:
+    - ./packaging/aur/publish.sh luadot-nightly "$LUADOT_TAG"
