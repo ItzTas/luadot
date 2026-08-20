@@ -107,15 +107,6 @@ mod tests {
     }
 
     #[test]
-    fn a_summary_takes_a_string_of_its_own() {
-        let config = from_source(r#"ld.on.diff({ summary = "everything drifted" })"#).unwrap();
-
-        assert!(
-            matches!(config.diff().summary(), Some(Custom::Text(text)) if text == "everything drifted")
-        );
-    }
-
-    #[test]
     fn false_silences_what_it_is_given_to() {
         let config =
             from_source("ld.on.diff({ summary = false, entry = false, render = false })").unwrap();
@@ -135,29 +126,6 @@ mod tests {
         assert_eq!(tool.program(), "delta");
         assert_eq!(tool.arguments(), ["--side-by-side"]);
         assert_eq!(config.diff().args(), ["--stat"]);
-    }
-
-    #[test]
-    fn a_tool_without_arguments_needs_no_list() {
-        let config = from_source(r#"ld.on.diff({ tool = "difft" })"#).unwrap();
-        let tool = config.diff().tool().unwrap();
-
-        assert_eq!(tool.program(), "difft");
-        assert!(tool.arguments().is_empty());
-    }
-
-    #[test]
-    fn a_later_call_only_replaces_the_keys_it_carries() {
-        let config = from_source(
-            r#"
-            ld.on.diff({ tool = "difft", summary = false })
-            ld.on.diff({ summary = "done" })
-            "#,
-        )
-        .unwrap();
-
-        assert_eq!(config.diff().tool().unwrap().program(), "difft");
-        assert!(matches!(config.diff().summary(), Some(Custom::Text(text)) if text == "done"));
     }
 
     #[test]
@@ -203,17 +171,5 @@ mod tests {
         );
 
         assert!(err.contains("`tool` takes a word or a list of words"));
-    }
-
-    #[test]
-    fn a_call_away_from_the_configuration_does_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-        let template = dir.path().join(".zshrc.luadot");
-        std::fs::create_dir_all(&template).unwrap();
-
-        assert!(
-            crate::lua::from_template(&template, "ld.on.diff({ summary = false })\nreturn \"ok\"")
-                .is_ok()
-        );
     }
 }

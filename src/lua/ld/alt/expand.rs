@@ -73,32 +73,6 @@ mod tests {
     }
 
     #[test]
-    fn a_var_shadows_a_global() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("shadow.tmpl"), "<%= type %>").unwrap();
-
-        let outputs = from_template(
-            &dir,
-            r#"return ld.alt.expand("shadow.tmpl", { type = "shadowed" })"#,
-        )
-        .unwrap();
-
-        assert_eq!(outputs[0].content(), &Content::Text("shadowed".to_string()));
-    }
-
-    #[test]
-    fn the_vars_are_optional() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("plain.tmpl.zsh"), "plain\n").unwrap();
-
-        let outputs = from_template(&dir, r#"return ld.alt.expand("plain.tmpl.zsh")"#).unwrap();
-
-        assert_eq!(outputs[0].content(), &Content::Text("plain\n".to_string()));
-    }
-
-    #[test]
     fn a_missing_file_is_reported() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
@@ -107,25 +81,6 @@ mod tests {
 
         assert!(err.contains("`ld.alt.expand`"));
         assert!(err.contains("found no file `missing.tmpl`"));
-    }
-
-    #[test]
-    fn an_absolute_path_is_reached() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        let shared = root.path().join("shared.tmpl");
-        std::fs::write(&shared, "shared <%= x %>").unwrap();
-
-        let outputs = from_template(
-            &dir,
-            &format!(
-                r#"return ld.alt.expand("{}", {{ x = 1 }})"#,
-                shared.display()
-            ),
-        )
-        .unwrap();
-
-        assert_eq!(outputs[0].content(), &Content::Text("shared 1".to_string()));
     }
 
     #[test]

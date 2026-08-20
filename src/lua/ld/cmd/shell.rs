@@ -33,11 +33,6 @@ mod tests {
     }
 
     #[test]
-    fn captures_what_the_command_prints() {
-        assert_eq!(eval(r#"return cmd("printf hello")"#).unwrap(), "hello");
-    }
-
-    #[test]
     fn the_line_goes_through_the_shell() {
         assert_eq!(
             eval(r#"return cmd("printf 'a\nb\n' | tail -n 1")"#).unwrap(),

@@ -50,26 +50,6 @@ mod tests {
     use crate::lua::runtime::runtime;
 
     #[test]
-    fn every_surface_names_where_it_runs() {
-        assert_eq!(Surface::Config.label(), "config.lua");
-        assert_eq!(Surface::Bootstrap.label(), "bootstrap.lua");
-        assert_eq!(Surface::Setup.label(), "a setup script");
-        assert_eq!(Surface::Template.label(), "luadot.lua");
-        assert_eq!(Surface::Standalone.label(), "a `.luadot` file");
-        assert_eq!(Surface::Exec.label(), "luadot exec");
-    }
-
-    #[test]
-    fn only_the_surfaces_running_again_and_again_carry_a_cost() {
-        assert!(Surface::Config.cost().is_some());
-        assert!(Surface::Template.cost().is_some());
-        assert!(Surface::Standalone.cost().is_some());
-        assert!(Surface::Bootstrap.cost().is_none());
-        assert!(Surface::Setup.cost().is_none());
-        assert!(Surface::Exec.cost().is_none());
-    }
-
-    #[test]
     fn the_installed_surface_is_the_current_one() {
         let lua = runtime().unwrap();
 

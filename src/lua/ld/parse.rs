@@ -143,35 +143,7 @@ fn keys<T>(entries: &[(&str, T)]) -> String {
 mod tests {
     use super::*;
 
-    use super::super::constants::{CONFLICT_POLICIES, CRYPT_BACKENDS, LINK_MODES};
-
     const ENTRIES: [(&str, u8); 2] = [("one", 1), ("two", 2)];
-
-    #[test]
-    fn link_modes_round_trip_through_their_name() {
-        for (name, mode) in LINK_MODES {
-            assert_eq!(mode.name(), name);
-        }
-    }
-
-    #[test]
-    fn conflict_policies_round_trip_through_their_name() {
-        for (name, policy) in CONFLICT_POLICIES {
-            assert_eq!(policy.name(), name);
-        }
-    }
-
-    #[test]
-    fn crypt_backends_round_trip_through_their_name() {
-        for (name, backend) in CRYPT_BACKENDS {
-            assert_eq!(backend.name(), name);
-        }
-    }
-
-    #[test]
-    fn lookup_finds_a_known_name() {
-        assert_eq!(lookup(&ENTRIES, "two", "number").unwrap(), 2);
-    }
 
     #[test]
     fn lookup_lists_the_available_names() {

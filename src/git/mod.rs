@@ -7,6 +7,7 @@ mod ignore;
 mod init;
 mod push;
 mod run;
+mod scratch;
 mod stage;
 
 pub use auto::auto;
@@ -16,4 +17,5 @@ pub use ignore::{Excludes, Kind};
 pub use init::init;
 pub use push::push;
 pub use run::present;
+pub use scratch::{record, scratch};
 pub use stage::{stage, stage_all, unstage};

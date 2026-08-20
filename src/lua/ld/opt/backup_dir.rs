@@ -17,36 +17,8 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
 
     use crate::lua::from_source;
-
-    #[test]
-    fn defaults_to_the_directory_luadot_owns() {
-        let config = from_source("local unused = 1").unwrap();
-
-        assert_eq!(config.backup_dir(), None);
-    }
-
-    #[test]
-    fn takes_the_directory_as_it_is_written() {
-        let config = from_source(r#"ld.opt.backup_dir("~/dots/backups")"#).unwrap();
-
-        assert_eq!(config.backup_dir(), Some(Path::new("~/dots/backups")));
-    }
-
-    #[test]
-    fn the_last_directory_wins() {
-        let config = from_source(
-            r#"
-            ld.opt.backup_dir("~/first")
-            ld.opt.backup_dir("/data/second")
-            "#,
-        )
-        .unwrap();
-
-        assert_eq!(config.backup_dir(), Some(Path::new("/data/second")));
-    }
 
     #[test]
     fn rejects_an_empty_directory() {

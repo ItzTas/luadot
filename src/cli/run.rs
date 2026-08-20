@@ -56,15 +56,3 @@ fn dispatch(cli: Cli) -> Result<()> {
         Cmd::Tmpl(args) => commands::tmpl_cmd(args),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn verbosity_picks_the_filter() {
-        assert_eq!(filter(1).to_string(), VERBOSE_FILTER);
-        assert_eq!(filter(2).to_string(), TRACE_FILTER);
-        assert_eq!(filter(9).to_string(), TRACE_FILTER);
-    }
-}

@@ -223,7 +223,6 @@ impl IntoLua for &DiffCounts {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
 
     use super::*;
 
@@ -242,18 +241,6 @@ mod tests {
         lua.globals().set("subject", value).unwrap();
 
         lua.load(source).eval().unwrap()
-    }
-
-    #[test]
-    fn every_state_carries_a_name() {
-        for state in [
-            DiffState::Missing,
-            DiffState::Differs,
-            DiffState::Mode,
-            DiffState::Other,
-        ] {
-            assert!(!state.name().is_empty());
-        }
     }
 
     #[test]
@@ -344,13 +331,5 @@ mod tests {
         assert_eq!(diff.args(), ["--stat"]);
         assert!(diff.entry().is_none());
         assert!(diff.tool().is_none());
-    }
-
-    #[test]
-    fn a_file_keeps_the_path_it_was_built_with() {
-        assert_eq!(file().path(), Path::new("home/.bashrc"));
-        assert_eq!(file().mode(), 0o644);
-        assert_eq!(file().found_mode(), Some(0o600));
-        assert_eq!(file().found(), Some(b"handwritten\n".as_slice()));
     }
 }

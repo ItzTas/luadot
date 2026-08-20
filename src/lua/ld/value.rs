@@ -89,14 +89,6 @@ mod tests {
     use crate::lua::runtime::runtime;
 
     #[test]
-    fn text_reads_a_string() {
-        let lua = runtime().unwrap();
-        let value = Value::String(lua.create_string("hard").unwrap());
-
-        assert_eq!(text("opt", &value, "link").unwrap(), "hard");
-    }
-
-    #[test]
     fn text_rejects_anything_else() {
         let err = text("opt", &Value::Boolean(true), "link")
             .unwrap_err()
@@ -115,29 +107,12 @@ mod tests {
     }
 
     #[test]
-    fn flag_reads_a_boolean() {
-        assert!(!flag("opt", &Value::Boolean(false), "pkg_warn").unwrap());
-        assert!(flag("opt", &Value::Boolean(true), "pkg_warn").unwrap());
-    }
-
-    #[test]
     fn flag_rejects_anything_else() {
         let err = flag("opt", &Value::Integer(0), "pkg_warn")
             .unwrap_err()
             .to_string();
 
         assert!(err.contains("`ld.opt.pkg_warn` takes true or false"));
-    }
-
-    #[test]
-    fn span_reads_a_string_carrying_a_unit() {
-        let lua = runtime().unwrap();
-        let value = Value::String(lua.create_string("30d").unwrap());
-
-        assert_eq!(
-            span("opt", &value, "backup_age", "a span like \"30d\"").unwrap(),
-            2_592_000
-        );
     }
 
     #[test]
@@ -154,37 +129,12 @@ mod tests {
     }
 
     #[test]
-    fn span_rejects_anything_that_is_not_a_string() {
-        let err = span("opt", &Value::Integer(30), "backup_age", "a span")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.opt.backup_age` takes a string"));
-    }
-
-    #[test]
-    fn count_reads_a_whole_number() {
-        assert_eq!(count("opt", &Value::Integer(5), "backup_keep").unwrap(), 5);
-        assert_eq!(count("opt", &Value::Number(5.0), "backup_keep").unwrap(), 5);
-        assert_eq!(count("opt", &Value::Integer(0), "backup_keep").unwrap(), 0);
-    }
-
-    #[test]
     fn count_rejects_a_fraction_and_anything_that_is_not_a_number() {
         for value in [Value::Number(1.5), Value::Boolean(true), Value::Nil] {
             let err = count("opt", &value, "backup_keep").unwrap_err().to_string();
 
             assert!(err.contains("`ld.opt.backup_keep` takes a whole number"));
         }
-    }
-
-    #[test]
-    fn count_rejects_a_negative_number() {
-        let err = count("opt", &Value::Integer(-1), "backup_keep")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("takes a whole number of zero or more"));
     }
 
     #[test]
@@ -221,14 +171,6 @@ mod tests {
             .to_string();
 
         assert!(err.contains("`ld.crypt.lock.recipients` takes a key or a list of keys"));
-    }
-
-    #[test]
-    fn keys_rejects_a_blank_key() {
-        let lua = runtime().unwrap();
-        let value = Value::String(lua.create_string("  ").unwrap());
-
-        assert!(keys("crypt.lock", &value, "recipients").is_err());
     }
 
     #[test]

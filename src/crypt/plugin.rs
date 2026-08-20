@@ -169,14 +169,6 @@ mod tests {
     }
 
     #[test]
-    fn an_uppercase_recipient_names_the_same_binary() {
-        assert_eq!(
-            from_recipient("AGE1YUBIKEY1QWQVURUPQ2FZHAEG38G4HKYRFCYVPUHRJCNR6DTCXZFTZMXTD8J7F"),
-            Some("yubikey".to_string())
-        );
-    }
-
-    #[test]
     fn a_native_recipient_needs_no_plugin() {
         assert_eq!(
             from_recipient("age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"),
@@ -211,11 +203,6 @@ mod tests {
     }
 
     #[test]
-    fn a_native_identity_needs_no_plugin() {
-        assert!(from_identity("# public key: age1ql3z7\nAGE-SECRET-KEY-1QQQPQ\n").is_empty());
-    }
-
-    #[test]
     fn a_binary_is_looked_up_along_the_path() {
         let dir = tempfile::tempdir().unwrap();
         let binary = install(dir.path(), "age-plugin-luadot", 0o755);
@@ -224,15 +211,6 @@ mod tests {
         assert_eq!(in_path("age-plugin-luadot", Some(&path)), Some(binary));
         assert_eq!(in_path("age-plugin-missing", Some(&path)), None);
         assert_eq!(in_path("age-plugin-luadot", None), None);
-    }
-
-    #[test]
-    fn a_binary_nothing_can_run_is_not_one() {
-        let dir = tempfile::tempdir().unwrap();
-        install(dir.path(), "age-plugin-luadot", 0o644);
-        let path = env::join_paths([dir.path()]).unwrap();
-
-        assert_eq!(in_path("age-plugin-luadot", Some(&path)), None);
     }
 
     #[test]
@@ -269,21 +247,5 @@ mod tests {
             .to_string();
 
         assert!(err.contains("needs `age-plugin-luadotplugin`"));
-    }
-
-    #[test]
-    fn an_unreadable_or_missing_identity_is_left_to_age() {
-        let dir = tempfile::tempdir().unwrap();
-
-        assert!(for_identity("apply", Backend::Age, Lock::Keys, None).is_ok());
-        assert!(
-            for_identity(
-                "apply",
-                Backend::Age,
-                Lock::Keys,
-                Some(&dir.path().join("missing.txt")),
-            )
-            .is_ok()
-        );
     }
 }

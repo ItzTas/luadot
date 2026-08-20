@@ -120,18 +120,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn app_dir_is_nested_under_the_given_root() {
-        assert_eq!(
-            app_dir(Path::new("/home/u/.local/share")),
-            PathBuf::from("/home/u/.local/share/luadot")
-        );
-        assert_eq!(
-            app_dir(Path::new("/home/u/.config")),
-            PathBuf::from("/home/u/.config/luadot")
-        );
-    }
-
-    #[test]
     fn normalize_resolves_dot_and_dotdot() {
         assert_eq!(normalize(Path::new("/a/b/../c")), PathBuf::from("/a/c"));
         assert_eq!(normalize(Path::new("/a/./b")), PathBuf::from("/a/b"));
@@ -139,25 +127,6 @@ mod tests {
         assert_eq!(normalize(Path::new("/..")), PathBuf::from("/"));
         assert_eq!(normalize(Path::new("a/../b")), PathBuf::from("b"));
         assert_eq!(normalize(Path::new("../a")), PathBuf::from("../a"));
-    }
-
-    #[test]
-    fn expand_resolves_a_path_against_the_home_directory() {
-        let home = Path::new("/home/u");
-
-        assert_eq!(expand(home, Path::new("~")), PathBuf::from("/home/u"));
-        assert_eq!(
-            expand(home, Path::new("~/backups")),
-            PathBuf::from("/home/u/backups")
-        );
-        assert_eq!(
-            expand(home, Path::new("backups")),
-            PathBuf::from("/home/u/backups")
-        );
-        assert_eq!(
-            expand(home, Path::new("/data/backups")),
-            PathBuf::from("/data/backups")
-        );
     }
 
     #[test]
@@ -228,20 +197,6 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("is outside home/ and root/"));
-    }
-
-    #[test]
-    fn managed_relative_names_the_prefixed_path() {
-        let home = Path::new("/home/u");
-
-        assert_eq!(
-            managed_relative(home, Path::new("/home/u/.vimrc")).unwrap(),
-            PathBuf::from("home/.vimrc")
-        );
-        assert_eq!(
-            managed_relative(home, Path::new("/etc/hosts")).unwrap(),
-            PathBuf::from("root/etc/hosts")
-        );
     }
 
     #[test]

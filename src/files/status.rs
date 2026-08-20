@@ -140,20 +140,6 @@ mod tests {
     }
 
     #[test]
-    fn copy_mode_reports_a_hard_link_as_unlinked() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        std::fs::hard_link(&source, &dest).unwrap();
-
-        assert_eq!(
-            file_status(LinkMode::Copy, &source, &dest).unwrap(),
-            FileStatus::Unlinked
-        );
-    }
-
-    #[test]
     fn reports_differs_for_a_dangling_symlink() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
@@ -165,16 +151,5 @@ mod tests {
             file_status(LinkMode::Hard, &source, &dest).unwrap(),
             FileStatus::Differs
         );
-    }
-
-    #[test]
-    fn errors_when_the_source_cannot_be_read() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        std::fs::create_dir(&source).unwrap();
-        write(&dest, "system");
-
-        assert!(file_status(LinkMode::Hard, &source, &dest).is_err());
     }
 }

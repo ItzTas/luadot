@@ -1,6 +1,6 @@
 [package]
 name = "luadot"
-version = "0.1.0-nightly.4"
+version = "0.1.0-nightly.7"
 edition = "2024"
 description = "A dotfiles manager configured in Lua"
 build = "build/main.rs"

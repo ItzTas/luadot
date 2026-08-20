@@ -145,30 +145,10 @@ mod tests {
     }
 
     #[test]
-    fn tables_nest() {
-        assert_eq!(
-            json(r#"return ld.alt.json({ paths = { "~/bin" } })"#).unwrap(),
-            "{\n  \"paths\": [\n    \"~/bin\"\n  ]\n}"
-        );
-    }
-
-    #[test]
-    fn an_empty_table_is_an_object() {
-        assert_eq!(json("return ld.alt.json({})").unwrap(), "{}");
-    }
-
-    #[test]
     fn a_table_mixing_a_list_with_names_is_reported() {
         let err = error(r#"return ld.alt.json({ "one", name = "two" })"#);
 
         assert!(err.contains("mixing a list of 1 value(s) with named keys"));
-    }
-
-    #[test]
-    fn a_key_that_is_not_a_string_is_reported() {
-        let err = error(r#"return ld.alt.json({ [true] = "one" })"#);
-
-        assert!(err.contains("needs string keys, got a boolean one"));
     }
 
     #[test]

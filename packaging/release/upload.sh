@@ -12,7 +12,7 @@ die() {
 
 tag=$1
 [ -n "$tag" ] || die 'no tag given; nothing was released'
-[ -n "${GITLAB_TOKEN:-}" ] || die 'GITLAB_TOKEN is not set'
+[ -n "${CI_JOB_TOKEN:-}" ] || die 'CI_JOB_TOKEN is not set'
 [ -n "${CI_API_V4_URL:-}" ] || die 'CI_API_V4_URL is not set'
 [ -n "${CI_PROJECT_ID:-}" ] || die 'CI_PROJECT_ID is not set'
 
@@ -31,7 +31,7 @@ releases="$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases"
 gitlab() {
 	local method=$1 url=$2
 	shift 2
-	curl -fsS -X "$method" -H "PRIVATE-TOKEN: $GITLAB_TOKEN" "$@" "$url"
+	curl -fsS -X "$method" -H "JOB-TOKEN: $CI_JOB_TOKEN" "$@" "$url"
 }
 
 links=$(jq -n '[]')
@@ -39,7 +39,7 @@ for path in "${assets[@]}"; do
 	name=$(basename "$path")
 
 	curl -fsS -X PUT \
-		-H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+		-H "JOB-TOKEN: $CI_JOB_TOKEN" \
 		--upload-file "$path" \
 		"$registry/$name" >/dev/null
 

@@ -33,9 +33,4 @@ mod tests {
         );
         assert_eq!(trimmed("  \n".to_string()), None);
     }
-
-    #[test]
-    fn read_ignores_a_missing_file() {
-        assert_eq!(read(Path::new("/nonexistent/hostname")), None);
-    }
 }

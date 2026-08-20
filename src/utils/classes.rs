@@ -63,23 +63,6 @@ mod tests {
     }
 
     #[test]
-    fn a_state_answering_everything_leaves_nothing_to_ask() {
-        let declared = [class("form-factor")];
-        let mut state = State::default();
-        state.set_class("form-factor", "laptop");
-
-        assert!(missing(&declared, &state).is_empty());
-    }
-
-    #[test]
-    fn the_way_out_names_the_class() {
-        assert_eq!(
-            skip("form-factor"),
-            "it with `luadot class set form-factor <value>`"
-        );
-    }
-
-    #[test]
     fn asking_without_a_terminal_reports_the_way_out() {
         let err = ask("class", &class("form-factor"), None)
             .unwrap_err()

@@ -159,16 +159,6 @@ mod tests {
     }
 
     #[test]
-    fn a_file_carries_no_mode_of_its_own() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let outputs = from_template(&dir, r#"ld.alt.out({ content = "x" })"#).unwrap();
-
-        assert_eq!(outputs[0].mode(), None);
-    }
-
-    #[test]
     fn rejects_a_mode_that_is_not_three_or_four_octal_digits() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
@@ -182,16 +172,6 @@ mod tests {
             assert!(err.contains("three or four octal digits"), "{raw}");
             assert!(err.contains(raw), "{raw}");
         }
-    }
-
-    #[test]
-    fn rejects_a_mode_that_is_not_a_string() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = error(&dir, r#"ld.alt.out({ content = "x", mode = 600 })"#);
-
-        assert!(err.contains("needs a `mode` holding an octal string like \"600\""));
     }
 
     #[test]

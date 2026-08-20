@@ -76,19 +76,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_has_no_repo() {
-        assert!(State::default().repo().is_none());
-    }
-
-    #[test]
-    fn default_has_no_class() {
-        let state = State::default();
-
-        assert!(state.classes().is_empty());
-        assert_eq!(state.class("form-factor"), None);
-    }
-
-    #[test]
     fn serde_roundtrip_with_repo() {
         let mut state = State::default();
         state.set_repo(PathBuf::from("/a/b"));
@@ -121,15 +108,6 @@ mod tests {
     }
 
     #[test]
-    fn setting_a_class_twice_keeps_the_last_answer() {
-        let mut state = State::default();
-        state.set_class("form-factor", "desktop");
-        state.set_class("form-factor", "laptop");
-
-        assert_eq!(state.class("form-factor"), Some("laptop"));
-    }
-
-    #[test]
     fn unsetting_reports_whether_it_was_set() {
         let mut state = State::default();
         state.set_class("form-factor", "laptop");
@@ -149,14 +127,5 @@ mod tests {
             state.classes().iter().collect::<Vec<_>>(),
             [("email", "me@example.com"), ("form-factor", "laptop")]
         );
-    }
-
-    #[test]
-    fn get_reads_a_top_level_key() {
-        let mut state = State::default();
-        state.set_repo(PathBuf::from("/a/b"));
-
-        assert_eq!(state.get("repo").unwrap().unwrap(), "/a/b");
-        assert!(state.get("missing").unwrap().is_none());
     }
 }

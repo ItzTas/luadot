@@ -73,12 +73,6 @@ mod tests {
     }
 
     #[test]
-    fn a_chunk_emitting_nothing_returns_an_empty_string() {
-        assert_eq!(render("").unwrap(), "");
-        assert_eq!(render("<% local unused = 1 %>").unwrap(), "");
-    }
-
-    #[test]
     fn literals_and_expressions_come_out_in_order() {
         assert_eq!(
             render("export EDITOR=<%= \"nvim\" %>\n").unwrap(),

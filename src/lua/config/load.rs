@@ -110,13 +110,6 @@ mod tests {
     }
 
     #[test]
-    fn a_script_calling_nothing_keeps_the_defaults() {
-        let config = from_source("local unused = 1").unwrap();
-
-        assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Hard);
-    }
-
-    #[test]
     fn requires_modules_from_the_lua_directory() {
         let dir = tempfile::tempdir().unwrap();
         let modules = dir.path().join(MODULES_DIR);

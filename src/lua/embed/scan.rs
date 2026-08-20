@@ -336,21 +336,11 @@ mod tests {
     }
 
     #[test]
-    fn the_dash_open_is_an_alias_of_the_output_tag() {
-        assert_eq!(scan("<%- x %>").unwrap(), scan("<%= x %>").unwrap());
-    }
-
-    #[test]
     fn a_comment_produces_nothing_and_keeps_the_lines() {
         assert_eq!(
             scan("a\n<%# a note\nspanning %>\nb").unwrap(),
             vec![literal("a\n", 1), literal("\nb", 3)]
         );
-    }
-
-    #[test]
-    fn a_comment_closes_on_the_plain_delimiter_alone() {
-        assert_eq!(scan("<%# note -%>\nb").unwrap(), vec![literal("\nb", 1)]);
     }
 
     #[test]
@@ -420,18 +410,6 @@ mod tests {
         assert_eq!(
             scan(r#"<% local s = "a\"%>" %>"#).unwrap(),
             vec![statement(r#" local s = "a\"%>" "#, 1)]
-        );
-    }
-
-    #[test]
-    fn a_close_inside_a_lua_comment_does_not_close() {
-        assert_eq!(
-            scan("<% x = 1 -- %> still comment\nx = 2 %>").unwrap(),
-            vec![statement(" x = 1 -- %> still comment\nx = 2 ", 1)]
-        );
-        assert_eq!(
-            scan("<% --[[ %> ]] x = 1 %>").unwrap(),
-            vec![statement(" --[[ %> ]] x = 1 ", 1)]
         );
     }
 

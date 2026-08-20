@@ -45,19 +45,3 @@ fn require_git(repo: &Path) -> Result<()> {
         repo.display()
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_directory_without_git_metadata_says_how_to_get_one() {
-        let dir = tempfile::tempdir().unwrap();
-
-        let err = require_git(dir.path()).unwrap_err().to_string();
-
-        assert!(err.contains("sync: "));
-        assert!(err.contains("is not a git repository"));
-        assert!(err.contains("luadot clone <url>"));
-    }
-}

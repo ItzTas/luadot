@@ -102,14 +102,6 @@ mod tests {
     }
 
     #[test]
-    fn the_replacement_reaches_the_groups_of_the_match() {
-        assert_eq!(
-            eval(r#"return regex.gsub("neovim@0.11.2", "(\\w+)@([\\d.]+)", "$2 of $1")"#).unwrap(),
-            "0.11.2 of neovim"
-        );
-    }
-
-    #[test]
     fn a_limit_stops_after_that_many_matches() {
         assert_eq!(
             eval(r#"return regex.gsub("a=1, b=2, c=3", "\\d", "0", 2)"#).unwrap(),

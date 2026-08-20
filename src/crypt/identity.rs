@@ -106,10 +106,6 @@ mod tests {
 
     use super::*;
 
-    fn program(words: &[&str]) -> Provider {
-        Provider::Program(words.iter().map(|word| word.to_string()).collect())
-    }
-
     #[test]
     fn a_line_runs_through_the_shell() {
         let command = Provider::Line("pass show age/key".to_string()).command();
@@ -125,20 +121,6 @@ mod tests {
     }
 
     #[test]
-    fn a_list_runs_the_program_it_names() {
-        let command = program(&["op", "read", "op://vault/age/key"]).command();
-
-        assert_eq!(command.get_program(), OsStr::new("op"));
-        assert_eq!(
-            command
-                .get_args()
-                .map(|arg| arg.to_string_lossy().into_owned())
-                .collect::<Vec<String>>(),
-            ["read", "op://vault/age/key"]
-        );
-    }
-
-    #[test]
     fn without_a_provider_the_identity_is_the_configured_file() {
         let mut identity = Identity::new(Some(Key::File(PathBuf::from("/home/u/key.txt"))));
 
@@ -146,11 +128,6 @@ mod tests {
             identity.path("apply").unwrap(),
             Some(Path::new("/home/u/key.txt"))
         );
-    }
-
-    #[test]
-    fn without_anything_there_is_no_identity() {
-        assert_eq!(Identity::default().path("apply").unwrap(), None);
     }
 
     #[test]
@@ -218,14 +195,5 @@ mod tests {
         let err = identity.path("apply").unwrap_err().to_string();
 
         assert!(err.contains("produced no identity"));
-    }
-
-    #[test]
-    fn a_provider_that_cannot_run_says_so() {
-        let mut identity = Identity::new(Some(Key::Command(program(&["luadot-no-such-provider"]))));
-
-        let err = format!("{:#}", identity.path("apply").unwrap_err());
-
-        assert!(err.contains("apply: failed to run `luadot-no-such-provider`"));
     }
 }

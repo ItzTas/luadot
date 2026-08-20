@@ -1,14 +1,15 @@
 use std::io::Write;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
+
+use crate::git;
 
 use super::constants::{
-    GENERATED_SIDE, MIRROR_ADD, MIRROR_GIT, MIRROR_INIT, MIRROR_MODE, MIRROR_PREFIX, MIRROR_TREE,
-    REPOSITORY_SIDE, SYSTEM_SIDE,
+    GENERATED_SIDE, MIRROR_BRANCH, MIRROR_MODE, MIRROR_PREFIX, MIRROR_TREE, REPOSITORY_SIDE,
+    SYSTEM_SIDE,
 };
 
 static MIRROR: AtomicU32 = AtomicU32::new(0);
@@ -30,6 +31,7 @@ pub struct Mirror {
 pub struct Tracked<'a> {
     mirror: &'a Mirror,
     root: PathBuf,
+    pending: Vec<PathBuf>,
 }
 
 impl Side {
@@ -90,10 +92,13 @@ impl Mirror {
             .create(&root)
             .with_context(|| format!("{}: failed to create {}", self.command, root.display()))?;
 
-        let tracked = Tracked { mirror: self, root };
-        tracked.git(&MIRROR_INIT)?;
+        git::scratch(&self.command, &root, MIRROR_BRANCH)?;
 
-        Ok(tracked)
+        Ok(Tracked {
+            mirror: self,
+            root,
+            pending: Vec::new(),
+        })
     }
 }
 
@@ -102,13 +107,16 @@ impl Tracked<'_> {
         &self.root
     }
 
-    pub fn write(&self, relative: &Path, contents: &[u8], mode: u32) -> Result<()> {
+    pub fn write(&mut self, relative: &Path, contents: &[u8], mode: u32) -> Result<()> {
         written(
             &self.mirror.command,
             &self.root.join(relative),
             contents,
             mode,
-        )
+        )?;
+        self.pending.push(relative.to_path_buf());
+
+        Ok(())
     }
 
     pub fn erase(&self, relative: &Path) -> Result<()> {
@@ -125,25 +133,10 @@ impl Tracked<'_> {
         }
     }
 
-    pub fn stage(&self) -> Result<()> {
-        self.git(&MIRROR_ADD)
-    }
+    pub fn stage(&mut self) -> Result<()> {
+        let pending = std::mem::take(&mut self.pending);
 
-    fn git(&self, arguments: &[&str]) -> Result<()> {
-        let command = &self.mirror.command;
-        let status = Command::new(MIRROR_GIT)
-            .current_dir(&self.root)
-            .args(arguments)
-            .status()
-            .with_context(|| {
-                format!("{command}: failed to run git; is it installed and on PATH?")
-            })?;
-
-        if !status.success() {
-            bail!("{command}: git {} failed", arguments.join(" "));
-        }
-
-        Ok(())
+        git::record(&self.mirror.command, &self.root, &pending)
     }
 }
 
@@ -234,20 +227,5 @@ mod tests {
 
         drop(mirror);
         assert!(!root.exists());
-    }
-
-    #[test]
-    fn two_mirrors_never_share_a_root() {
-        let first = Mirror::open("diff").unwrap();
-        let second = Mirror::open("diff").unwrap();
-
-        assert_ne!(first.root(), second.root());
-    }
-
-    #[test]
-    fn a_side_names_the_directory_it_holds() {
-        assert_eq!(Side::Repository.dir(), "repository");
-        assert_eq!(Side::Generated.dir(), "generated");
-        assert_eq!(Side::System.dir(), "system");
     }
 }

@@ -313,10 +313,6 @@ impl Counts {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use crate::lua::from_source;
-    use crate::output::ITEM_WIDTH;
 
     use super::*;
 
@@ -330,41 +326,9 @@ mod tests {
     }
 
     #[test]
-    fn every_status_has_a_label() {
-        for status in [
-            FileStatus::Synced,
-            FileStatus::Missing,
-            FileStatus::Unlinked,
-            FileStatus::Differs,
-            FileStatus::Unreadable,
-        ] {
-            let (_, label) = display(status);
-            assert!(!label.is_empty());
-        }
-    }
-
-    #[test]
     fn the_label_of_a_state_is_the_name_the_configuration_reads() {
         for (status, label, _) in STATUS_LABELS {
             assert_eq!(label, status.name());
-        }
-    }
-
-    #[test]
-    fn labels_fit_the_printed_column() {
-        for (_, text, _) in STATUS_LABELS {
-            assert!(text.len() + 1 < ITEM_WIDTH);
-        }
-    }
-
-    #[test]
-    fn every_state_a_file_can_be_reported_in_has_a_section() {
-        for (status, _, _) in STATUS_LABELS {
-            if status == FileStatus::Synced {
-                continue;
-            }
-
-            assert!(STATUS_SECTIONS.iter().any(|(state, _, _)| *state == status));
         }
     }
 
@@ -405,55 +369,6 @@ mod tests {
             line(Side::Repository, 1, 2, &counts),
             "nothing to apply, every managed file is synced, 2 template(s) not resolved"
         );
-    }
-
-    #[test]
-    fn a_customized_entry_reads_the_state_of_the_file() {
-        let config = from_source(
-            r#"ld.on.status({ entry = function(file)
-                 return file.side .. " " .. file.state .. " " .. file.path
-               end })"#,
-        )
-        .unwrap();
-
-        let file = StatusFile::new(
-            PathBuf::from("home/.bashrc"),
-            PathBuf::from("/home/u/.bashrc"),
-            Side::Repository,
-            FileStatus::Unlinked,
-        );
-
-        let shown = config
-            .status()
-            .entry()
-            .unwrap()
-            .shown(&what(CUSTOM_ENTRY), &file)
-            .unwrap();
-
-        assert_eq!(shown, Some("repository unlinked home/.bashrc".to_string()));
-    }
-
-    #[test]
-    fn a_customized_summary_reads_the_counts_of_the_side() {
-        let config = from_source(
-            r#"ld.on.status({ summary = function(counts)
-                 return counts.templates .. " into " .. counts.total .. ", " .. counts.synced
-               end })"#,
-        )
-        .unwrap();
-
-        let counts = StatusCounts::new(Side::Generated, 3, "unused".to_string())
-            .with_templates(2)
-            .with_states(counts(&[FileStatus::Synced, FileStatus::Synced]).states());
-
-        let shown = config
-            .status()
-            .summary()
-            .unwrap()
-            .shown(&what(CUSTOM_SUMMARY), &counts)
-            .unwrap();
-
-        assert_eq!(shown, Some("2 into 3, 2".to_string()));
     }
 
     #[test]

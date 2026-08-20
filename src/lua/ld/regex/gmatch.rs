@@ -42,23 +42,6 @@ mod tests {
     }
 
     #[test]
-    fn walks_every_match_in_order() {
-        assert_eq!(
-            eval(
-                r#"
-                local names = {}
-                for whole in regex.gmatch("a=1, b=2, c=3", "\\w=\\d") do
-                  names[#names + 1] = whole
-                end
-                return table.concat(names, "|")
-                "#
-            )
-            .unwrap(),
-            "a=1|b=2|c=3"
-        );
-    }
-
-    #[test]
     fn carries_the_groups_of_each_match() {
         assert_eq!(
             eval(

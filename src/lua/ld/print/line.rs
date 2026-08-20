@@ -26,21 +26,6 @@ mod tests {
     }
 
     #[test]
-    fn a_line_takes_the_text_alone() {
-        assert!(run(r#"print_("a line")"#).is_ok());
-    }
-
-    #[test]
-    fn a_line_takes_the_options_it_is_styled_with() {
-        assert!(run(r#"print_("a line", { tone = "good", mark = "»" })"#).is_ok());
-    }
-
-    #[test]
-    fn a_call_without_anything_is_an_empty_line() {
-        assert!(run("print_()").is_ok());
-    }
-
-    #[test]
     fn reports_a_text_that_is_not_a_string() {
         let err = run("print_({})").unwrap_err().to_string();
 

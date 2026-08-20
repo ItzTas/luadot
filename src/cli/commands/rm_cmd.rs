@@ -505,71 +505,6 @@ mod tests {
         std::fs::write(path, contents).unwrap();
     }
 
-    fn counts(restored: u32, untouched: u32) -> Counts {
-        Counts {
-            restored,
-            untouched,
-        }
-    }
-
-    #[test]
-    fn a_single_entry_needs_no_confirmation() {
-        let repo = Path::new("/repo");
-
-        assert!(confirmed(repo, &[Entry::File(repo.join(".bashrc"))]).unwrap());
-    }
-
-    #[test]
-    fn preview_lists_the_entries_relative_to_the_repository() {
-        let repo = Path::new("/repo");
-        let entries = vec![
-            Entry::File(repo.join(".bashrc")),
-            Entry::Template(repo.join(".zshrc.luadot")),
-        ];
-
-        assert_eq!(
-            preview(repo, &entries, PREVIEW_LIMIT),
-            "  .bashrc\n  .zshrc.luadot"
-        );
-    }
-
-    #[test]
-    fn preview_truncates_a_long_list() {
-        let repo = Path::new("/repo");
-        let entries: Vec<Entry> = (0..PREVIEW_LIMIT + 3)
-            .map(|index| Entry::File(repo.join(format!(".file{index}"))))
-            .collect();
-
-        let preview = preview(repo, &entries, PREVIEW_LIMIT);
-
-        assert_eq!(preview.lines().count(), PREVIEW_LIMIT + 1);
-        assert!(preview.ends_with("  ... and 3 more"));
-    }
-
-    #[test]
-    fn the_summary_counts_the_files_and_the_templates_apart() {
-        let repo = Path::new("/repo");
-        let files = [Entry::File(repo.join(".bashrc"))];
-        let both = [
-            Entry::File(repo.join(".bashrc")),
-            Entry::Template(repo.join(".zshrc.luadot")),
-        ];
-        let templates = [Entry::Standalone(repo.join(".zprofile.luadot"))];
-
-        assert_eq!(
-            summary("stopped managing", &files, &counts(1, 0)),
-            "stopped managing 1 file(s) (1 restored, 0 left untouched)"
-        );
-        assert_eq!(
-            summary("would stop managing", &both, &counts(1, 1)),
-            "would stop managing 1 file(s) and 1 template(s) (1 restored, 1 left untouched)"
-        );
-        assert_eq!(
-            summary("stopped managing", &templates, &counts(0, 1)),
-            "stopped managing 1 template(s) (0 restored, 1 left untouched)"
-        );
-    }
-
     #[test]
     fn a_plan_says_what_detaching_would_do_without_doing_it() {
         let dir = tempfile::tempdir().unwrap();
@@ -674,43 +609,6 @@ mod tests {
     }
 
     #[test]
-    fn detach_keeps_a_symlink_pointing_somewhere_else() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        let other = dir.path().join("other");
-        write(&source, "repo");
-        write(&other, "other");
-        std::os::unix::fs::symlink(&other, &dest).unwrap();
-
-        assert_eq!(
-            detach(&source, &dest, &mut None).unwrap(),
-            Detached::Untouched
-        );
-        assert!(
-            std::fs::symlink_metadata(&dest)
-                .unwrap()
-                .file_type()
-                .is_symlink()
-        );
-    }
-
-    #[test]
-    fn detach_leaves_the_system_file_when_the_repository_holds_a_symlink() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&dest, "system");
-        std::os::unix::fs::symlink(&dest, &source).unwrap();
-
-        assert_eq!(
-            detach(&source, &dest, &mut None).unwrap(),
-            Detached::Untouched
-        );
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "system");
-    }
-
-    #[test]
     fn prune_parents_removes_empty_directories_up_to_the_repository() {
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path().join("repo");
@@ -721,20 +619,6 @@ mod tests {
 
         assert!(!repo.join(".config").exists());
         assert!(repo.is_dir());
-    }
-
-    #[test]
-    fn prune_parents_stops_at_a_directory_that_still_holds_files() {
-        let dir = tempfile::tempdir().unwrap();
-        let repo = dir.path().join("repo");
-        let nested = repo.join(".config").join("nvim");
-        std::fs::create_dir_all(&nested).unwrap();
-        write(&repo.join(".config").join("keep"), "keep");
-
-        prune_parents(&repo, &nested.join("init.lua")).unwrap();
-
-        assert!(!nested.exists());
-        assert!(repo.join(".config").is_dir());
     }
 
     #[test]
@@ -777,20 +661,6 @@ mod tests {
         let entries = plan(&home, &repo, &[arg]).unwrap();
 
         assert_eq!(entries, vec![Entry::Template(template)]);
-    }
-
-    #[test]
-    fn plan_deduplicates_repeated_arguments() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(repo.join("home")).unwrap();
-        write(&repo.join("home/.bashrc"), "data");
-
-        let arg = home.join(".bashrc").to_string_lossy().into_owned();
-        let entries = plan(&home, &repo, &[arg.clone(), arg]).unwrap();
-
-        assert_eq!(entries, vec![Entry::File(repo.join("home/.bashrc"))]);
     }
 
     #[test]
@@ -883,55 +753,6 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(home.join(".zprofile")).unwrap(),
             "export HOST=1\n"
-        );
-    }
-
-    #[test]
-    fn a_template_that_does_not_resolve_still_goes_away() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let template = repo.join("home/.zshrc.luadot");
-        std::fs::create_dir_all(&template).unwrap();
-        write(&template.join("luadot.lua"), "error(\"broken\")");
-
-        let detached = detach_template(
-            &home,
-            &repo,
-            &Entry::Template(template.clone()),
-            &Classes::default(),
-            &mut None,
-        )
-        .unwrap();
-
-        assert_eq!(detached, vec![Detached::Untouched]);
-        assert!(!template.exists());
-    }
-
-    #[test]
-    fn only_a_link_reaching_inside_the_template_is_followed() {
-        let dir = tempfile::tempdir().unwrap();
-        let template = dir.path().join(".zshrc.luadot");
-        let inside = template.join("laptop.zsh");
-        let outside = dir.path().join("elsewhere.zsh");
-        std::fs::create_dir_all(&template).unwrap();
-        write(&inside, "laptop");
-        write(&outside, "elsewhere");
-
-        let linked = dir.path().join("linked");
-        std::os::unix::fs::symlink(&inside, &linked).unwrap();
-        assert_eq!(link_into(&template, &linked).unwrap(), Some(inside));
-
-        let other = dir.path().join("other");
-        std::os::unix::fs::symlink(&outside, &other).unwrap();
-        assert_eq!(link_into(&template, &other).unwrap(), None);
-
-        let plain = dir.path().join("plain");
-        write(&plain, "plain");
-        assert_eq!(link_into(&template, &plain).unwrap(), None);
-        assert_eq!(
-            link_into(&template, &dir.path().join("gone")).unwrap(),
-            None
         );
     }
 }

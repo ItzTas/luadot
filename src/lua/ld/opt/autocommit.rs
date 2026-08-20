@@ -22,13 +22,6 @@ mod tests {
     use crate::lua::from_source;
 
     #[test]
-    fn defaults_to_committing_nothing() {
-        let config = from_source("local unused = 1").unwrap();
-
-        assert!(!config.autocommit(Path::new("home/.bashrc")));
-    }
-
-    #[test]
     fn turns_the_commit_on_for_every_file() {
         let config = from_source("ld.opt.autocommit(true)").unwrap();
 

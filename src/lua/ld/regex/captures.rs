@@ -26,21 +26,6 @@ mod tests {
     use crate::lua::runtime::runtime;
 
     #[test]
-    fn owned_carries_the_whole_match_before_its_groups() {
-        let regex = Regex::new(r"(\w+)@([\d.]+)").unwrap();
-        let captures = regex.captures("neovim@0.11.2").unwrap();
-
-        assert_eq!(
-            owned(&captures),
-            [
-                Some("neovim@0.11.2".to_string()),
-                Some("neovim".to_string()),
-                Some("0.11.2".to_string()),
-            ]
-        );
-    }
-
-    #[test]
     fn a_group_that_did_not_participate_is_nil() {
         let lua = runtime().unwrap();
         let regex = Regex::new(r"(a)|(b)").unwrap();

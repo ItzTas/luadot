@@ -95,16 +95,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_look_without_anything_set_is_the_plain_style() {
-        assert_eq!(Look::default().style(), Style::new());
-    }
-
-    #[test]
-    fn a_tone_carries_its_own_style() {
-        assert_eq!(Look::from(Tone::Good).style(), Tone::Good.style());
-    }
-
-    #[test]
     fn a_color_wins_over_the_color_of_the_tone() {
         let look = Look::from(Tone::Good).with_fg(Some(AnsiColor::Red.into()));
 

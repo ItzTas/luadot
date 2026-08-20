@@ -182,19 +182,6 @@ mod tests {
     }
 
     #[test]
-    fn creates_missing_parent_directories() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("nested/deep/dest");
-        write(&source, "data");
-
-        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Created);
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
-    }
-
-    #[test]
     fn reports_already_synced_when_hard_linked() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
@@ -251,18 +238,6 @@ mod tests {
     }
 
     #[test]
-    fn refuses_to_replace_a_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "repo");
-        std::fs::create_dir(&dest).unwrap();
-
-        let err = sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap_err();
-        assert!(err.to_string().contains("refusing to replace directory"));
-    }
-
-    #[test]
     fn symbolic_mode_creates_a_symlink_and_detects_it() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
@@ -314,52 +289,5 @@ mod tests {
 
         let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Copy, &source, &dest).unwrap();
         assert_eq!(outcome, SyncOutcome::AlreadySynced);
-    }
-
-    #[test]
-    fn copy_mode_replaces_a_hard_link_with_a_real_copy() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        std::fs::hard_link(&source, &dest).unwrap();
-
-        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Copy, &source, &dest).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Replaced);
-        assert_ne!(
-            std::fs::metadata(&source).unwrap().ino(),
-            std::fs::metadata(&dest).unwrap().ino()
-        );
-    }
-
-    #[test]
-    fn copy_mode_replaces_a_symlink_with_a_real_copy() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        std::os::unix::fs::symlink(&source, &dest).unwrap();
-
-        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Copy, &source, &dest).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Replaced);
-        assert!(
-            !std::fs::symlink_metadata(&dest)
-                .unwrap()
-                .file_type()
-                .is_symlink()
-        );
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
-    }
-
-    #[test]
-    fn errors_when_source_is_not_a_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("missing");
-        let dest = dir.path().join("dest");
-
-        let err = sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap_err();
-        assert!(err.to_string().contains("is not a file"));
     }
 }

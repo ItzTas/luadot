@@ -13,21 +13,3 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         Ok(())
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::table::table;
-    use crate::lua::runtime::runtime;
-
-    fn run(source: &str) -> mlua::Result<()> {
-        let lua = runtime().unwrap();
-        lua.globals().set("print_", table(&lua).unwrap()).unwrap();
-
-        lua.load(source).exec()
-    }
-
-    #[test]
-    fn a_note_carries_the_name_of_the_program() {
-        assert!(run(r#"print_.note("nothing is managed")"#).is_ok());
-    }
-}

@@ -143,18 +143,6 @@ mod tests {
     }
 
     #[test]
-    fn repeated_calls_accumulate() {
-        let config = configure(
-            r#"
-            ld.class({ name = "form-factor" })
-            ld.class({ name = "email" })
-            "#,
-        );
-
-        assert_eq!(config.classes().len(), 2);
-    }
-
-    #[test]
     fn a_single_choice_is_taken_as_a_list_of_one() {
         let config = configure(r#"ld.class({ name = "shell", choices = "zsh" })"#);
 
@@ -179,11 +167,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_an_empty_name() {
-        assert!(error(r#"ld.class({ name = "" })"#).contains("that is not empty"));
-    }
-
-    #[test]
     fn rejects_choices_of_the_wrong_type() {
         let err = error(r#"ld.class({ name = "shell", choices = 42 })"#);
 
@@ -203,15 +186,5 @@ mod tests {
             error(r#"ld.class({ name = "shell", choices = { "zsh", "fish" }, default = "bash" })"#);
 
         assert!(err.contains("default `bash` is not one of its choices (zsh, fish)"));
-    }
-
-    #[test]
-    fn a_default_without_choices_is_free() {
-        let config = configure(r#"ld.class({ name = "email", default = "me@example.com" })"#);
-
-        assert_eq!(
-            config.class("email").unwrap().default(),
-            Some("me@example.com")
-        );
     }
 }

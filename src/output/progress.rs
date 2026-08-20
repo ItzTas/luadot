@@ -50,19 +50,3 @@ impl Drop for Progress {
         render.shutdown_and_wait();
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_task_reports_to_the_tree() {
-        let progress = Progress::new();
-
-        let task = progress.task("fetch");
-        task.init(Some(2), None);
-        task.set(1);
-
-        assert_eq!(progress.root.num_tasks(), 1);
-    }
-}

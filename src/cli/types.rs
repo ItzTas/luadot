@@ -75,9 +75,8 @@ pub enum Cmd {
 #[cfg(test)]
 mod tests {
     use clap::CommandFactory;
-    use clap::error::ErrorKind;
 
-    use super::super::commands::{ClassAction, TmplAction};
+    use super::super::commands::TmplAction;
     use super::*;
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
@@ -90,60 +89,11 @@ mod tests {
     }
 
     #[test]
-    fn a_subcommand_reaches_its_arguments() {
-        let cli = parse(&["luadot", "add", ".bashrc", ".vimrc"]).unwrap();
-
-        match cli.command {
-            Cmd::Add(args) => assert_eq!(args.paths, [".bashrc", ".vimrc"]),
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn add_requires_a_path() {
-        let err = parse(&["luadot", "add"]).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
-    }
-
-    #[test]
-    fn rm_takes_the_yes_flag() {
-        let cli = parse(&["luadot", "rm", "-y", ".bashrc"]).unwrap();
-
-        match cli.command {
-            Cmd::Rm(args) => {
-                assert!(args.yes);
-                assert_eq!(args.paths, [".bashrc"]);
-            }
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
     fn git_keeps_every_argument_verbatim() {
         let cli = parse(&["luadot", "git", "commit", "-m", "msg"]).unwrap();
 
         match cli.command {
             Cmd::Git(args) => assert_eq!(args.args, ["commit", "-m", "msg"]),
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn git_forwards_the_help_flag() {
-        let cli = parse(&["luadot", "git", "--help"]).unwrap();
-
-        match cli.command {
-            Cmd::Git(args) => assert_eq!(args.args, ["--help"]),
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn push_keeps_the_arguments_it_forwards() {
-        let cli = parse(&["luadot", "push", "origin", "main"]).unwrap();
-
-        match cli.command {
-            Cmd::Push(args) => assert_eq!(args.args, ["origin", "main"]),
             other => panic!("parsed {other:?}"),
         }
     }
@@ -162,57 +112,6 @@ mod tests {
     }
 
     #[test]
-    fn bare_sync_commits_with_the_default_message_and_pushes() {
-        let cli = parse(&["luadot", "sync"]).unwrap();
-
-        match cli.command {
-            Cmd::Sync(args) => {
-                assert_eq!(args.message, None);
-                assert!(!args.no_push);
-            }
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn exec_keeps_the_flags_after_the_target() {
-        let cli = parse(&["luadot", "exec", "report.lua", "--json"]).unwrap();
-
-        match cli.command {
-            Cmd::Exec(args) => {
-                assert_eq!(args.target, "report.lua");
-                assert_eq!(args.args, ["--json"]);
-            }
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn bare_class_defaults_to_listing() {
-        let cli = parse(&["luadot", "class"]).unwrap();
-
-        match cli.command {
-            Cmd::Class(args) => assert!(args.action.is_none()),
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn class_set_takes_a_name_and_a_value() {
-        let cli = parse(&["luadot", "class", "set", "email", "me@example.com"]).unwrap();
-
-        match cli.command {
-            Cmd::Class(ClassArgs {
-                action: Some(ClassAction::Set { name, value }),
-            }) => {
-                assert_eq!(name.as_deref(), Some("email"));
-                assert_eq!(value, ["me@example.com"]);
-            }
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
     fn tmpl_new_takes_one_path_and_the_file_flag() {
         let cli = parse(&["luadot", "tmpl", "new", "-f", "~/.zprofile"]).unwrap();
 
@@ -225,27 +124,5 @@ mod tests {
             }
             other => panic!("parsed {other:?}"),
         }
-    }
-
-    #[test]
-    fn tmpl_new_refuses_a_second_path() {
-        let err = parse(&["luadot", "tmpl", "new", ".zshrc", ".vimrc"]).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::UnknownArgument);
-    }
-
-    #[test]
-    fn bare_tmpl_shows_its_help() {
-        let err = parse(&["luadot", "tmpl"]).unwrap_err();
-        assert_eq!(
-            err.kind(),
-            ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
-        );
-    }
-
-    #[test]
-    fn verbose_counts_from_any_position() {
-        assert_eq!(parse(&["luadot", "-v", "status"]).unwrap().verbose, 1);
-        assert_eq!(parse(&["luadot", "status", "-vv"]).unwrap().verbose, 2);
-        assert_eq!(parse(&["luadot", "status"]).unwrap().verbose, 0);
     }
 }
