@@ -13,8 +13,9 @@ provides=("$_pkgname=$pkgver")
 conflicts=("$_pkgname")
 options=('!strip' '!debug')
 _registry='https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot'
-source_x86_64=("$_registry/$pkgver/$_pkgname-$pkgver-x86_64.tar.gz")
-source_aarch64=("$_registry/$pkgver/$_pkgname-$pkgver-aarch64.tar.gz")
+_version=@VERSION@
+source_x86_64=("$_registry/$_version/$_pkgname-$pkgver-x86_64.tar.gz")
+source_aarch64=("$_registry/$_version/$_pkgname-$pkgver-aarch64.tar.gz")
 sha256sums_x86_64=('@SHA256_X86_64@')
 sha256sums_aarch64=('@SHA256_AARCH64@')
 

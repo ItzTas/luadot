@@ -25,9 +25,9 @@ templates=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/$pkgname" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-pkgver=${tag#v}
-pkgver=${pkgver//-/.}
-asset="$gitlab_registry/$pkgver/luadot-$pkgver"
+version=${tag#v}
+pkgver=${version//-/.}
+asset="$gitlab_registry/$version/luadot-$pkgver"
 
 declare -A package_assets=(
 	["luadot"]="SHA256=$asset-src.tar.gz"
@@ -50,7 +50,7 @@ download() {
 	die "$url never became available"
 }
 
-sed_args=(-e "s|@PKGVER@|$pkgver|g" -e "s|@TAG@|$tag|g")
+sed_args=(-e "s|@PKGVER@|$pkgver|g" -e "s|@VERSION@|$version|g" -e "s|@TAG@|$tag|g")
 index=0
 while IFS='=' read -r placeholder url; do
 	index=$((index + 1))
