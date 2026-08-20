@@ -13,7 +13,6 @@ test:
         - Cargo.lock
     paths:
       - .cargo/
-      - target/
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends cmake
     - rustup component add clippy
