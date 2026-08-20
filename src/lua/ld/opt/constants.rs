@@ -1,10 +1,14 @@
 use super::super::table::Setter;
 use super::{
-    backup, backup_age, backup_dir, backup_keep, conflict, link, passphrase_warn, pkg_warn,
-    repo_dir,
+    autocommit, autopush, backup, backup_age, backup_dir, backup_keep, conflict, link,
+    passphrase_warn, pkg_warn, repo_dir,
 };
 
 pub const NAMESPACE: &str = "opt";
+
+pub const AUTOCOMMIT: &str = "autocommit";
+
+pub const AUTOPUSH: &str = "autopush";
 
 pub const BACKUP: &str = "backup";
 
@@ -26,7 +30,9 @@ pub const PKG_WARN: &str = "pkg_warn";
 
 pub const REPO_DIR: &str = "repo_dir";
 
-pub const SETTERS: [(&str, Setter); 9] = [
+pub const SETTERS: [(&str, Setter); 11] = [
+    (AUTOCOMMIT, autocommit::set),
+    (AUTOPUSH, autopush::set),
     (BACKUP, backup::set),
     (BACKUP_AGE, backup_age::set),
     (BACKUP_DIR, backup_dir::set),

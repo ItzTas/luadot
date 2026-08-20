@@ -1,9 +1,9 @@
 use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
-    AddArgs, AltArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs,
-    EditArgs, ExecArgs, GitArgs, InitArgs, NewArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs,
-    SetupArgs, StatusArgs,
+    AddArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs, EditArgs,
+    ExecArgs, GitArgs, InitArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs, SetupArgs, StatusArgs,
+    SyncArgs, TmplArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -42,11 +42,9 @@ pub enum Cmd {
     Diff(DiffArgs),
     #[command(about = "Put the repository's files back on the system")]
     Apply(ApplyArgs),
-    #[command(about = "Run the templates and put the files they produce on the system")]
-    Alt(AltArgs),
-    #[command(about = "Create an empty template in the repository")]
-    New(NewArgs),
-    #[command(about = "Put back the files an earlier apply or alt replaced")]
+    #[command(about = "Create the repository's templates and run them")]
+    Tmpl(TmplArgs),
+    #[command(about = "Put back the files an earlier apply or tmpl alt replaced")]
     Restore(RestoreArgs),
     #[command(about = "Open the repository's copy of a file in $VISUAL/$EDITOR")]
     Edit(EditArgs),
@@ -64,6 +62,8 @@ pub enum Cmd {
     Setup(SetupArgs),
     #[command(about = "Start a shell in the repository")]
     Cd,
+    #[command(about = "Stage what changed in the repository, commit it and push it")]
+    Sync(SyncArgs),
     #[command(about = "Run git inside the repository")]
     Git(GitArgs),
     #[command(about = "Shorthand for `luadot git push`")]
@@ -77,7 +77,7 @@ mod tests {
     use clap::CommandFactory;
     use clap::error::ErrorKind;
 
-    use super::super::commands::ClassAction;
+    use super::super::commands::{ClassAction, TmplAction};
     use super::*;
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
@@ -149,6 +149,32 @@ mod tests {
     }
 
     #[test]
+    fn sync_takes_a_message_and_can_leave_the_push_out() {
+        let cli = parse(&["luadot", "sync", "-m", "from here", "--no-push"]).unwrap();
+
+        match cli.command {
+            Cmd::Sync(args) => {
+                assert_eq!(args.message.as_deref(), Some("from here"));
+                assert!(args.no_push);
+            }
+            other => panic!("parsed {other:?}"),
+        }
+    }
+
+    #[test]
+    fn bare_sync_commits_with_the_default_message_and_pushes() {
+        let cli = parse(&["luadot", "sync"]).unwrap();
+
+        match cli.command {
+            Cmd::Sync(args) => {
+                assert_eq!(args.message, None);
+                assert!(!args.no_push);
+            }
+            other => panic!("parsed {other:?}"),
+        }
+    }
+
+    #[test]
     fn exec_keeps_the_flags_after_the_target() {
         let cli = parse(&["luadot", "exec", "report.lua", "--json"]).unwrap();
 
@@ -187,11 +213,13 @@ mod tests {
     }
 
     #[test]
-    fn new_takes_one_path_and_the_file_flag() {
-        let cli = parse(&["luadot", "new", "-f", "~/.zprofile"]).unwrap();
+    fn tmpl_new_takes_one_path_and_the_file_flag() {
+        let cli = parse(&["luadot", "tmpl", "new", "-f", "~/.zprofile"]).unwrap();
 
         match cli.command {
-            Cmd::New(args) => {
+            Cmd::Tmpl(TmplArgs {
+                action: TmplAction::New(args),
+            }) => {
                 assert!(args.file);
                 assert_eq!(args.path, "~/.zprofile");
             }
@@ -200,9 +228,18 @@ mod tests {
     }
 
     #[test]
-    fn new_refuses_a_second_path() {
-        let err = parse(&["luadot", "new", ".zshrc", ".vimrc"]).unwrap_err();
+    fn tmpl_new_refuses_a_second_path() {
+        let err = parse(&["luadot", "tmpl", "new", ".zshrc", ".vimrc"]).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn bare_tmpl_shows_its_help() {
+        let err = parse(&["luadot", "tmpl"]).unwrap_err();
+        assert_eq!(
+            err.kind(),
+            ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+        );
     }
 
     #[test]

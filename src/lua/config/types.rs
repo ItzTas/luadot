@@ -20,6 +20,8 @@ pub struct Config {
     classes: Vec<Class>,
     pkg_warn: bool,
     passphrase_warn: bool,
+    autocommit: bool,
+    autopush: bool,
     backup: bool,
     backup_dir: Option<PathBuf>,
     backup_keep: Option<u32>,
@@ -41,6 +43,8 @@ impl Default for Config {
             classes: Vec::new(),
             pkg_warn: true,
             passphrase_warn: true,
+            autocommit: false,
+            autopush: false,
             backup: true,
             backup_dir: None,
             backup_keep: None,
@@ -72,6 +76,8 @@ pub struct Rule {
     mode: Option<u32>,
     owner: Option<String>,
     encrypt: Option<bool>,
+    autocommit: Option<bool>,
+    autopush: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,6 +137,14 @@ impl Config {
 
     pub fn pkg_warn(&self) -> bool {
         self.pkg_warn
+    }
+
+    pub fn set_autocommit(&mut self, autocommit: bool) {
+        self.autocommit = autocommit;
+    }
+
+    pub fn set_autopush(&mut self, autopush: bool) {
+        self.autopush = autopush;
     }
 
     pub fn set_backup(&mut self, backup: bool) {
@@ -267,6 +281,28 @@ impl Config {
         self.matching(relative).filter_map(Rule::owner).next_back()
     }
 
+    pub fn autocommit(&self, relative: &Path) -> bool {
+        match self
+            .matching(relative)
+            .filter_map(Rule::autocommit)
+            .next_back()
+        {
+            Some(autocommit) => autocommit,
+            None => self.autocommit || self.autopush || self.pushed(relative),
+        }
+    }
+
+    pub fn autopush(&self, relative: &Path) -> bool {
+        self.autocommit(relative) && self.pushed(relative)
+    }
+
+    fn pushed(&self, relative: &Path) -> bool {
+        self.matching(relative)
+            .filter_map(Rule::autopush)
+            .next_back()
+            .unwrap_or(self.autopush)
+    }
+
     pub fn encrypt(&self, relative: &Path) -> bool {
         self.matching(relative)
             .filter_map(Rule::encrypt)
@@ -315,6 +351,8 @@ impl Rule {
             mode: None,
             owner: None,
             encrypt: None,
+            autocommit: None,
+            autopush: None,
         }
     }
 
@@ -340,6 +378,16 @@ impl Rule {
 
     pub fn with_encrypt(mut self, encrypt: Option<bool>) -> Self {
         self.encrypt = encrypt;
+        self
+    }
+
+    pub fn with_autocommit(mut self, autocommit: Option<bool>) -> Self {
+        self.autocommit = autocommit;
+        self
+    }
+
+    pub fn with_autopush(mut self, autopush: Option<bool>) -> Self {
+        self.autopush = autopush;
         self
     }
 
@@ -373,6 +421,14 @@ impl Rule {
 
     pub fn encrypt(&self) -> Option<bool> {
         self.encrypt
+    }
+
+    pub fn autocommit(&self) -> Option<bool> {
+        self.autocommit
+    }
+
+    pub fn autopush(&self) -> Option<bool> {
+        self.autopush
     }
 }
 
@@ -437,6 +493,8 @@ mod tests {
         assert_eq!(config.mode(path), None);
         assert_eq!(config.owner(path), None);
         assert!(!config.encrypt(path));
+        assert!(!config.autocommit(path));
+        assert!(!config.autopush(path));
     }
 
     #[test]

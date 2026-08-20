@@ -9,10 +9,7 @@ pub const LOCK: &str = "lock";
 
 pub const LOCK_KEYS: &str = "crypt.lock";
 
-pub const LOCK_KIND: &str =
-    "\"passphrase\" or a table of `recipients`, `identity` and `identity_command`";
-
-pub const LOCK_CONFLICT: &str = "`ld.crypt.lock` locks with a passphrase or with keys, never both; drop `passphrase` or drop the keys beside it";
+pub const LOCK_KIND: &str = "\"passphrase\" or a table of `recipients` and `identity`";
 
 pub const PASSPHRASE: &str = "passphrase";
 

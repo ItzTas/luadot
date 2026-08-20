@@ -23,3 +23,5 @@ pub const PLUGIN_BINARY: &str = "age-plugin-";
 pub const PLUGIN_RECIPIENT: &str = "age1";
 
 pub const PLUGIN_IDENTITY: &str = "AGE-PLUGIN-";
+
+pub const EXECUTABLE: u32 = 0o111;

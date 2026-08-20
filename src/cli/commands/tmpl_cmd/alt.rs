@@ -21,8 +21,8 @@ pub struct AltArgs {
     pub dry_run: bool,
 }
 
-pub fn alt_cmd(args: AltArgs) -> Result<()> {
-    let Workspace { config, home, repo } = utils::workspace("alt")?;
+pub fn alt(args: AltArgs) -> Result<()> {
+    let Workspace { config, home, repo } = utils::workspace("tmpl alt")?;
 
     let classes = state::load()?.classes().clone();
 
@@ -31,20 +31,21 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         None => repo.clone(),
     };
 
-    let templates: Vec<Entry> =
-        utils::managed_entries("alt", &repo, &root, |relative| config.is_ignored(relative))?
-            .into_iter()
-            .filter(|entry| match entry {
-                Entry::Template(_) | Entry::Standalone(_) => true,
-                Entry::File(_) => false,
-            })
-            .collect();
+    let templates: Vec<Entry> = utils::managed_entries("tmpl alt", &repo, &root, |relative| {
+        config.is_ignored(relative)
+    })?
+    .into_iter()
+    .filter(|entry| match entry {
+        Entry::Template(_) | Entry::Standalone(_) => true,
+        Entry::File(_) => false,
+    })
+    .collect();
     if templates.is_empty() {
         output::note("no template to resolve");
         return Ok(());
     }
 
-    let mut run = Run::open("alt", args.dry_run, &home, &config)?;
+    let mut run = Run::open("tmpl alt", args.dry_run, &home, &config)?;
 
     let mut outcomes: Vec<SyncOutcome> = Vec::new();
     for entry in &templates {
@@ -64,13 +65,14 @@ pub fn alt_cmd(args: AltArgs) -> Result<()> {
         count(&outcomes, SyncOutcome::AlreadySynced),
         count(&outcomes, SyncOutcome::Skipped),
     ));
-    run.finish("alt")?;
+    run.finish("tmpl alt")?;
 
     Ok(())
 }
 
 fn template_root(home: &Path, repo: &Path, arg: &str) -> Result<PathBuf> {
-    let target = std::path::absolute(arg).with_context(|| format!("alt: invalid path {arg}"))?;
+    let target =
+        std::path::absolute(arg).with_context(|| format!("tmpl alt: invalid path {arg}"))?;
     let managed = utils::repo_path(home, repo, &target)?;
 
     if let Some(dir) = files::template_dir(&managed).filter(|dir| dir.exists()) {
@@ -81,7 +83,7 @@ fn template_root(home: &Path, repo: &Path, arg: &str) -> Result<PathBuf> {
     }
 
     bail!(
-        "alt: {} has no template in the repository",
+        "tmpl alt: {} has no template in the repository",
         target.display()
     )
 }
@@ -94,21 +96,21 @@ fn resolve(
     classes: &Classes,
     run: &mut Run,
 ) -> Result<Vec<SyncOutcome>> {
-    utils::outputs("alt", home, repo, entry, classes)?
+    utils::outputs("tmpl alt", home, repo, entry, classes)?
         .iter()
         .map(|output| place(config, home, output, run))
         .collect()
 }
 
 fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result<SyncOutcome> {
-    let relative = utils::output_relative("alt", home, output)?;
-    let status = utils::escalated_output_status("alt", config, home, output)?;
+    let relative = utils::output_relative("tmpl alt", home, output)?;
+    let status = utils::escalated_output_status("tmpl alt", config, home, output)?;
 
     let policy = output
         .conflict()
         .unwrap_or_else(|| config.conflict_policy(&relative));
     let predicted = files::predict(policy, status, output.dest())
-        .with_context(|| format!("alt: failed to place {}", output.dest().display()))?;
+        .with_context(|| format!("tmpl alt: failed to place {}", output.dest().display()))?;
     let on_change = output.on_change().or_else(|| config.on_change(&relative));
 
     run.settle(predicted, &relative, output.dest(), on_change, || {
@@ -123,7 +125,7 @@ fn write(
     output: &Output,
 ) -> Result<SyncOutcome> {
     let dest = output.dest();
-    let failed = || format!("alt: failed to place {}", dest.display());
+    let failed = || format!("tmpl alt: failed to place {}", dest.display());
 
     if utils::is_root(relative) {
         return write_root(config, relative, policy, output).with_context(failed);
@@ -400,7 +402,7 @@ mod tests {
         write(&home.join(".zshrc"), "handwritten\n");
 
         let saved = root.path().join("backup");
-        let mut run = Run::new(false, Some(Backup::at("alt", &home, saved.clone())));
+        let mut run = Run::new(false, Some(Backup::at("tmpl alt", &home, saved.clone())));
         resolve(
             &Config::default(),
             &home,
@@ -444,7 +446,7 @@ mod tests {
         let arg = home.join(".zshrc").to_string_lossy().into_owned();
         let err = template_root(&home, &repo, &arg).unwrap_err().to_string();
 
-        assert!(err.contains("alt: "));
+        assert!(err.contains("tmpl alt: "));
         assert!(err.contains("has no template in the repository"));
     }
 
@@ -563,7 +565,7 @@ mod tests {
             run,
         )
         .unwrap();
-        run.finish("alt").unwrap();
+        run.finish("tmpl alt").unwrap();
 
         outcomes
     }
@@ -667,9 +669,9 @@ mod tests {
         )
         .unwrap();
 
-        let err = run.finish("alt").unwrap_err().to_string();
+        let err = run.finish("tmpl alt").unwrap_err().to_string();
 
-        assert_eq!(err, "alt: `exit 4` exited with status 4");
+        assert_eq!(err, "tmpl alt: `exit 4` exited with status 4");
         assert!(home.join(".zshrc").exists());
     }
 

@@ -27,3 +27,10 @@ target
 
 # Scratch directory: everything inside is ignored
 /.gitignored/
+
+# Release assets built by packaging/release/build.sh
+/dist/
+
+# Build results linked by nix build
+/result
+/result-*

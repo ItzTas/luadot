@@ -3,7 +3,7 @@ use std::io::Write;
 
 use anstream::{eprint, eprintln, print, println, stderr, stdout};
 
-use super::constants::{FIELD_WIDTH, LABEL_WIDTH};
+use super::constants::{FIELD_WIDTH, HINT_INDENT, ITEM_INDENT, ITEM_WIDTH, LABEL_WIDTH};
 use super::format::notice;
 use super::message::{Message, Stream};
 use super::tone::Tone;
@@ -46,10 +46,28 @@ pub fn line(text: impl Display) {
     say(&Message::new(text));
 }
 
+pub fn title(text: impl Display) {
+    say(&Message::new(text).with_look(Tone::Strong.into()));
+}
+
 pub fn section(title: impl Display) {
     say(&Message::new(title)
         .with_look(Tone::Strong.into())
         .with_blank(true));
+}
+
+pub fn hint(text: impl Display) {
+    say(&Message::new(text)
+        .with_look(Tone::Muted.into())
+        .with_indent(HINT_INDENT));
+}
+
+pub fn item(tone: Tone, label: impl Display, text: impl Display) {
+    say(&Message::new(label)
+        .with_tail(text)
+        .with_look(tone.into())
+        .with_indent(ITEM_INDENT)
+        .with_column(Some(ITEM_WIDTH)));
 }
 
 pub fn entry(tone: Tone, label: impl Display, text: impl Display) {

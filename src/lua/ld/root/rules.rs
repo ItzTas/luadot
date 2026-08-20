@@ -49,6 +49,8 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
     let mode: Option<String> = entry.get("mode")?;
     let owner: Option<String> = entry.get("owner")?;
     let encrypt: Option<bool> = entry.get("encrypt")?;
+    let autocommit: Option<bool> = entry.get("autocommit")?;
+    let autopush: Option<bool> = entry.get("autopush")?;
 
     Ok(
         Rule::new(pattern, link_mode(link)?, conflict_policy(conflict)?)
@@ -56,7 +58,9 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
             .with_ignore(ignore)
             .with_mode(mode.map(|raw| mode_bits(&raw, "a rule")).transpose()?)
             .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?)
-            .with_encrypt(encrypt),
+            .with_encrypt(encrypt)
+            .with_autocommit(autocommit)
+            .with_autopush(autopush),
     )
 }
 
@@ -294,6 +298,73 @@ mod tests {
 
         assert!(config.encrypt(Path::new("home/.ssh/id_ed25519")));
         assert!(!config.encrypt(Path::new("home/.ssh/id_ed25519.pub")));
+    }
+
+    #[test]
+    fn a_rule_commits_and_pushes_the_files_it_matches_on_its_own() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = "home/.config/nvim/**", autocommit = true },
+              { match = "home/.ssh/**", autopush = true },
+            })
+            "#,
+        );
+
+        let nvim = Path::new("home/.config/nvim/init.lua");
+        assert!(config.autocommit(nvim));
+        assert!(!config.autopush(nvim));
+
+        let key = Path::new("home/.ssh/config");
+        assert!(config.autopush(key));
+        assert!(config.autocommit(key));
+
+        assert!(!config.autocommit(Path::new("home/.bashrc")));
+    }
+
+    #[test]
+    fn a_rule_takes_a_file_back_from_the_ones_committed_on_their_own() {
+        let config = configure(
+            r#"
+            ld.opt.autocommit(true)
+            ld.rules({ { match = "home/.ssh/**", autocommit = false } })
+            "#,
+        );
+
+        assert!(config.autocommit(Path::new("home/.bashrc")));
+        assert!(!config.autocommit(Path::new("home/.ssh/config")));
+    }
+
+    #[test]
+    fn a_rule_committing_nothing_pushes_nothing_either() {
+        let config = configure(
+            r#"
+            ld.opt.autopush(true)
+            ld.rules({ { match = "home/.netrc", autocommit = false } })
+            "#,
+        );
+
+        let netrc = Path::new("home/.netrc");
+        assert!(!config.autocommit(netrc));
+        assert!(!config.autopush(netrc));
+
+        let bashrc = Path::new("home/.bashrc");
+        assert!(config.autocommit(bashrc));
+        assert!(config.autopush(bashrc));
+    }
+
+    #[test]
+    fn a_rule_can_hold_the_push_back_and_keep_the_commit() {
+        let config = configure(
+            r#"
+            ld.opt.autopush(true)
+            ld.rules({ { match = "home/.netrc", autopush = false } })
+            "#,
+        );
+
+        let netrc = Path::new("home/.netrc");
+        assert!(config.autocommit(netrc));
+        assert!(!config.autopush(netrc));
     }
 
     #[test]

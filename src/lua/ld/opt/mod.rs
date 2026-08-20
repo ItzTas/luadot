@@ -1,3 +1,5 @@
+mod autocommit;
+mod autopush;
 mod backup;
 mod backup_age;
 mod backup_dir;

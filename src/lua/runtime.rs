@@ -2,8 +2,8 @@ use std::path::Path;
 
 use mlua::{Lua, Table, Value};
 
+use super::bundled::lpeg;
 use super::constants::MODULES_DIR;
-use super::lpeg;
 
 pub fn runtime() -> mlua::Result<Lua> {
     let lua = Lua::new();

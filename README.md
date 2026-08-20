@@ -10,9 +10,33 @@ On Arch Linux, from the AUR:
 paru -S luadot
 ```
 
-`luadot-nightly` follows the pre-release tags instead, and conflicts with
-`luadot` — install one or the other. Both build from the tagged source, run the
-test suite, and ship the shell completions.
+`luadot-bin` is the same release without the compile, from the binaries built
+for `x86_64` and `aarch64` by the release pipeline. `luadot-nightly` follows the
+pre-release tags instead, and builds from source like `luadot`; there is no
+nightly binary package. The three conflict with each other — install one. All
+of them ship the shell completions.
+
+On Debian or Ubuntu, from the `.deb` the release publishes for `amd64` and
+`arm64`:
+
+```
+curl -fLO https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot/0.2.0/luadot_0.2.0-1_amd64.deb
+sudo apt install ./luadot_0.2.0-1_amd64.deb
+```
+
+There is no apt repository behind it, so `apt upgrade` will not move it — the
+next version is another download.
+
+On Nix, from the flake the repository ships:
+
+```
+nix run github:ItzTas/luadot -- status
+nix profile install github:ItzTas/luadot
+```
+
+It exports `packages.default` for the four Linux and Darwin systems, an
+`overlays.default` that adds `luadot` to a nixpkgs instance, and a dev shell.
+See [docs/nix.md](docs/nix.md).
 
 Anywhere else, from source:
 
@@ -31,21 +55,31 @@ cargo install --git https://github.com/ItzTas/luadot luadot
 | `luadot status [-t] [path]` | Lists the managed files whose system copy is not in sync, `-t` the files the templates produce too. |
 | `luadot diff [-t] [path]` | Shows what the repository holds and the system does not, `-t` what the templates produce too. |
 | `luadot apply [-n] [path]` | Puts the repository's files back on the system. |
-| `luadot alt [-n] [path]` | Runs the templates and puts the files they produce on the system. |
-| `luadot new [-f] <path>` | Creates an empty template in the repository, for the file that path names. |
-| `luadot restore [-l] [-y] [-n] [backup]` | Puts back the files an earlier `apply` or `alt` replaced. |
+| `luadot tmpl alt [-n] [path]` | Runs the templates and puts the files they produce on the system. |
+| `luadot tmpl new [-f] <path>` | Creates an empty template next to the file that path names, and starts managing it. |
+| `luadot restore [-l] [-y] [-n] [backup]` | Puts back the files an earlier `apply` or `tmpl alt` replaced. |
 | `luadot edit <path>` | Opens the repository's copy of a file, or the script of the template producing it, in `$VISUAL`/`$EDITOR`. |
 | `luadot rekey [-n] [path]` | Re-encrypts the repository's secrets for the recipients set now. |
 | `luadot exec <source\|file.lua> [args]...` | Runs Lua with `ld` installed, from a string or a `.lua` file. |
-| `luadot config [show\|path\|edit]` | Shows the resolved configuration, prints its path, or opens it. |
+| `luadot config [show\|path\|repo\|edit]` | Shows the resolved configuration, prints its path or the path of the repository, or opens it. |
 | `luadot class [list\|set\|unset\|get]` | Lists the declared classes and answers them for this machine. |
+| `luadot bootstrap` | Runs the repository's `bootstrap.lua`. |
+| `luadot setup [-l] [name]...` | Runs the setup scripts the names ask for, `-l` prints the names instead. |
 | `luadot cd` | Starts a shell in the repository. |
+| `luadot sync [-m MSG] [--no-push]` | Stages what changed in the repository, commits it and pushes it. |
 | `luadot git <args>...` | Runs git inside the repository. |
 | `luadot push [args]...` | Shorthand for `luadot git push`. |
 | `luadot completions <shell>` | Prints a completion script for that shell. |
 
 `luadot --help` explains any command in place (`luadot rm --help`), and
 `luadot --version` prints the version.
+
+The bash, zsh and fish scripts hand `luadot git` and `luadot push` over to the
+completion git already installs, pointed at the managed repository — so
+`luadot git ch<Tab>` and `luadot git checkout <Tab>` answer the way `git` does,
+with the branches of the repository luadot manages and not of the directory you
+happen to be in. `luadot setup <Tab>` answers with the setups the repository
+declares, which `luadot setup --list` prints on its own.
 
 ### Where the repository lives
 
@@ -61,14 +95,17 @@ luadot clone git@github.com:me/dotfiles.git ~/dotfiles
 `init` is the same thing without a repository to start from: it creates an empty
 git repository, in the same default place or in the directory you name, and
 remembers it too. The directory has to be empty or not exist yet, and nothing is
-committed for you — `luadot add` fills it and `luadot git` commits it:
+committed for you — `luadot add` fills it and stages what it wrote, so the commit
+is one command away:
 
 ```
 luadot init ~/dotfiles
 luadot add ~/.zshrc
-luadot git add -A
 luadot git commit -m "first"
 ```
+
+`luadot rm` stages what it took out the same way, and `luadot sync` does the
+whole round in one go.
 
 `ld.opt.repo_dir` says it in the configuration instead, which is what a
 repository luadot did not clone needs — the one already sitting in `~/dotfiles`
@@ -82,8 +119,28 @@ It wins over what `clone` remembered, so it is also how a machine follows a
 repository that moved. The path is read on every command; luadot never moves the
 directory for you, and points at it where it stands.
 
-`status` reports one line per file that `apply` would touch, and a count for
-everything else:
+`status` reads like `git status`: the repository it is looking at, what it
+holds, and then one section per state, each naming the command that settles it.
+The files already in sync are left out, the way git leaves an unchanged file
+out:
+
+```
+$ luadot status
+On repository /home/u/dotfiles
+12 managed file(s), 2 template(s) not resolved
+
+Files not on the system:
+  (use "luadot apply <path>..." to write them)
+        missing:     home/.bashrc
+
+Files not linked:
+  (use "luadot apply <path>..." to link them)
+        unlinked:    home/.vimrc
+
+Files that differ:
+  (use "luadot diff <path>..." to see what changed)
+        differs:     home/.zshrc
+```
 
 - `missing` — the file is in the repository but not on the system.
 - `unlinked` — the contents match, but the system copy is not the link the
@@ -92,7 +149,16 @@ everything else:
 - `unreadable` — a system file luadot may not read; `status` never asks for
   privilege, `apply` does.
 
-Those lines and the count closing them are the configuration's to replace, in
+With nothing left for `apply` to do, the sections go away and the line under
+the header says so:
+
+```
+$ luadot status
+On repository /home/u/dotfiles
+nothing to apply, every managed file is synced
+```
+
+Those lines and the one under the header are the configuration's to replace, in
 `ld.on.status` — [Customizing a command](#customizing-a-command) is what it
 takes.
 
@@ -100,9 +166,10 @@ takes.
 
 ```
 $ luadot diff
-diff --git repository/home/.vimrc system/home/.vimrc
---- repository/home/.vimrc
-+++ system/home/.vimrc
+diff --git a/home/.vimrc b/home/.vimrc
+index 3f8a2b1..7c4d9e0 100644
+--- a/home/.vimrc
++++ b/home/.vimrc
 @@ -1,2 +1,2 @@
  set number
 -set ruler
@@ -113,13 +180,15 @@ luadot: 1 of 12 managed file(s) differ
 The repository is the left side and the system the right side, so what the
 diff adds is what `apply` would overwrite and what it removes is what `add`
 would bring in. A path narrows the report to that file or to everything below
-that directory. A file the system does not have shows its whole content as
-absent from the right side; one reported `unlinked` holds the same content and
-has nothing to show.
+that directory. A file the system does not have is a deleted file, its whole
+content absent from the right side; one reported `unlinked` holds the same
+content and has nothing to show.
 
-The diff itself is `git diff`, run over a private copy of the two sides, so
-your pager, your colors and your `diff.*` settings are the ones that apply, and
-binary files are reported as differing instead of printed. Since git only
+The diff itself is `git diff`, run over a private repository whose index holds
+the repository side and whose working tree holds the system side, so what comes
+out is the diff git always prints — the same `a/` and `b/` paths, your pager,
+your colors and your `diff.*` settings — and binary files are reported as
+differing instead of printed. Since git only
 records the executable bit, a system file whose content matches but whose mode
 drifted gets a line of its own:
 
@@ -137,9 +206,15 @@ them and reports the files they produce, without writing any of them:
 
 ```
 $ luadot status --templates
-missing    home/.config/nvim/init.lua
-luadot: 12 managed file(s) (12 synced, 0 missing, 0 unlinked, 0 differs)
-luadot: 2 template(s) into 3 file(s) (2 synced, 1 missing, 0 unlinked, 0 differs)
+On repository /home/u/dotfiles
+nothing to apply, every managed file is synced
+
+Generated from templates
+2 template(s) into 3 file(s)
+
+Files not on the system:
+  (use "luadot apply <path>..." to write them)
+        missing:     home/.config/nvim/init.lua
 ```
 
 `diff --templates` shows the same files as a diff, the generated side under
@@ -163,6 +238,70 @@ Stop managing 2 file(s)? [y/N]
 
 `-y` (or `--yes`) answers it upfront, which is also what a script needs: without
 a terminal to ask on, `rm` refuses rather than assuming an answer.
+
+### Sending it to the remote
+
+`add` and `rm` stage what they wrote and what they took out, so the repository
+is always one commit away from carrying your changes. `sync` is that commit and
+the push behind it:
+
+```
+$ luadot sync
+[main 9f1c2ab] sync from thinkpad
+ 2 files changed, 31 insertions(+)
+```
+
+It stages everything the repository holds, commits it, and pushes. `-m` writes
+the message instead of the default `sync from <host>`, `--no-push` stops after
+the commit, and a run with nothing to commit says so and pushes whatever is
+still ahead of the remote:
+
+```
+$ luadot sync -m "nvim keymaps"
+$ luadot sync --no-push
+```
+
+A branch that tracks nothing yet is pushed with `--set-upstream origin HEAD`,
+so the first `sync` after `luadot init` needs no argument of its own — only a
+remote to push to:
+
+```
+luadot git remote add origin git@github.com:me/dotfiles.git
+luadot sync
+```
+
+`luadot git` is still there for everything else, and `luadot push` remains the
+shorthand for `luadot git push`.
+
+The configuration takes the same round without the command. `ld.opt.autocommit`
+makes `add` and `rm` commit what they staged, and `ld.opt.autopush` pushes that
+commit — it commits on its own, so it does not need `autocommit` beside it:
+
+```lua
+ld.opt.autocommit(true)
+ld.opt.autopush(true)
+```
+
+Both are rule keys too, which is how one part of the repository travels on its
+own while the rest waits for you:
+
+```lua
+ld.rules({
+  { match = "home/.config/nvim/**", autopush = true },
+  { match = "home/.ssh/**", autocommit = false },
+})
+```
+
+The rules answer per file and a run commits as soon as one file it touched asks
+for it. `autocommit = false` is the way out of both, since a commit is what
+there is to push; `autopush = false` keeps the commit and leaves the pushing to
+you. Nothing else changes: the commit carries the same default message, and a
+repository with no commit yet is left alone rather than pushed.
+
+What a rule decides is whether a file *starts* a commit, not what the commit
+carries: git commits the whole index, so a file staged earlier and left there
+travels with the next commit something else triggers. A file that should never
+reach the repository at all is `ignore`d instead.
 
 ### The layout
 
@@ -312,19 +451,14 @@ secret says so once. `ld.opt.passphrase_warn(false)` silences that line and
 nothing else. age asks per file, and only gpg's agent caches the answer, so
 expect one prompt per secret with age.
 
-The table form says the same thing, for a configuration that computes the
-answer rather than writing it out:
+A lock is one answer: the word `"passphrase"` is the whole of it, and the table
+form carries keys only. A configuration that computes the answer picks between
+the two where it writes the call:
 
 ```lua
-ld.crypt.lock({ passphrase = ld.class.get("profile") == "personal" })
-```
-
-A lock is one answer, so the keys have no meaning beside a passphrase and
-carrying both is refused where it is written, rather than silently ignored:
-
-```
-luadot: `ld.crypt.lock` locks with a passphrase or with keys, never both; drop
-`passphrase` or drop the keys beside it
+ld.crypt.lock(ld.class.get("profile") == "personal" and "passphrase" or {
+  recipients = "age1example",
+})
 ```
 
 `ld.crypt.backend` is a separate question and combines with either lock: `age`
@@ -348,7 +482,7 @@ there is none, and an `owner` rule sets who owns it, as for any system file.
 | Call | Arguments | Effect |
 | --- | --- | --- |
 | `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
-| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked. One call, one answer: a passphrase or keys, never both. Defaults to keys with none set. |
+| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked. One call, one answer: the word locks with a passphrase, the table with keys. Defaults to keys with none set. |
 | `ld.crypt.lock`'s `recipients` | a key or a list of them | Public keys or key ids the files are encrypted to. |
 | `ld.crypt.lock`'s `identity` | a path, a command line, or a table carrying `type` and its value | Private key used to decrypt with age; gpg uses its keyring. A path resolves `~` and a relative path against your home directory; a command prints the key instead. |
 | `ld.opt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |
@@ -356,23 +490,32 @@ there is none, and an `owner` rule sets who owns it, as for any system file.
 
 ### Seeing it first
 
-`-n` (or `--dry-run`) makes `apply`, `alt` and `rm` report what they would do
+`-n` (or `--dry-run`) makes `apply`, `tmpl alt` and `rm` report what they would do
 and touch nothing — no file written, no backup taken:
 
 ```
 $ luadot apply --dry-run
-create   home/.config/nvim/init.lua
-replace  home/.zshrc
+create     home/.config/nvim/init.lua
+replace    home/.zshrc
 luadot: would apply 12 file(s) (1 created, 1 replaced, 10 unchanged, 0 skipped)
 ```
 
 Only the files that would change are listed, one line each, the same way
-`status` reports them.
+`status` reports them. A real run names every file it went through, unchanged
+ones included:
+
+```
+$ luadot apply
+created    home/.config/nvim/init.lua
+replaced   home/.zshrc
+unchanged  home/.gitconfig
+luadot: applied 3 file(s) (1 created, 1 replaced, 1 unchanged, 0 skipped)
+```
 
 ### Backups
 
 Every file luadot destroys is copied first, so nothing it overwrites is lost:
-`apply` and `alt` save what they replace, and `rm` saves both the repository
+`apply` and `tmpl alt` save what they replace, and `rm` saves both the repository
 entry it deletes and the system symlink it writes over.
 
 ```
@@ -510,17 +653,19 @@ ld.rules({
 })
 ```
 
-A rule carries seven more keys, all optional next to `match` or `regex`:
+A rule carries nine more keys, all optional next to `match` or `regex`:
 
 | Key | Values | Effect |
 | --- | --- | --- |
 | `link` | `"hard"`, `"symbolic"`, `"copy"` | How the matching files are placed. Files under `root/` are always copies, whatever it says. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the system copy differs. |
-| `on_change` | a command line | Runs after `apply` or `alt` created or replaced one of those files. |
+| `on_change` | a command line | Runs after `apply` or `tmpl alt` created or replaced one of those files. |
 | `ignore` | `true`, `false` | Whether the matching files are left unmanaged. |
 | `mode` | three or four octal digits, as a string | The permission bits a matching file under `root/` is placed with. An encrypted file carries `600` without it. |
 | `owner` | `"user"` or `"user:group"` | Who owns a matching file under `root/`. |
 | `encrypt` | `true`, `false` | Whether `add` stores the matching files encrypted. |
+| `autocommit` | `true`, `false` | Whether `add` and `rm` commit on their own once one of those files is staged. |
+| `autopush` | `true`, `false` | Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back. |
 
 Either syntax also matches a directory on behalf of everything under it, so
 `{ match = "home/.ssh" }` and `{ regex = "^home/\\.ssh$" }` both cover
@@ -543,13 +688,15 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.opt.backup_age(span)` | a span like `"30d"`, in `s`, `m`, `h`, `d` or `w` | How long a backup is kept; the ones older than that are dropped. Defaults to keeping them forever. |
 | `ld.opt.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
+| `ld.opt.autocommit(enabled)` | `true`, `false` | Whether `add` and `rm` commit what they staged. Defaults to `false`. |
+| `ld.opt.autopush(enabled)` | `true`, `false` | Whether that commit is pushed too, committing first. Defaults to `false`. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 | `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
-| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked: with a passphrase or with keys, never both. The `identity` takes a path or a command. |
+| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked: the word locks with a passphrase, the table with keys. The `identity` takes a path or a command. |
 | `ld.opt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |
 | `ld.crypt(options)` | a table of options | Sets several crypt options at once; only the keys it carries. |
-| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, and marks them as encrypted. |
+| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, marks them as encrypted, and commits and pushes them on their own. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |
@@ -565,6 +712,13 @@ place, and `--dry-run` prints the command instead of running it.
 | `ld.print(text, options)` | a string and a table of options | Writes a line to the terminal, styled the way the options ask. |
 | `ld.print.note(text)`, `ld.print.warn(text)`, `ld.print.error(text)` | a string and a table of options | The same line carrying `luadot:`; the last two on the error stream. |
 | `ld.print.section(title)`, `ld.print.entry(label, text)`, `ld.print.field(name, value)` | strings and a table of options | A title over a blank line, a labelled line, a named value. |
+| `ld.regex.test(text, pattern)` | a text and an expression | Whether the expression matches anywhere in the text. |
+| `ld.regex.match(text, pattern)` | a text and an expression | The whole match, then each of its groups; nothing when the expression does not match. |
+| `ld.regex.find(text, pattern)` | a text and an expression | Where the match starts and where it ends; nothing when the expression does not match. |
+| `ld.regex.gmatch(text, pattern)` | a text and an expression | An iterator walking every match, each one yielding the whole match then its groups. |
+| `ld.regex.gsub(text, pattern, replacement, limit)` | a text, an expression, a string or a function, and an optional count | The text with the matches rewritten and how many were; `$1` and `${name}` carry the groups. |
+| `ld.regex.split(text, pattern, limit)` | a text, an expression and an optional count | The pieces the expression cuts the text into. |
+| `ld.regex.escape(text)` | a string | The text as an expression matching itself, every special character quoted. |
 
 Options also take the table form, which sets whatever keys it carries and leaves
 the rest alone:
@@ -588,7 +742,7 @@ instead of hiding the call:
 | `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.backup_age`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.crypt.backend`, `ld.crypt.lock`, `ld.class`, `ld.on.status`, `ld.on.diff` | `config.lua`, which builds the configuration | does nothing, warns |
 | `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
-| `ld.opt.pkg_warn`, `ld.opt.passphrase_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path`, `ld.print` | everywhere | — |
+| `ld.opt.pkg_warn`, `ld.opt.passphrase_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path`, `ld.print`, `ld.regex` | everywhere | — |
 
 A call away from where it has an effect is not an error; it runs, does nothing
 and says so:
@@ -877,8 +1031,8 @@ made of are the same in both:
 
 | Key | Takes | Effect |
 | --- | --- | --- |
-| `entry` | a function, or `false` | Runs for every file the command inspected, in place of the line it would have written. |
-| `summary` | a function, a string, or `false` | Replaces the count line closing each side. |
+| `entry` | a function, or `false` | Runs for every file the command inspected, in place of the line it would have written — and, in `status`, in place of the sections grouping them. |
+| `summary` | a function, a string, or `false` | Replaces the line each side opens with. |
 | `render` | a function, or `false` | Runs once, with every one of those files, and takes the whole report over. |
 
 Each one takes a function, and the one that is only a line takes a string too.
@@ -898,8 +1052,9 @@ ld.on.status({
 ```
 
 `false` silences the piece it is given to, so `ld.on.status({ summary = false })`
-drops the count lines. A second call replaces only the keys it carries, and the
-two commands are customized apart — neither reads the other's call.
+leaves each side with its header alone. A second call replaces only the keys it
+carries, and the two commands are customized apart — neither reads the other's
+call.
 
 `entry` and `render` are handed the same table, one file at a time or every one
 of them at once. `path`, `system` and `side` are in both commands' tables:
@@ -916,7 +1071,8 @@ of them at once. `path`, `system` and `side` are in both commands' tables:
 `state` is the word `status` reports with: `"synced"`, `"missing"`,
 `"unlinked"`, `"differs"` or `"unreadable"`. Every inspected file reaches
 `entry` and `render`, the synced ones included — the built-in report leaves
-those out, a customized one decides for itself:
+those out and groups the rest into sections, a customized one gets a flat list
+and decides for itself:
 
 ```lua
 ld.on.status({
@@ -968,9 +1124,9 @@ ld.on.diff({
 | `tool` | a program, or a list holding it and its arguments | Compares the two sides instead of `git diff`. |
 | `args` | a word or a list of them | Extra arguments for whichever program compares them. |
 
-The tool runs inside the same private copy of the two sides, with the two
-directories as its last two arguments, and `args` is passed to whichever program
-runs — git included, where it lands before the `--`:
+A tool of its own gets a private copy of the two sides as two directories, its
+last two arguments, instead of the repository git diffs; `args` is passed to
+whichever program runs, git included, where it lands right after `diff`:
 
 ```lua
 ld.on.diff({ tool = { "difft", "--color", "always" } })
@@ -995,11 +1151,11 @@ of them down; bootstrap.lua is where it belongs (silence it with
 `ld.opt.pkg_warn(false)`)
 ```
 
-A template pays the same cost on every `alt`, so `luadot.lua` is warned too:
+A template pays the same cost on every `tmpl alt`, so `luadot.lua` is warned too:
 
 ```
 luadot: `ld.cmd` in luadot.lua runs every time the template is resolved and
-will slow `alt` down; bootstrap.lua is where it belongs (silence it with
+will slow `tmpl alt` down; bootstrap.lua is where it belongs (silence it with
 `ld.opt.pkg_warn(false)`)
 ```
 
@@ -1033,7 +1189,44 @@ require("editors")
 ```
 
 `ld` is a global, so a required module calls it directly, returns values for
-`config.lua` to pass along, or exposes functions to be called from there.
+`config.lua` to pass along, or exposes functions to be called from there. The
+same directory is on the module path of every template, so a helper written
+once is reached from both.
+
+### Regular expressions
+
+Lua patterns cover the easy cases and stop there — no alternation, no
+quantifier on a group, no named capture. `ld.regex` is the real thing, the same
+engine the `regex` key of a rule is written in, available in every script:
+
+```lua
+local _, version = ld.regex.match(ld.cmd("nvim --version"), "NVIM v([\\d.]+)")
+
+local trimmed = ld.regex.gsub(text, "\\s+$", "")
+
+for _, name, value in ld.regex.gmatch(env, "(\\w+)=(\\S+)") do
+  ld.print.field(name, value)
+end
+```
+
+Every call yields the whole match first and then each of its groups, which is
+what the `_` above skips. `find` yields the two positions instead, and `gsub`
+returns the new text next to the number of matches it rewrote. A replacement
+string carries the groups as `$1` or `${name}`, and a replacement function
+receives the same values `match` yields, returning the piece to write — or `nil`
+to leave that match alone:
+
+```lua
+local bumped = ld.regex.gsub("nvim 0.11.2", "(\\d+)\\.(\\d+)", function(_, major, minor)
+  return major .. "." .. (tonumber(minor) + 1)
+end)
+```
+
+The expressions are the ones documented at
+<https://docs.rs/regex/latest/regex/#syntax>: leading `\\` because Lua strings
+eat one of them, linear time on any input, and no backreferences or lookaround
+as the price for it. `ld.regex.split` cuts a text on every match, and
+`ld.regex.escape` turns a literal into an expression matching itself.
 
 ### Parsing with LPeg
 
@@ -1086,7 +1279,7 @@ A path whose name ends in `.luadot` is a template, in one of two forms. A
 **directory** holds a `luadot.lua` deciding what ends up on the system, next to
 the files that decision picks from or renders. A plain **file** is an embedded
 template rendered directly to the mirrored path, with nothing else around it.
-`luadot alt` is what runs both: `apply` walks past them instead of mirroring
+`luadot tmpl alt` is what runs both: `apply` walks past them instead of mirroring
 them, and what the rest of the commands do with a template closes this
 section.
 
@@ -1110,15 +1303,21 @@ The destination is the template's own path without the suffix, so the
 repository keeps mirroring the system. Inside a directory, a `dest`
 of your own overrides it.
 
-`luadot new` creates either form, empty. It takes the path of the file the
+`luadot tmpl new` creates either form, empty. It takes the path of the file the
 template is for, the `.luadot` suffix being added when it is not already
-there, and mirrors it into the repository the way `add` does:
+there, writes the template next to that file, and then adds it to the
+repository the way `add` does:
 
 ```
-luadot new ~/.zshrc                  -- ~/dotfiles/home/.zshrc.luadot/luadot.lua
-luadot new .config/nvim/init.lua     -- ~/dotfiles/home/.config/nvim/init.lua.luadot/luadot.lua
-luadot new -f ~/.zprofile            -- ~/dotfiles/home/.zprofile.luadot, a standalone template
+luadot tmpl new ~/.zshrc               -- ~/.zshrc.luadot/luadot.lua
+luadot tmpl new .config/nvim/init.lua  -- ~/.config/nvim/init.lua.luadot/luadot.lua
+luadot tmpl new -f ~/.zprofile         -- ~/.zprofile.luadot, a standalone template
 ```
+
+The template stays where it was written and the repository links it, exactly
+like a file you `add`, so `~/.zshrc.luadot/luadot.lua` and
+`~/dotfiles/home/.zshrc.luadot/luadot.lua` are the same file. Files you put in
+a directory template afterwards are yours to `add`.
 
 A relative path is resolved against the directory you are in, and has to land
 inside your home directory. The directory form gets a `luadot.lua` returning
@@ -1196,8 +1395,9 @@ so several templates can share a file kept elsewhere in the repository:
 ld.alt.out({ content = ld.alt.file(ld.path.repo .. "/shared/aliases.zsh") })
 ```
 
-The template's own `lua/` directory is requirable, exactly like the
-configuration's.
+The template's own `lua/` directory is requirable, and so is
+`~/.config/luadot/lua/`, so a module written once for the configuration is
+reached from any template. A name defined in both is taken from the template.
 
 ### Building a file out of fragments
 
@@ -1261,7 +1461,7 @@ ld.alt.out({
 `mode` is compared as well as written, so a file that already holds the right
 content with the wrong permissions is reported as differing and put back at
 `600`. `on_change` runs only when the file was actually created or replaced —
-`alt` over an unchanged file runs nothing — and `--dry-run` prints the command
+`tmpl alt` over an unchanged file runs nothing — and `--dry-run` prints the command
 instead of running it.
 
 The same command belongs in `config.lua` when it is about a path rather than about
@@ -1321,7 +1521,7 @@ export EDITOR=<%= editor %>
 
 ### The standalone form
 
-A `.luadot` **file** is an embedded template that needs no directory: `alt`
+A `.luadot` **file** is an embedded template that needs no directory: `tmpl alt`
 renders it and places the result at the mirrored path, following the
 configured `link` and `conflict` rules. `ld.sys`, `ld.class`, `ld.cmd` and the
 rest of the interface are all there; what it does not have is what needs the
@@ -1331,7 +1531,7 @@ directory:
 | --- | --- |
 | several outputs | there is no `ld.alt.out` to call |
 | `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `config.lua` still applies |
-| `require` of a `lua/` directory | there is no directory |
+| `require` of its own `lua/` directory | there is no directory; `~/.config/luadot/lua/` is still requirable |
 | `ld.alt.*` | inert, warned; `ld.alt.json` is the exception, it needs no directory |
 
 `ld.path.dir` is `nil` — there is no template directory; `ld.path.repo` still
@@ -1344,14 +1544,14 @@ as one:
 
 | Command | On a template |
 | --- | --- |
-| `apply` | Walks past it; `alt` is what resolves it. |
+| `apply` | Walks past it; `tmpl alt` is what resolves it. |
 | `status -t`, `diff -t` | Resolves it and reports the files it produces; without the flag both say how many templates they left out. |
 | `add` | Refuses a file a template already produces, and leaves it out when it walks a directory. |
 | `rm` | Takes the whole template out and leaves what it produced on the system. |
 | `edit` | Opens the `luadot.lua` of a directory template, the file itself of a standalone one. |
 
 `status --templates` and `diff --templates` resolve the templates the way
-`alt --dry-run` does: the `luadot.lua` runs, `ld.cmd` and the rest of the
+`tmpl alt --dry-run` does: the `luadot.lua` runs, `ld.cmd` and the rest of the
 interface run with it, and nothing is written — what comes out is compared
 against what the system holds and then dropped. That is why they take a flag
 instead of resolving on their own: a template asking a password store for a

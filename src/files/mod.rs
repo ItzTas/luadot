@@ -14,7 +14,7 @@ pub use fs::{
     create_parent, exists, link_target, mode_bits, regular_file, remove_existing, write_mode,
 };
 pub use link::{LinkMode, link};
-pub use mirror::{Mirror, Side};
+pub use mirror::{Mirror, Side, Tracked};
 pub use predict::predict;
 pub use status::{FileStatus, file_status};
 pub use sync::{ConflictPolicy, SyncOutcome, refused, sync_file};

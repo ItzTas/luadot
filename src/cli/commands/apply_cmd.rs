@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Args;
@@ -40,12 +40,14 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         return Ok(());
     }
 
-    let mut run = Run::open("apply", args.dry_run, &home, &config)?;
     let mut secrets = Secrets {
         config: &config,
         lock: config.crypt_lock(),
         identity: config.crypt_identity(&home),
     };
+    require_plugins(&repo, &files, &mut secrets)?;
+
+    let mut run = Run::open("apply", args.dry_run, &home, &config)?;
 
     let mut created = 0u32;
     let mut replaced = 0u32;
@@ -92,6 +94,25 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     run.finish("apply")?;
 
     Ok(())
+}
+
+fn require_plugins(repo: &Path, files: &[PathBuf], secrets: &mut Secrets) -> Result<()> {
+    let decrypts = files.iter().any(|file| {
+        matches!(
+            crypt::split(utils::relative(repo, file)),
+            Some((_, crypt::Backend::Age))
+        )
+    });
+    if !decrypts {
+        return Ok(());
+    }
+
+    crypt::require_identity_plugins(
+        "apply",
+        crypt::Backend::Age,
+        secrets.lock,
+        secrets.identity.path("apply")?,
+    )
 }
 
 fn place_home(

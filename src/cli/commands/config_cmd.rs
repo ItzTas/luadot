@@ -20,6 +20,8 @@ pub enum ConfigAction {
     Show,
     #[command(about = "Print the path of the configuration file")]
     Path,
+    #[command(about = "Print the path of the managed repository")]
+    Repo,
     #[command(about = "Open the configuration file in $VISUAL/$EDITOR")]
     Edit,
 }
@@ -28,6 +30,7 @@ pub fn config_cmd(args: ConfigArgs) -> Result<()> {
     match args.action.unwrap_or(ConfigAction::Show) {
         ConfigAction::Show => show(),
         ConfigAction::Path => path(),
+        ConfigAction::Repo => repo(),
         ConfigAction::Edit => edit(),
     }
 }
@@ -88,6 +91,12 @@ fn overrides(rule: &Rule) -> String {
 
 fn path() -> Result<()> {
     output::line(lua::config_path()?.display());
+    Ok(())
+}
+
+fn repo() -> Result<()> {
+    let repo = utils::require_repo("config", lua::load_config()?.repo_dir())?;
+    output::line(repo.display());
     Ok(())
 }
 

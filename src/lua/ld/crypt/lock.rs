@@ -4,10 +4,10 @@ use mlua::{Lua, Table, Value};
 
 use super::super::parse::external;
 use super::super::surface::{self, Surface};
-use super::super::value::{choice, expected, flag, keys, text};
+use super::super::value::{choice, expected, keys, text};
 use super::constants::{
     FILE_ALONE, IDENTITY, IDENTITY_KEYS, IDENTITY_KIND, IDENTITY_TYPE, IDENTITY_TYPES, Kind, LOCK,
-    LOCK_CONFLICT, LOCK_KEYS, LOCK_KIND, NAMESPACE, PASSPHRASE, RECIPIENTS, TYPE,
+    LOCK_KEYS, LOCK_KIND, NAMESPACE, PASSPHRASE, RECIPIENTS, TYPE,
 };
 use crate::crypt::{Key, Provider, Secrets};
 use crate::lua::Config;
@@ -50,22 +50,10 @@ fn keyed(options: &Table) -> mlua::Result<Secrets> {
         value => Some(key(&value)?),
     };
 
-    let passphrase = match options.get::<Value>(PASSPHRASE)? {
-        Value::Nil => false,
-        value => flag(LOCK_KEYS, &value, PASSPHRASE)?,
-    };
-
-    if !passphrase {
-        return Ok(Secrets::Keys {
-            recipients,
-            identity,
-        });
-    }
-    if !recipients.is_empty() || identity.is_some() {
-        return Err(external(LOCK_CONFLICT.to_string()));
-    }
-
-    Ok(Secrets::Passphrase)
+    Ok(Secrets::Keys {
+        recipients,
+        identity,
+    })
 }
 
 fn key(value: &Value) -> mlua::Result<Key> {
@@ -163,33 +151,6 @@ mod tests {
                 identity: Some(Key::File(PathBuf::from("~/.keys/age.txt"))),
             }
         );
-    }
-
-    #[test]
-    fn the_table_form_reaches_the_passphrase_too() {
-        let config = from_source("ld.crypt.lock({ passphrase = true })").unwrap();
-
-        assert_eq!(config.crypt_secrets(), &Secrets::Passphrase);
-    }
-
-    #[test]
-    fn a_passphrase_turned_off_leaves_the_keys_alone() {
-        let config =
-            from_source(r#"ld.crypt.lock({ passphrase = false, recipients = "age1example" })"#)
-                .unwrap();
-
-        assert_eq!(config.crypt_secrets().recipients(), ["age1example"]);
-    }
-
-    #[test]
-    fn a_passphrase_beside_keys_is_refused() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.crypt.lock({ passphrase = true, recipients = "age1example" })"#)
-                .unwrap_err()
-        );
-
-        assert!(err.contains("locks with a passphrase or with keys, never both"));
     }
 
     #[test]

@@ -3,15 +3,17 @@ use mlua::{Lua, Table};
 use super::constants::API;
 use super::path::Paths;
 use super::surface::Surface;
-use super::{alt, argv, class, cmd, crypt, git, on, opt, path, pkg, print, root, setup, sys};
+use super::{
+    alt, argv, class, cmd, crypt, git, on, opt, path, pkg, print, regex, root, setup, sys,
+};
 use crate::lua::Config;
-use crate::lua::lpeg;
+use crate::lua::bundled::lpeg;
 use crate::state::Classes;
 
 type Namespace = fn(&Lua) -> mlua::Result<Table>;
 
 pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) -> mlua::Result<()> {
-    let namespaces: [(&str, Namespace); 9] = [
+    let namespaces: [(&str, Namespace); 10] = [
         (alt::NAMESPACE, alt::table),
         (argv::NAMESPACE, argv::table),
         (cmd::NAMESPACE, cmd::table),
@@ -20,6 +22,7 @@ pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) ->
         (opt::NAMESPACE, opt::table),
         (pkg::NAMESPACE, pkg::table),
         (print::NAMESPACE, print::table),
+        (regex::NAMESPACE, regex::table),
         (sys::NAMESPACE, sys::table),
     ];
 
@@ -93,6 +96,9 @@ mod tests {
         assert(type(ld.sys.has_battery()) == "boolean", "sys.has_battery is missing")
         assert(type(ld.path.home) == "string", "path.home is missing")
         assert(type(ld.path.config) == "string", "path.config is missing")
+        for _, name in ipairs({ "test", "match", "find", "gmatch", "gsub", "split", "escape" }) do
+          assert(type(ld.regex[name]) == "function", "regex." .. name .. " is missing")
+        end
         assert(type(ld.lpeg.P) == "function", "lpeg is missing")
         assert(type(ld.re.match) == "function", "re is missing")
     "#;
