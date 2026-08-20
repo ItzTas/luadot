@@ -2,10 +2,15 @@
 
 A dotfiles manager configured in Lua.
 
-One git repository mirrors your machines: `home/` for your home directory,
-`root/` for the rest of the filesystem. A Lua configuration decides how each
-file is placed: linked hard, symbolic or copied, ignored, encrypted, or
-generated per machine by a template.
+luadot keeps your dotfiles in a git repository and puts them back on every
+machine you clone it to. The configuration is a Lua script instead of a static
+file, so one repository answers for a laptop, a desktop and a server without a
+branch or a copy per machine.
+
+The repository mirrors your machines: `home/` for your home directory, `root/`
+for the rest of the filesystem. Rules decide how each file is placed: linked
+hard, symbolic or copied, ignored, encrypted, or generated per machine by a
+template.
 
 ```lua
 ld.rules({
