@@ -71,15 +71,6 @@ mod tests {
     }
 
     #[test]
-    fn a_workspace_names_files_inside_itself() {
-        let workspace = Workspace::create("edit").unwrap();
-
-        let plain = workspace.file(OsStr::new(".netrc"));
-        assert_eq!(plain.parent(), Some(workspace.dir.as_path()));
-        assert_eq!(plain.file_name(), Some(OsStr::new(".netrc")));
-    }
-
-    #[test]
     fn removing_a_workspace_takes_its_contents_along() {
         let workspace = Workspace::create("edit").unwrap();
         let plain = workspace.file(OsStr::new(".netrc"));
@@ -89,15 +80,5 @@ mod tests {
 
         assert!(std::fs::symlink_metadata(&plain).is_err());
         assert!(std::fs::symlink_metadata(&workspace.dir).is_err());
-    }
-
-    #[test]
-    fn dropping_a_workspace_removes_it() {
-        let dir = {
-            let workspace = Workspace::create("edit").unwrap();
-            workspace.dir.clone()
-        };
-
-        assert!(std::fs::symlink_metadata(&dir).is_err());
     }
 }

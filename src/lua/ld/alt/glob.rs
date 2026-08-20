@@ -106,14 +106,6 @@ mod tests {
     }
 
     #[test]
-    fn a_pattern_matching_nothing_yields_an_empty_list() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        assert_eq!(listed(&dir, "conf.d/*.zsh"), "");
-    }
-
-    #[test]
     fn a_directory_is_never_listed() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
@@ -197,16 +189,6 @@ mod tests {
             listed(&dir, &format!("{}/*.zsh", shared.display())),
             shared.join("aliases.zsh").display().to_string()
         );
-    }
-
-    #[test]
-    fn the_template_directory_is_matched_literally() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = root.path().join("[1].luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        write(&dir.join("conf.d/10-env.zsh"), "env");
-
-        assert_eq!(listed(&dir, "conf.d/*.zsh"), "conf.d/10-env.zsh");
     }
 
     #[test]

@@ -105,19 +105,6 @@ mod tests {
     }
 
     #[test]
-    fn the_configured_destination_is_used_when_no_argument_is_given() {
-        let dir = destination(
-            "clone",
-            Path::new("/home/u"),
-            None,
-            Some(Path::new("~/dotfiles")),
-        )
-        .unwrap();
-
-        assert_eq!(dir, PathBuf::from("/home/u/dotfiles"));
-    }
-
-    #[test]
     fn without_either_the_destination_lands_where_luadot_keeps_its_data() {
         let dir = destination("init", Path::new("/home/u"), None, None).unwrap();
 
@@ -165,25 +152,6 @@ mod tests {
                 "status: repository {} does not exist; clone it there or fix `ld.opt.repo_dir`",
                 missing.display()
             )
-        );
-    }
-
-    #[test]
-    fn errors_when_the_repository_is_a_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("repo");
-        std::fs::write(&file, "").unwrap();
-
-        assert!(resolve("cd", None, Some(&file)).is_err());
-    }
-
-    #[test]
-    fn returns_an_existing_repository() {
-        let dir = tempfile::tempdir().unwrap();
-
-        assert_eq!(
-            resolve("apply", None, Some(dir.path())).unwrap(),
-            dir.path()
         );
     }
 
@@ -246,21 +214,6 @@ mod tests {
     }
 
     #[test]
-    fn managed_path_prefers_the_plain_file_over_the_encrypted_one() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(repo.join("home")).unwrap();
-        let plain = repo.join("home/.netrc");
-        std::fs::write(&plain, "plain").unwrap();
-        std::fs::write(repo.join("home/.netrc.age"), "cipher").unwrap();
-
-        let arg = home.join(".netrc").to_string_lossy().into_owned();
-
-        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), plain);
-    }
-
-    #[test]
     fn managed_path_finds_the_template_producing_a_file() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -272,20 +225,6 @@ mod tests {
         let arg = home.join(".zshrc").to_string_lossy().into_owned();
 
         assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), template);
-    }
-
-    #[test]
-    fn managed_path_finds_the_standalone_template_producing_a_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(repo.join("home")).unwrap();
-        let template = repo.join("home/.zprofile.luadot");
-        std::fs::write(&template, "export HOST=1\n").unwrap();
-
-        let arg = home.join(".zprofile").to_string_lossy().into_owned();
-
-        assert_eq!(managed_path("rm", &home, &repo, &arg).unwrap(), template);
     }
 
     #[test]

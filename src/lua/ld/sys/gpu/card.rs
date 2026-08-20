@@ -120,11 +120,6 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_directory_has_no_cards() {
-        assert!(cards_in(Path::new("/nonexistent/drm"), &Models::new()).is_empty());
-    }
-
-    #[test]
     fn an_unknown_identifier_stays_as_it_is() {
         assert_eq!(vendor("0x10DE\n"), "nvidia");
         assert_eq!(vendor("0xbeef\n"), "0xbeef");

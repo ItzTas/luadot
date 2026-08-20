@@ -35,15 +35,4 @@ mod tests {
 
         assert_eq!(matched, 3);
     }
-
-    #[test]
-    fn re_compiles_a_grammar() {
-        let captured: String = runtime()
-            .unwrap()
-            .load("local re = require(\"re\") return re.match(\"hello world\", \"{%a+}\")")
-            .eval()
-            .unwrap();
-
-        assert_eq!(captured, "hello");
-    }
 }

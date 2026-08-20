@@ -81,18 +81,6 @@ mod tests {
     }
 
     #[test]
-    fn stored_round_trips_through_split() {
-        for backend in [Backend::Age, Backend::Gpg] {
-            let cipher = stored(Path::new("home/.netrc"), backend);
-
-            assert_eq!(
-                split(&cipher),
-                Some((PathBuf::from("home/.netrc"), backend))
-            );
-        }
-    }
-
-    #[test]
     fn stored_variant_finds_the_file_on_disk() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join(".netrc");

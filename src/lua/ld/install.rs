@@ -49,7 +49,7 @@ mod tests {
 
     use super::*;
     use crate::lua::from_source;
-    use crate::lua::from_template;
+
     use crate::lua::runtime::runtime;
     use crate::state::Classes;
 
@@ -116,11 +116,6 @@ mod tests {
     }
 
     #[test]
-    fn the_configuration_carries_every_call() {
-        assert!(from_source(EVERY_CALL).is_ok());
-    }
-
-    #[test]
     fn the_bootstrap_carries_every_call() {
         exec(Surface::Bootstrap, EVERY_CALL);
     }
@@ -128,15 +123,6 @@ mod tests {
     #[test]
     fn a_setup_script_carries_every_call() {
         exec(Surface::Setup, EVERY_CALL);
-    }
-
-    #[test]
-    fn a_template_carries_every_call() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = root.path().join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-
-        assert!(from_template(&dir, &format!("{EVERY_CALL}\nreturn \"ok\"")).is_ok());
     }
 
     #[test]

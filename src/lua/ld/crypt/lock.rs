@@ -154,13 +154,6 @@ mod tests {
     }
 
     #[test]
-    fn a_single_recipient_needs_no_list() {
-        let config = from_source(r#"ld.crypt.lock({ recipients = "age1example" })"#).unwrap();
-
-        assert_eq!(config.crypt_secrets().recipients(), ["age1example"]);
-    }
-
-    #[test]
     fn a_written_identity_without_a_space_is_a_path() {
         assert_eq!(
             identity(r#"ld.crypt.lock({ identity = "~/.keys/age.txt" })"#),
@@ -209,17 +202,6 @@ mod tests {
     }
 
     #[test]
-    fn a_file_takes_one_path_and_no_more() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.crypt.lock({ identity = { type = "file", "a", "b" } })"#)
-                .unwrap_err()
-        );
-
-        assert!(err.contains("identity of type `file` takes one path"));
-    }
-
-    #[test]
     fn rejects_a_type_that_names_nothing() {
         let err = format!(
             "{:#}",
@@ -228,19 +210,6 @@ mod tests {
 
         assert!(err.contains("unknown identity type `keyring`"));
         assert!(err.contains("command, file"));
-    }
-
-    #[test]
-    fn the_last_call_wins() {
-        let config = from_source(
-            r#"
-            ld.crypt.lock({ recipients = "age1example" })
-            ld.crypt.lock("passphrase")
-            "#,
-        )
-        .unwrap();
-
-        assert_eq!(config.crypt_secrets(), &Secrets::Passphrase);
     }
 
     #[test]

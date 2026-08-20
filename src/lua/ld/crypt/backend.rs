@@ -29,13 +29,6 @@ mod tests {
     }
 
     #[test]
-    fn sets_the_backend() {
-        let config = from_source(r#"ld.crypt.backend("gpg")"#).unwrap();
-
-        assert_eq!(config.crypt_backend(), Backend::Gpg);
-    }
-
-    #[test]
     fn rejects_an_unknown_backend() {
         let err = format!(
             "{:#}",

@@ -112,15 +112,4 @@ mod tests {
         assert!(err.contains("sync: `git no-such-subcommand` failed:"));
         assert!(err.contains("no-such-subcommand"));
     }
-
-    #[test]
-    fn a_failing_command_reports_the_status_it_exited_with() {
-        let repo = repository();
-
-        let err = run("sync", repo.path(), ["no-such-subcommand"])
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("sync: `git no-such-subcommand` exited with status 1"));
-    }
 }

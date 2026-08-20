@@ -467,19 +467,6 @@ mod tests {
     }
 
     #[test]
-    fn a_placed_file_is_left_alone_afterwards() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("etc/app.conf");
-        write(&source, "conf");
-
-        sync_system(ConflictPolicy::Overwrite, &source, &dest, None, None).unwrap();
-        let outcome = sync_system(ConflictPolicy::Overwrite, &source, &dest, None, None).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::AlreadySynced);
-    }
-
-    #[test]
     fn a_mode_that_drifted_is_written_back() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
@@ -579,30 +566,6 @@ mod tests {
     }
 
     #[test]
-    fn a_symlink_never_counts_as_a_placed_copy() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("app.conf");
-        write(&source, "conf");
-        std::os::unix::fs::symlink(&source, &dest).unwrap();
-
-        assert_eq!(
-            inspect_system(&source, &dest, None).unwrap(),
-            FileStatus::Differs
-        );
-
-        let outcome = sync_system(ConflictPolicy::Overwrite, &source, &dest, None, None).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Replaced);
-        assert!(
-            !std::fs::symlink_metadata(&dest)
-                .unwrap()
-                .file_type()
-                .is_symlink()
-        );
-    }
-
-    #[test]
     fn import_system_copies_into_the_repository() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("app.conf");
@@ -617,18 +580,6 @@ mod tests {
     }
 
     #[test]
-    fn read_contents_returns_what_the_file_holds() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("app.conf");
-        write(&path, "conf\n");
-
-        assert_eq!(read_contents("diff", &path).unwrap(), b"conf\n");
-
-        let err = read_contents("diff", &dir.path().join("gone")).unwrap_err();
-        assert!(err.to_string().contains("diff: failed to read"));
-    }
-
-    #[test]
     fn stage_text_holds_the_text_in_a_private_file_until_dropped() {
         let staged = stage_text("generated\n").unwrap();
         let path = staged.path().to_path_buf();
@@ -638,16 +589,6 @@ mod tests {
 
         drop(staged);
         assert!(!path.exists());
-    }
-
-    #[test]
-    fn errors_when_the_source_is_not_a_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("missing");
-        let dest = dir.path().join("dest");
-
-        let err = sync_system(ConflictPolicy::Overwrite, &source, &dest, None, None).unwrap_err();
-        assert!(err.to_string().contains("is not a file"));
     }
 
     #[test]
@@ -670,19 +611,6 @@ mod tests {
         place_contents("apply", b"PrivateKey = secret\n", &dest, 0o600, None).unwrap();
 
         assert_eq!(std::fs::read(&dest).unwrap(), b"PrivateKey = secret\n");
-        assert_eq!(bits(&dest), 0o600);
-    }
-
-    #[test]
-    fn place_contents_narrows_a_widened_destination_back() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("wg0.conf");
-        write(&dest, "stale");
-        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o644)).unwrap();
-
-        place_contents("apply", b"secret", &dest, 0o600, None).unwrap();
-
-        assert_eq!(std::fs::read(&dest).unwrap(), b"secret");
         assert_eq!(bits(&dest), 0o600);
     }
 

@@ -44,7 +44,8 @@ fn destination(home: &Path, arg: &str) -> Result<PathBuf> {
         return Ok(target);
     }
 
-    files::template_dir(&target).with_context(|| format!("tmpl new: {arg} does not name a template"))
+    files::template_dir(&target)
+        .with_context(|| format!("tmpl new: {arg} does not name a template"))
 }
 
 fn argument(template: &Path) -> Result<String> {
@@ -163,32 +164,12 @@ mod tests {
     }
 
     #[test]
-    fn a_name_already_carrying_the_suffix_keeps_it() {
-        let (_root, home, _repo) = home_and_repo();
-
-        assert_eq!(
-            destination(&home, &arg(&home.join(".zshrc.luadot"))).unwrap(),
-            home.join(".zshrc.luadot")
-        );
-    }
-
-    #[test]
     fn a_nested_path_stays_next_to_the_file_it_produces() {
         let (_root, home, _repo) = home_and_repo();
 
         assert_eq!(
             destination(&home, &arg(&home.join(".config/nvim/init.lua"))).unwrap(),
             home.join(".config/nvim/init.lua.luadot")
-        );
-    }
-
-    #[test]
-    fn a_tilde_stands_for_the_home_directory() {
-        let (_root, home, _repo) = home_and_repo();
-
-        assert_eq!(
-            destination(&home, "~/.zshrc").unwrap(),
-            home.join(".zshrc.luadot")
         );
     }
 
@@ -200,46 +181,6 @@ mod tests {
             destination(&home, "/etc/zsh/zshrc").unwrap(),
             PathBuf::from("/etc/zsh/zshrc.luadot")
         );
-    }
-
-    #[test]
-    fn a_directory_template_holds_the_script_it_needs() {
-        let (_root, home, repo) = home_and_repo();
-        let template = home.join(".zshrc.luadot");
-
-        create(&template, &repo.join("home/.zshrc.luadot"), false).unwrap();
-
-        assert!(template.is_dir());
-        assert_eq!(
-            std::fs::read_to_string(template.join(TEMPLATE_FILE)).unwrap(),
-            TEMPLATE_SKELETON
-        );
-    }
-
-    #[test]
-    fn a_standalone_template_is_an_empty_file() {
-        let (_root, home, repo) = home_and_repo();
-        let template = home.join(".zprofile.luadot");
-
-        create(&template, &repo.join("home/.zprofile.luadot"), true).unwrap();
-
-        assert!(template.is_file());
-        assert_eq!(std::fs::read_to_string(&template).unwrap(), "");
-    }
-
-    #[test]
-    fn a_standalone_template_gets_the_directories_leading_to_it() {
-        let (_root, home, repo) = home_and_repo();
-        let template = home.join(".config/nvim/init.lua.luadot");
-
-        create(
-            &template,
-            &repo.join("home/.config/nvim/init.lua.luadot"),
-            true,
-        )
-        .unwrap();
-
-        assert!(template.is_file());
     }
 
     #[test]

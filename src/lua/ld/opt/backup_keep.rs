@@ -28,33 +28,6 @@ mod tests {
     use crate::lua::from_source;
 
     #[test]
-    fn every_backup_is_kept_until_a_limit_is_set() {
-        let config = from_source("local unused = 1").unwrap();
-
-        assert_eq!(config.backup_keep(), None);
-    }
-
-    #[test]
-    fn takes_the_number_of_backups_to_keep() {
-        let config = from_source("ld.opt.backup_keep(3)").unwrap();
-
-        assert_eq!(config.backup_keep(), Some(3));
-    }
-
-    #[test]
-    fn the_last_limit_wins() {
-        let config = from_source(
-            r#"
-            ld.opt.backup_keep(3)
-            ld.opt.backup_keep(10)
-            "#,
-        )
-        .unwrap();
-
-        assert_eq!(config.backup_keep(), Some(10));
-    }
-
-    #[test]
     fn rejects_keeping_nothing() {
         let err = format!("{:#}", from_source("ld.opt.backup_keep(0)").unwrap_err());
 

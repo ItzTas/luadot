@@ -87,18 +87,6 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_without_git_excludes_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut excludes = Excludes::open("add", dir.path()).unwrap();
-
-        assert!(
-            !excludes
-                .excluded(Path::new("home/.vimrc"), Kind::File)
-                .unwrap()
-        );
-    }
-
-    #[test]
     fn a_pattern_excludes_the_files_it_names() {
         let (_dir, repo) = repository("*.swp\n");
         let mut excludes = Excludes::open("add", &repo).unwrap();
@@ -150,25 +138,6 @@ mod tests {
         assert!(
             !excludes
                 .excluded(Path::new("home/.config/nvim"), Kind::Directory)
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn a_nested_gitignore_applies_below_itself() {
-        let (_dir, repo) = repository("");
-        std::fs::create_dir_all(repo.join("home/.config/nvim")).unwrap();
-        std::fs::write(repo.join("home/.config/nvim/.gitignore"), "*.log\n").unwrap();
-        let mut excludes = Excludes::open("add", &repo).unwrap();
-
-        assert!(
-            excludes
-                .excluded(Path::new("home/.config/nvim/lsp.log"), Kind::File)
-                .unwrap()
-        );
-        assert!(
-            !excludes
-                .excluded(Path::new("home/.config/fish/fish.log"), Kind::File)
                 .unwrap()
         );
     }

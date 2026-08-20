@@ -16,11 +16,7 @@ pub const MIRROR_MODE: u32 = 0o700;
 
 pub const MIRROR_TREE: &str = "tree";
 
-pub const MIRROR_GIT: &str = "git";
-
-pub const MIRROR_INIT: [&str; 4] = ["init", "--quiet", "--initial-branch", "luadot"];
-
-pub const MIRROR_ADD: [&str; 3] = ["add", "--force", "--all"];
+pub const MIRROR_BRANCH: &str = "luadot";
 
 pub const REPOSITORY_SIDE: &str = "repository";
 

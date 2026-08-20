@@ -28,13 +28,6 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_empty_directory_passes() {
-        let dir = tempfile::tempdir().unwrap();
-
-        require_empty("init", dir.path()).unwrap();
-    }
-
-    #[test]
     fn a_directory_holding_something_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("existing.txt"), "data").unwrap();

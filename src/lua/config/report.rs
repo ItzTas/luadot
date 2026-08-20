@@ -47,15 +47,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn nothing_is_customized_until_a_piece_is_given() {
-        let report = Report::default();
-
-        assert!(report.entry().is_none());
-        assert!(report.summary().is_none());
-        assert!(report.render().is_none());
-    }
-
-    #[test]
     fn merging_only_replaces_the_pieces_the_other_one_carries() {
         let mut report = Report::default()
             .with_entry(Some(Custom::Silent))

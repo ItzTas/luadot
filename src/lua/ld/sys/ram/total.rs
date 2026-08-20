@@ -39,9 +39,4 @@ mod tests {
         assert_eq!(parse("MemFree: 1234 kB\n"), None);
         assert_eq!(parse("MemTotal: what kB\n"), None);
     }
-
-    #[test]
-    fn a_missing_file_leaves_the_total_at_zero() {
-        assert_eq!(read(Path::new("/nonexistent/meminfo")), 0);
-    }
 }

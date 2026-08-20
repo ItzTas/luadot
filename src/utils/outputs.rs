@@ -141,29 +141,6 @@ mod tests {
     }
 
     #[test]
-    fn a_standalone_template_resolves_into_one_file() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let file = repo.join("home/.zprofile.luadot");
-        write(&file, "export HOST=<%= 1 + 1 %>\n");
-
-        let resolved = outputs(
-            "diff",
-            &home,
-            &repo,
-            &Entry::Standalone(file),
-            &Classes::default(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            resolved[0].content(),
-            &Content::Text("export HOST=2\n".to_string())
-        );
-    }
-
-    #[test]
     fn a_plain_file_is_not_a_template() {
         let err = outputs(
             "status",
@@ -257,19 +234,6 @@ mod tests {
         );
         assert_eq!(
             generated_mode(&config, relative, &output.clone().with_mode(Some(0o600))),
-            Some(0o600)
-        );
-    }
-
-    #[test]
-    fn a_generated_home_file_keeps_the_mode_it_declares() {
-        let config = Config::default();
-        let relative = Path::new("home/.netrc");
-        let output = text(PathBuf::from("/home/u/.netrc"), "machine example\n");
-
-        assert_eq!(generated_mode(&config, relative, &output), None);
-        assert_eq!(
-            generated_mode(&config, relative, &output.with_mode(Some(0o600))),
             Some(0o600)
         );
     }

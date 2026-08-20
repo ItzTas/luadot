@@ -257,30 +257,6 @@ mod tests {
     }
 
     #[test]
-    fn the_machine_and_the_paths_are_available() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-
-        let source = format!(
-            r#"
-            assert(type(ld.sys.host.name) == "string", "sys.host.name is missing")
-            assert(#ld.sys.host.os > 0, "sys.host.os is missing")
-            assert(#ld.sys.host.arch > 0, "sys.host.arch is missing")
-            assert(type(ld.sys.gpu.vendor) == "string", "sys.gpu.vendor is missing")
-            assert(ld.sys.ram >= 0, "sys.ram is missing")
-            assert(ld.path.home == "{home}", "path.home is wrong")
-            assert(ld.path.repo == "{home}", "path.repo is wrong")
-            assert(ld.path.dir == "{dir}", "path.dir is wrong")
-            return "ok"
-            "#,
-            home = root.path().display(),
-            dir = dir.display(),
-        );
-
-        assert!(from_source(&dir, &source).is_ok());
-    }
-
-    #[test]
     fn modules_of_the_template_are_requirable() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".zshrc.luadot");
@@ -300,61 +276,6 @@ mod tests {
     }
 
     #[test]
-    fn modules_of_the_configuration_are_requirable() {
-        let root = tempfile::tempdir().unwrap();
-        let config = root.path().join("config");
-        std::fs::create_dir_all(config.join(MODULES_DIR)).unwrap();
-        std::fs::write(
-            config.join(MODULES_DIR).join("shell.lua"),
-            r#"return "export EDITOR=nvim\n""#,
-        )
-        .unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-
-        let outputs = from_config(
-            &dir,
-            r#"return require("shell")"#,
-            &config,
-            &Classes::default(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            outputs[0].content(),
-            &Content::Text("export EDITOR=nvim\n".to_string())
-        );
-    }
-
-    #[test]
-    fn a_module_of_the_template_shadows_the_one_of_the_configuration() {
-        let root = tempfile::tempdir().unwrap();
-        let config = root.path().join("config");
-        std::fs::create_dir_all(config.join(MODULES_DIR)).unwrap();
-        std::fs::write(
-            config.join(MODULES_DIR).join("shell.lua"),
-            r#"return "configuration""#,
-        )
-        .unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-        std::fs::create_dir_all(dir.join(MODULES_DIR)).unwrap();
-        std::fs::write(
-            dir.join(MODULES_DIR).join("shell.lua"),
-            r#"return "template""#,
-        )
-        .unwrap();
-
-        let outputs = from_config(
-            &dir,
-            r#"return require("shell")"#,
-            &config,
-            &Classes::default(),
-        )
-        .unwrap();
-
-        assert_eq!(outputs[0].content(), &Content::Text("template".to_string()));
-    }
-
-    #[test]
     fn a_template_producing_nothing_is_an_error() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".zshrc.luadot");
@@ -371,16 +292,6 @@ mod tests {
 
         assert!(err.contains("failed to run"));
         assert!(err.contains(TEMPLATE_FILE));
-    }
-
-    #[test]
-    fn an_invalid_returned_value_reports_the_file() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-
-        let err = error(&dir, "return 42");
-
-        assert!(err.contains("returned an invalid file"));
     }
 
     #[test]

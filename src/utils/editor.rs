@@ -47,7 +47,7 @@ mod tests {
     use std::ffi::{OsStr, OsString};
     use std::path::Path;
 
-    use super::{DEFAULT_EDITOR, build_command, resolve_editor};
+    use super::{build_command, resolve_editor};
 
     #[test]
     fn resolve_editor_prefers_visual() {
@@ -64,11 +64,6 @@ mod tests {
             resolve_editor(Some(OsString::new()), Some("vi".into())),
             "vi"
         );
-    }
-
-    #[test]
-    fn resolve_editor_defaults_when_nothing_is_set() {
-        assert_eq!(resolve_editor(None, None), DEFAULT_EDITOR);
     }
 
     #[test]

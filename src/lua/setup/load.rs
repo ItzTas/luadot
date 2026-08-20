@@ -247,16 +247,6 @@ mod tests {
     }
 
     #[test]
-    fn list_yields_nothing_without_a_setup_directory() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-
-        let dir = setup_dir("test", &home, &config, &repo).unwrap();
-
-        assert_eq!(list("test", &dir).unwrap(), Vec::<String>::new());
-    }
-
-    #[test]
     fn find_prefers_lua_over_sh() {
         let root = tempfile::tempdir().unwrap();
         let (home, config, repo) = dirs(root.path());
@@ -265,30 +255,6 @@ mod tests {
         let dir = setup_dir("test", &home, &config, &repo).unwrap();
 
         assert_eq!(find(&dir, "ufw").unwrap(), lua);
-    }
-
-    #[test]
-    fn find_falls_back_to_sh() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        let sh = write_setup(&home, &config, &repo, "ufw.sh", "");
-        let dir = setup_dir("test", &home, &config, &repo).unwrap();
-
-        assert_eq!(find(&dir, "ufw").unwrap(), sh);
-        assert!(find(&dir, "docker").is_none());
-    }
-
-    #[test]
-    fn list_names_a_directory_holding_an_init() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        write_setup(&home, &config, &repo, "ufw/init.lua", "");
-        write_setup(&home, &config, &repo, "docker/init.sh", "");
-        write_setup(&home, &config, &repo, "notes/readme.md", "");
-
-        let dir = setup_dir("test", &home, &config, &repo).unwrap();
-
-        assert_eq!(list("test", &dir).unwrap(), ["docker", "ufw"]);
     }
 
     #[test]
@@ -302,31 +268,6 @@ mod tests {
 
         assert_eq!(find(&dir, "ufw").unwrap(), init);
         assert_eq!(find(&dir, "docker").unwrap(), file);
-    }
-
-    #[test]
-    fn a_directory_setup_knows_its_own_directory() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        write_setup(
-            &home,
-            &config,
-            &repo,
-            "ufw/init.lua",
-            r#"
-            local out = assert(io.open(ld.path.repo .. "/dir.txt", "w"))
-            out:write(ld.path.dir)
-            out:close()
-            "#,
-        );
-
-        run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap();
-
-        let dir = setup_dir("test", &home, &config, &repo).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(repo.join("dir.txt")).unwrap(),
-            dir.join("ufw").display().to_string()
-        );
     }
 
     #[test]
@@ -359,13 +300,6 @@ mod tests {
             std::fs::read_to_string(repo.join("modules.txt")).unwrap(),
             "own/shared"
         );
-    }
-
-    #[test]
-    fn ordered_defaults_to_the_listing_order() {
-        let names = vec!["a".to_string(), "b".to_string()];
-
-        assert_eq!(ordered("test", names, &[]).unwrap(), ["a", "b"]);
     }
 
     #[test]

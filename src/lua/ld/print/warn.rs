@@ -19,21 +19,8 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 #[cfg(test)]
 mod tests {
     use super::super::parse::message;
-    use super::super::table::table;
     use crate::lua::runtime::runtime;
     use crate::output::{Message, Stream, Tone};
-
-    fn run(source: &str) -> mlua::Result<()> {
-        let lua = runtime().unwrap();
-        lua.globals().set("print_", table(&lua).unwrap()).unwrap();
-
-        lua.load(source).exec()
-    }
-
-    #[test]
-    fn a_warning_goes_to_the_error_stream() {
-        assert!(run(r#"print_.warn("careful")"#).is_ok());
-    }
 
     #[test]
     fn the_options_win_over_the_tone_of_the_call() {

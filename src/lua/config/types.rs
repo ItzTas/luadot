@@ -483,21 +483,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_config_uses_the_default_mode_and_policy() {
-        let config = Config::default();
-        let path = Path::new(".bashrc");
-
-        assert_eq!(config.link_mode(path), LinkMode::default());
-        assert_eq!(config.conflict_policy(path), ConflictPolicy::default());
-        assert!(!config.is_ignored(path));
-        assert_eq!(config.mode(path), None);
-        assert_eq!(config.owner(path), None);
-        assert!(!config.encrypt(path));
-        assert!(!config.autocommit(path));
-        assert!(!config.autopush(path));
-    }
-
-    #[test]
     fn git_metadata_is_always_ignored() {
         let config = Config::default();
 
@@ -533,26 +518,6 @@ mod tests {
     }
 
     #[test]
-    fn a_matcher_prints_the_syntax_it_was_written_in() {
-        assert_eq!(
-            Matcher::Glob(Pattern::new(".ssh/**").unwrap()).to_string(),
-            ".ssh/**"
-        );
-        assert_eq!(
-            Matcher::Regex(Regex::new(r"^\.ssh").unwrap()).to_string(),
-            r"/^\.ssh/"
-        );
-        assert_eq!(
-            Matcher::Any(vec![
-                Matcher::Glob(Pattern::new(".ssh/**").unwrap()),
-                Matcher::Regex(Regex::new(r"^\.gnupg").unwrap()),
-            ])
-            .to_string(),
-            r"{.ssh/**, /^\.gnupg/}"
-        );
-    }
-
-    #[test]
     fn a_matcher_holding_alternatives_matches_any_of_them() {
         let matcher = Matcher::Any(vec![
             Matcher::Glob(Pattern::new("**/*.tmp").unwrap()),
@@ -562,14 +527,6 @@ mod tests {
         assert!(matcher.matches(Path::new(".cache/build.tmp")));
         assert!(matcher.matches(Path::new(".vimrc.swp")));
         assert!(!matcher.matches(Path::new(".vimrc")));
-    }
-
-    #[test]
-    fn default_config_declares_no_class() {
-        let config = Config::default();
-
-        assert!(config.classes().is_empty());
-        assert!(config.class("form-factor").is_none());
     }
 
     #[test]

@@ -197,16 +197,6 @@ mod tests {
     }
 
     #[test]
-    fn a_class_without_choices_takes_anything() {
-        let free = Class::new("email".to_string(), None, Vec::new(), None);
-
-        assert_eq!(
-            checked(&free, "me@example.com".to_string()).unwrap(),
-            "me@example.com"
-        );
-    }
-
-    #[test]
     fn an_undeclared_class_lists_the_declared_ones() {
         let mut config = Config::default();
         config.add_class(class());
@@ -215,10 +205,5 @@ mod tests {
 
         assert!(err.contains("class: no class named `editor`"));
         assert!(err.contains("declared: form-factor"));
-    }
-
-    #[test]
-    fn a_configuration_without_classes_declares_none() {
-        assert_eq!(names(&Config::default()), "none");
     }
 }

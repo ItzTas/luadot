@@ -24,8 +24,6 @@ pub use add_cmd::{AddArgs, add_cmd};
 pub use apply_cmd::{ApplyArgs, apply_cmd};
 pub use bootstrap_cmd::bootstrap_cmd;
 pub use cd_cmd::cd_cmd;
-#[cfg(test)]
-pub use class_cmd::ClassAction;
 pub use class_cmd::{ClassArgs, class_cmd};
 pub use clone_cmd::{CloneArgs, clone_cmd};
 pub use completions_cmd::{CompletionsArgs, completions_cmd};

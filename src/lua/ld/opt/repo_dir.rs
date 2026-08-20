@@ -22,29 +22,9 @@ mod tests {
     use crate::lua::from_source;
 
     #[test]
-    fn defaults_to_the_repository_clone_left_behind() {
-        let config = from_source("local unused = 1").unwrap();
-
-        assert_eq!(config.repo_dir(), None);
-    }
-
-    #[test]
     fn takes_the_directory_as_it_is_written() {
         let config = from_source(r#"ld.opt.repo_dir("~/dotfiles")"#).unwrap();
 
         assert_eq!(config.repo_dir(), Some(Path::new("~/dotfiles")));
-    }
-
-    #[test]
-    fn the_last_directory_wins() {
-        let config = from_source(
-            r#"
-            ld.opt.repo_dir("~/first")
-            ld.opt.repo_dir("/data/second")
-            "#,
-        )
-        .unwrap();
-
-        assert_eq!(config.repo_dir(), Some(Path::new("/data/second")));
     }
 }

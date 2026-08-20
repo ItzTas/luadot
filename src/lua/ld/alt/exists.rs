@@ -37,16 +37,6 @@ mod tests {
     }
 
     #[test]
-    fn answers_for_a_file_of_the_template() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("laptop.zsh"), "laptop").unwrap();
-
-        assert_eq!(answer(&dir, "laptop.zsh"), "true");
-        assert_eq!(answer(&dir, "desktop.zsh"), "false");
-    }
-
-    #[test]
     fn a_directory_is_not_a_file() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());

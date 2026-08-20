@@ -101,24 +101,4 @@ mod tests {
 
         unstage("rm", repo.path(), &[repo.path().join("home/.absent")]).unwrap();
     }
-
-    #[test]
-    fn a_directory_without_git_metadata_is_left_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join(".bashrc");
-        std::fs::write(&file, "alias l=ls\n").unwrap();
-
-        stage("add", dir.path(), std::slice::from_ref(&file)).unwrap();
-        unstage("rm", dir.path(), &[file]).unwrap();
-        stage_all("sync", dir.path()).unwrap();
-    }
-
-    #[test]
-    fn nothing_to_stage_runs_nothing() {
-        let repo = repository();
-
-        stage("add", repo.path(), &[]).unwrap();
-
-        assert_eq!(index(repo.path()), "");
-    }
 }

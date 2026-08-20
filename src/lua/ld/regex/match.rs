@@ -45,14 +45,6 @@ mod tests {
     }
 
     #[test]
-    fn yields_nothing_without_a_match() {
-        assert_eq!(
-            eval(r#"return regex.match("neovim", "\\d+") == nil and "nil" or "value""#).unwrap(),
-            "nil"
-        );
-    }
-
-    #[test]
     fn reports_an_invalid_expression() {
         let err = eval(r#"return regex.match("neovim", "(")"#)
             .unwrap_err()

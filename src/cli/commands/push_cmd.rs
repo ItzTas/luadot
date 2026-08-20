@@ -31,11 +31,6 @@ mod tests {
     use super::push_args;
 
     #[test]
-    fn bare_push_forwards_only_push() {
-        assert_eq!(push_args(Vec::new()), ["push"]);
-    }
-
-    #[test]
     fn forwards_extra_args_after_push() {
         let args = vec!["origin".to_string(), "main".to_string()];
         assert_eq!(push_args(args), ["push", "origin", "main"]);

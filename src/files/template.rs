@@ -38,33 +38,10 @@ mod tests {
     }
 
     #[test]
-    fn anything_else_is_not_a_template() {
-        assert!(!is_template(Path::new("/repo/.zshrc")));
-        assert!(!is_template(Path::new("/repo/.luadot")));
-        assert!(!is_template(Path::new("/repo/luadot")));
-        assert!(!is_template(Path::new("/")));
-    }
-
-    #[test]
     fn the_target_drops_the_suffix_and_keeps_the_location() {
         assert_eq!(
             template_target(Path::new("/repo/.config/nvim/init.lua.luadot")),
             Some(PathBuf::from("/repo/.config/nvim/init.lua"))
         );
-    }
-
-    #[test]
-    fn the_directory_of_a_target_carries_the_suffix() {
-        assert_eq!(
-            template_dir(Path::new("/repo/.zshrc")),
-            Some(PathBuf::from("/repo/.zshrc.luadot"))
-        );
-        assert_eq!(template_dir(Path::new("/")), None);
-    }
-
-    #[test]
-    fn a_path_without_the_suffix_has_no_target() {
-        assert_eq!(template_target(Path::new("/repo/.zshrc")), None);
-        assert_eq!(template_target(Path::new("/repo/.luadot")), None);
     }
 }

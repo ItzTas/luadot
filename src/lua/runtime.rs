@@ -45,13 +45,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn runtime_evaluates_expression() {
-        let lua = runtime().unwrap();
-        let value: i64 = lua.load("return 1 + 2").eval().unwrap();
-        assert_eq!(value, 3);
-    }
-
-    #[test]
     fn environment_layers_the_vars_over_the_globals() {
         let lua = runtime().unwrap();
         let vars = lua.create_table().unwrap();

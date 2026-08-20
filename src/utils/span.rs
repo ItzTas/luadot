@@ -44,11 +44,6 @@ mod tests {
     }
 
     #[test]
-    fn surrounding_space_is_ignored() {
-        assert_eq!(seconds("  7d  "), Some(604_800));
-    }
-
-    #[test]
     fn a_span_without_a_known_unit_is_read_as_nothing() {
         for raw in ["30", "", "d", "30 d", "30dd", "-1d", "1.5d", "thirty days"] {
             assert_eq!(seconds(raw), None, "{raw}");

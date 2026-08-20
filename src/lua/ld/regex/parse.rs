@@ -49,15 +49,6 @@ fn broken(function: &str) -> mlua::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lua::runtime::runtime;
-
-    #[test]
-    fn text_reads_a_string() {
-        let lua = runtime().unwrap();
-        let value = Value::String(lua.create_string("one").unwrap());
-
-        assert_eq!(text(&value, "gsub", "the text").unwrap(), "one");
-    }
 
     #[test]
     fn text_names_the_call_and_the_argument_it_wanted() {

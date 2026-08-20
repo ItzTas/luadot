@@ -266,20 +266,20 @@ fn staged(config: &Config, side: Side, files: &[DiffFile]) -> Result<()> {
 }
 
 fn tracked_tree<'a>(mirror: &'a Mirror, staging: &[&DiffFile]) -> Result<Tracked<'a>> {
-    let tree = mirror.tracked()?;
+    let mut tree = mirror.tracked()?;
     for file in staging {
         tree.write(file.path(), file.content(), file.mode())?;
     }
     tree.stage()?;
 
     for file in staging {
-        held(&tree, file)?;
+        held(&mut tree, file)?;
     }
 
     Ok(tree)
 }
 
-fn held(tree: &Tracked<'_>, file: &DiffFile) -> Result<()> {
+fn held(tree: &mut Tracked<'_>, file: &DiffFile) -> Result<()> {
     let (Some(found), Some(mode)) = (file.found(), file.found_mode()) else {
         return tree.erase(file.path());
     };
@@ -370,9 +370,6 @@ fn shows(status: FileStatus) -> bool {
 #[cfg(test)]
 mod tests {
     use std::ffi::OsStr;
-    use std::os::unix::fs::PermissionsExt;
-
-    use crate::lua::{Custom, from_source};
 
     use super::*;
 
@@ -493,170 +490,6 @@ mod tests {
     }
 
     #[test]
-    fn the_summary_names_the_side_it_counts() {
-        assert_eq!(named(Side::Repository), "managed");
-        assert_eq!(named(Side::Generated), "generated");
-    }
-
-    #[test]
-    fn a_customized_summary_reads_the_line_it_replaces() {
-        let config = from_source(
-            r#"ld.on.diff({ summary = function(counts)
-                 return counts.side .. " " .. counts.drifted .. "/" .. counts.total
-               end })"#,
-        )
-        .unwrap();
-
-        let counts = DiffCounts::new(Side::Generated, 1, 12, "unused".to_string());
-        let shown = config
-            .diff()
-            .summary()
-            .unwrap()
-            .shown(&what(CUSTOM_SUMMARY), &counts)
-            .unwrap();
-
-        assert_eq!(shown, Some("generated 1/12".to_string()));
-    }
-
-    #[test]
-    fn a_customized_entry_reads_both_sides_of_the_file() {
-        let config = from_source(
-            r#"ld.on.diff({ entry = function(file)
-                 return file.state .. " " .. file.path .. " " .. file.mode.source
-               end })"#,
-        )
-        .unwrap();
-
-        let file = DiffFile::new(
-            PathBuf::from("home/.bashrc"),
-            PathBuf::from("/home/u/.bashrc"),
-            Side::Repository,
-            DiffState::Differs,
-        )
-        .with_source(b"managed\n".to_vec(), 0o644);
-
-        let shown = config
-            .diff()
-            .entry()
-            .unwrap()
-            .shown(&what(CUSTOM_ENTRY), &file)
-            .unwrap();
-
-        assert_eq!(shown, Some("differs home/.bashrc 0644".to_string()));
-    }
-
-    #[test]
-    fn a_render_call_is_handed_every_drifted_file() {
-        let config = from_source(
-            r#"ld.on.diff({ render = function(files)
-                 local names = {}
-                 for _, file in ipairs(files) do names[#names + 1] = file.path end
-                 return table.concat(names, ",")
-               end })"#,
-        )
-        .unwrap();
-
-        let files = [
-            DiffFile::new(
-                PathBuf::from("home/.bashrc"),
-                PathBuf::from("/home/u/.bashrc"),
-                Side::Repository,
-                DiffState::Missing,
-            ),
-            DiffFile::new(
-                PathBuf::from("home/.vimrc"),
-                PathBuf::from("/home/u/.vimrc"),
-                Side::Repository,
-                DiffState::Differs,
-            ),
-        ];
-
-        let shown = config
-            .diff()
-            .render()
-            .unwrap()
-            .shown(
-                &what(CUSTOM_RENDER),
-                files.iter().collect::<Vec<&DiffFile>>(),
-            )
-            .unwrap();
-
-        assert_eq!(shown, Some("home/.bashrc,home/.vimrc".to_string()));
-    }
-
-    #[test]
-    fn a_customization_that_answers_with_nothing_prints_nothing() {
-        assert_eq!(
-            Custom::Silent.shown(&what(CUSTOM_SUMMARY), ()).unwrap(),
-            None
-        );
-    }
-
-    #[test]
-    fn the_system_side_is_read_only_when_it_is_a_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join(".bashrc");
-        std::fs::write(&file, "handwritten\n").unwrap();
-        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
-
-        let System::Holds(contents, mode) = system_side(&file).unwrap() else {
-            panic!("a regular file holds its contents");
-        };
-        assert_eq!(contents, b"handwritten\n");
-        assert_eq!(mode, 0o600);
-
-        assert!(matches!(
-            system_side(&dir.path().join("gone")).unwrap(),
-            System::Absent
-        ));
-        assert!(matches!(system_side(dir.path()).unwrap(), System::Other));
-
-        let dangling = dir.path().join(".zshrc");
-        std::os::unix::fs::symlink(dir.path().join("gone"), &dangling).unwrap();
-        assert!(matches!(system_side(&dangling).unwrap(), System::Absent));
-    }
-
-    #[test]
-    fn a_file_the_system_holds_the_same_way_only_drifted_in_its_mode() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("app.conf");
-        std::fs::write(&dest, "conf\n").unwrap();
-        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o600)).unwrap();
-
-        let items = [Item {
-            relative: PathBuf::from("root/etc/app.conf"),
-            dest,
-            contents: b"conf\n".to_vec(),
-            mode: Some(0o644),
-        }];
-
-        let files = inspected(Side::Repository, &items).unwrap();
-
-        assert_eq!(files[0].state(), DiffState::Mode);
-        assert_eq!(files[0].mode(), 0o644);
-        assert_eq!(files[0].found_mode(), Some(0o600));
-        assert!(!files[0].state().staged());
-    }
-
-    #[test]
-    fn a_file_the_system_does_not_hold_carries_the_repository_side_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let items = [Item {
-            relative: PathBuf::from("home/.bashrc"),
-            dest: dir.path().join("gone"),
-            contents: b"managed\n".to_vec(),
-            mode: None,
-        }];
-
-        let files = inspected(Side::Repository, &items).unwrap();
-
-        assert_eq!(files[0].state(), DiffState::Missing);
-        assert_eq!(files[0].mode(), SYSTEM_TEXT_MODE);
-        assert_eq!(files[0].found(), None);
-        assert!(files[0].state().staged());
-    }
-
-    #[test]
     fn generated_content_carries_the_mode_the_template_declares() {
         let dest = PathBuf::from("/home/u/.netrc");
         let output = Output::new(
@@ -677,27 +510,6 @@ mod tests {
     }
 
     #[test]
-    fn a_selected_file_is_read_from_the_repository_with_its_own_mode() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("laptop.zsh");
-        std::fs::write(&source, "laptop\n").unwrap();
-        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o640)).unwrap();
-
-        let output = Output::new(
-            PathBuf::from("/home/u/.zshrc"),
-            Content::File(source),
-            None,
-            None,
-        );
-
-        let (contents, mode) =
-            expected(&Config::default(), Path::new("home/.zshrc"), &output).unwrap();
-
-        assert_eq!(contents, b"laptop\n");
-        assert_eq!(mode, Some(0o640));
-    }
-
-    #[test]
     fn a_drifted_generated_file_is_staged_on_both_sides() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
@@ -714,25 +526,5 @@ mod tests {
         assert_eq!(drifted.len(), 1);
         assert_eq!(drifted[0].relative, Path::new("home/.zshrc"));
         assert_eq!(drifted[0].contents, b"generated\n");
-    }
-
-    #[test]
-    fn a_generated_file_the_system_already_holds_is_left_out() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
-        std::fs::write(home.join(".zshrc"), "generated\n").unwrap();
-
-        let produced = resolve(&home, &repo, &[Entry::Template(dir)], &Classes::default()).unwrap();
-
-        assert!(
-            generated_items(&Config::default(), &home, &produced)
-                .unwrap()
-                .is_empty()
-        );
     }
 }

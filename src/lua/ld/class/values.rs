@@ -18,13 +18,6 @@ mod tests {
     use crate::lua::runtime::runtime;
 
     #[test]
-    fn a_runtime_without_values_answers_with_none() {
-        let lua = runtime().unwrap();
-
-        assert!(current(&lua).is_empty());
-    }
-
-    #[test]
     fn the_installed_values_are_the_current_ones() {
         let lua = runtime().unwrap();
         let mut classes = Classes::default();

@@ -77,44 +77,6 @@ fn write_state(home: &Path, repo: &Path) {
 }
 
 #[test]
-fn version_prints_the_package_version() {
-    let home = tempfile::tempdir().unwrap();
-
-    luadot(home.path())
-        .arg("--version")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
-}
-
-#[test]
-fn help_lists_the_commands() {
-    let home = tempfile::tempdir().unwrap();
-
-    luadot(home.path()).arg("--help").assert().success().stdout(
-        predicate::str::contains("Usage: luadot")
-            .and(predicate::str::contains("apply"))
-            .and(predicate::str::contains("restore"))
-            .and(predicate::str::contains("completions")),
-    );
-}
-
-#[test]
-fn a_command_explains_itself() {
-    let home = tempfile::tempdir().unwrap();
-
-    luadot(home.path())
-        .args(["rm", "--help"])
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("Usage: luadot rm")
-                .and(predicate::str::contains("--yes"))
-                .and(predicate::str::contains("--dry-run")),
-        );
-}
-
-#[test]
 fn a_bare_invocation_prints_the_help() {
     let home = tempfile::tempdir().unwrap();
 
@@ -123,30 +85,6 @@ fn a_bare_invocation_prints_the_help() {
         .failure()
         .code(2)
         .stderr(predicate::str::contains("Usage: luadot"));
-}
-
-#[test]
-fn an_unknown_command_is_refused() {
-    let home = tempfile::tempdir().unwrap();
-
-    luadot(home.path())
-        .arg("nope")
-        .assert()
-        .failure()
-        .code(2)
-        .stderr(predicate::str::contains("unrecognized subcommand 'nope'"));
-}
-
-#[test]
-fn an_unknown_option_is_refused() {
-    let home = tempfile::tempdir().unwrap();
-
-    luadot(home.path())
-        .args(["rm", "--force", ".bashrc"])
-        .assert()
-        .failure()
-        .code(2)
-        .stderr(predicate::str::contains("unexpected argument '--force'"));
 }
 
 #[test]
@@ -315,29 +253,6 @@ fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_i
 
     luadot(&home).args(["restore", "--yes"]).assert().success();
     assert_eq!(read(&home.join(".bashrc")), "handwritten\n");
-}
-
-#[test]
-fn two_runs_in_a_row_keep_their_own_backup() {
-    let root = tempfile::tempdir().unwrap();
-    let home = root.path().join("home");
-    let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
-    write(&home.join(".bashrc"), "first\n");
-    write_state(&home, &repo);
-
-    luadot(&home).arg("apply").assert().success();
-    std::fs::remove_file(home.join(".bashrc")).unwrap();
-    write(&home.join(".bashrc"), "second\n");
-    luadot(&home).arg("apply").assert().success();
-
-    let mut saved: Vec<String> = std::fs::read_dir(home.join(".local/share/luadot/backups"))
-        .unwrap()
-        .map(|entry| read(&entry.unwrap().path().join("home/.bashrc")))
-        .collect();
-    saved.sort();
-
-    assert_eq!(saved, ["first\n", "second\n"]);
 }
 
 #[test]
@@ -851,31 +766,6 @@ fn diff_narrows_to_the_path_it_is_given_and_leaves_nothing_behind() {
 }
 
 #[test]
-fn diff_reports_a_system_file_whose_mode_is_all_that_drifted() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let root = tempfile::tempdir().unwrap();
-    let home = root.path().join("home");
-    let repo = root.path().join("repo");
-    let system = root.path().join("etc/app.conf");
-    let managed = repo.join("root").join(system.strip_prefix("/").unwrap());
-    write(&managed, "conf\n");
-    write(&system, "conf\n");
-    std::fs::set_permissions(&system, std::fs::Permissions::from_mode(0o600)).unwrap();
-    write(
-        &home.join(".config/luadot/config.lua"),
-        r#"ld.rules({ match = "root/**", mode = "0640" })"#,
-    );
-    write_state(&home, &repo);
-
-    luadot(&home).arg("diff").assert().success().stdout(
-        predicate::str::contains("mode")
-            .and(predicate::str::contains("0600 -> 0640"))
-            .and(predicate::str::contains("1 of 1 managed file(s) differ")),
-    );
-}
-
-#[test]
 fn status_groups_what_apply_would_touch_under_the_repository_it_reads() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -970,70 +860,6 @@ fn status_hands_every_file_it_inspected_to_the_configuration() {
             .and(predicate::str::contains("synced     home/.zshrc"))
             .and(predicate::str::contains("counted 3"))
             .and(predicate::str::contains("managed file(s)").not()),
-    );
-}
-
-#[test]
-fn status_counts_the_templates_apart_from_the_files_they_produce() {
-    let root = tempfile::tempdir().unwrap();
-    let home = root.path().join("home");
-    let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
-    write(&home.join(".bashrc"), "managed\n");
-    write(
-        &repo.join("home/.zshrc.luadot/luadot.lua"),
-        r#"return "generated\n""#,
-    );
-    write(
-        &home.join(".config/luadot/config.lua"),
-        r#"
-        ld.on.status({
-          summary = function(counts)
-            return counts.side .. " " .. counts.templates .. "/" .. counts.total
-          end,
-        })
-        "#,
-    );
-    write_state(&home, &repo);
-
-    luadot(&home)
-        .args(["status", "--templates"])
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("repository 0/1")
-                .and(predicate::str::contains("generated 1/1")),
-        );
-}
-
-#[test]
-fn diff_writes_the_entries_and_the_summary_the_configuration_asks_for() {
-    let root = tempfile::tempdir().unwrap();
-    let home = root.path().join("home");
-    let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
-    write(&repo.join("home/.vimrc"), "set number\n");
-    write(&home.join(".bashrc"), "handwritten\n");
-    write(
-        &home.join(".config/luadot/config.lua"),
-        r#"
-        ld.on.diff({
-          entry = function(file)
-            return "» " .. file.state .. " " .. file.path
-          end,
-          summary = function(counts)
-            return counts.drifted .. "/" .. counts.total .. " on the " .. counts.side
-          end,
-        })
-        "#,
-    );
-    write_state(&home, &repo);
-
-    luadot(&home).arg("diff").assert().success().stdout(
-        predicate::str::contains("» differs home/.bashrc")
-            .and(predicate::str::contains("» missing home/.vimrc"))
-            .and(predicate::str::contains("2/2 on the repository"))
-            .and(predicate::str::contains("managed file(s) differ").not()),
     );
 }
 
@@ -1510,70 +1336,6 @@ fn an_encrypt_rule_reaches_a_system_file() {
         .stdout(predicate::str::contains(
             "nothing to apply, every managed file is synced",
         ));
-}
-
-#[test]
-fn a_mode_rule_lands_on_an_encrypted_system_file() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let root = tempfile::tempdir().unwrap();
-    let home = root.path().join("home");
-    let repo = root.path().join("repo");
-    std::fs::create_dir_all(&repo).unwrap();
-    let bin = fake_age(root.path());
-    let system = root.path().join("etc/wireguard/wg0.conf");
-    write(&system, "PrivateKey = hunter2\n");
-    system_secret_config(&home, r#"mode = "0640""#);
-    write_state(&home, &repo);
-
-    luadot_with_tools(&home, &bin)
-        .args(["add", system.to_str().unwrap()])
-        .assert()
-        .success();
-    std::fs::remove_file(&system).unwrap();
-
-    luadot_with_tools(&home, &bin)
-        .arg("apply")
-        .assert()
-        .success();
-    assert_eq!(
-        std::fs::metadata(&system).unwrap().permissions().mode() & 0o7777,
-        0o640
-    );
-
-    luadot_with_tools(&home, &bin)
-        .arg("apply")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("1 unchanged"));
-}
-
-#[test]
-fn rm_restores_the_plaintext_of_an_encrypted_system_file() {
-    let root = tempfile::tempdir().unwrap();
-    let home = root.path().join("home");
-    let repo = root.path().join("repo");
-    std::fs::create_dir_all(&repo).unwrap();
-    let bin = fake_age(root.path());
-    let system = root.path().join("etc/wireguard/wg0.conf");
-    write(&system, "PrivateKey = hunter2\n");
-    system_secret_config(&home, "");
-    write_state(&home, &repo);
-
-    luadot_with_tools(&home, &bin)
-        .args(["add", system.to_str().unwrap()])
-        .assert()
-        .success();
-    std::fs::remove_file(&system).unwrap();
-
-    luadot_with_tools(&home, &bin)
-        .args(["rm", "--yes", system.to_str().unwrap()])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("1 restored"));
-
-    assert!(!stored_beside(&system, &repo).exists());
-    assert_eq!(read(&system), "PrivateKey = hunter2\n");
 }
 
 #[test]

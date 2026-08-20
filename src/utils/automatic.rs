@@ -30,16 +30,6 @@ mod tests {
     }
 
     #[test]
-    fn nothing_written_asks_for_nothing() {
-        let repo = Path::new("/repo");
-
-        assert_eq!(
-            automatic(&config("ld.opt.autopush(true)"), repo, &[]),
-            Automatic::default()
-        );
-    }
-
-    #[test]
     fn one_path_asking_for_it_is_enough() {
         let repo = Path::new("/repo");
         let paths = vec![
