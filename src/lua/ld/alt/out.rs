@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use mlua::{Function, Lua, Table, Value};
 
-use super::super::constants::API;
+use super::super::constants::{API, CONFLICT, LINK, MODE, ON_CHANGE};
 use super::super::parse::{chain, conflict_policy, external, link_mode, mode_bits};
 use super::super::surface::{self, Surface};
-use super::constants::{DEST_ALONE, FILE, NAMESPACE, OUT};
+use super::constants::{CONTENT, DEST, DEST_ALONE, FILE, NAMESPACE, OUT};
 use super::file::handle;
 use crate::files::{sync_file, write_file};
 use crate::hook::Hooks;
@@ -74,13 +74,13 @@ fn parse(lua: &Lua, value: Value) -> mlua::Result<Output> {
 }
 
 fn from_table(lua: &Lua, entry: &Table) -> mlua::Result<Output> {
-    let dest: Option<String> = entry.get("dest")?;
-    let link: Option<String> = entry.get("link")?;
-    let conflict: Option<String> = entry.get("conflict")?;
-    let on_change: Option<String> = entry.get("on_change")?;
+    let dest: Option<String> = entry.get(DEST)?;
+    let link: Option<String> = entry.get(LINK)?;
+    let conflict: Option<String> = entry.get(CONFLICT)?;
+    let on_change: Option<String> = entry.get(ON_CHANGE)?;
 
-    let content = content(&entry.get::<Value>("content")?)?;
-    let mode = mode(&entry.get::<Value>("mode")?, &content)?;
+    let content = content(&entry.get::<Value>(CONTENT)?)?;
+    let mode = mode(&entry.get::<Value>(MODE)?, &content)?;
 
     Ok(Output::new(
         destination(lua, dest.as_deref())?,
