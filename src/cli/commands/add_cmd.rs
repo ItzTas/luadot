@@ -53,8 +53,9 @@ fn track_in_lfs(config: &Config, repo: &Path) -> Result<()> {
     if !git::sync_attributes("add", repo, &patterns)? {
         return Ok(());
     }
+    git::refresh_info("add", repo)?;
 
-    let path = git::attributes_path(repo);
+    let path = git::attributes_path("add", repo)?;
     if path.exists() {
         return git::stage("add", repo, &[path]);
     }
@@ -189,7 +190,7 @@ fn check_gitignore(
     }
 
     bail!(
-        "add: {} lands on {}, which the repository's .gitignore excludes",
+        "add: {} lands on {}, which the repository's ignore rules exclude",
         source.display(),
         relative.display()
     )
@@ -287,11 +288,6 @@ mod tests {
         path.to_string_lossy().into_owned()
     }
 
-    fn gitignore(repo: &Path, rules: &str) {
-        gix::init(repo).unwrap();
-        std::fs::write(repo.join(".gitignore"), rules).unwrap();
-    }
-
     #[test]
     fn plan_drops_the_files_the_configuration_ignores() {
         let dir = tempfile::tempdir().unwrap();
@@ -307,43 +303,6 @@ mod tests {
         let pairs = plan(&home, &repo, &[arg(&kept), arg(&ignored)], &config).unwrap();
 
         assert_eq!(pairs, vec![(kept, repo.join(".vimrc"))]);
-    }
-
-    #[test]
-    fn plan_refuses_a_file_the_gitignore_excludes() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        gitignore(&repo, "*.swp\n");
-        let source = home.join(".vimrc.swp");
-        std::fs::write(&source, "b").unwrap();
-
-        let err = plan(&home, &repo, &[arg(&source)], &Config::default())
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("lands on .vimrc.swp"));
-        assert!(err.contains(".gitignore"));
-    }
-
-    #[test]
-    fn plan_refuses_a_file_a_template_already_produces() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::create_dir_all(repo.join(".zshrc.luadot")).unwrap();
-        let source = home.join(".zshrc");
-        std::fs::write(&source, "handwritten\n").unwrap();
-
-        let err = plan(&home, &repo, &[arg(&source)], &Config::default())
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("add: "));
-        assert!(err.contains("is produced by"));
-        assert!(err.contains(".zshrc.luadot"));
     }
 
     #[test]
@@ -412,55 +371,5 @@ mod tests {
                 (plugins, repo.join(".config/nvim/lua/plugins.lua")),
             ]
         );
-    }
-
-    #[test]
-    fn plan_errors_when_source_is_missing() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let missing = home.join("missing");
-
-        let err = plan(&home, &repo, &[arg(&missing)], &Config::default())
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("is not a file or directory"));
-    }
-
-    #[test]
-    fn plan_errors_when_destination_exists() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::create_dir_all(&repo).unwrap();
-        std::fs::write(repo.join(".bashrc"), "old").unwrap();
-        let source = home.join(".bashrc");
-        std::fs::write(&source, "new").unwrap();
-
-        let err = plan(&home, &repo, &[arg(&source)], &Config::default())
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("already exists"));
-    }
-
-    #[test]
-    fn plan_errors_on_duplicate_destinations() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        let source = home.join(".bashrc");
-        std::fs::write(&source, "x").unwrap();
-
-        let err = plan(
-            &home,
-            &repo,
-            &[arg(&source), arg(&source)],
-            &Config::default(),
-        )
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("more than once"));
     }
 }

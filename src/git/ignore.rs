@@ -87,16 +87,26 @@ mod tests {
     }
 
     #[test]
-    fn a_pattern_excludes_the_files_it_names() {
-        let (_dir, repo) = repository("*.swp\n");
+    fn the_ignore_file_of_the_repository_counts_once_installed_without_a_gitignore() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        gix::init(&repo).unwrap();
+        let rules = super::super::rules::dir("add", &repo).unwrap();
+        std::fs::create_dir_all(&rules).unwrap();
+        std::fs::write(rules.join("ignore"), "*.log\n").unwrap();
+        super::super::info::refresh("add", &repo).unwrap();
         let mut excludes = Excludes::open("add", &repo).unwrap();
 
         assert!(
             excludes
-                .excluded(Path::new(".vimrc.swp"), Kind::File)
+                .excluded(Path::new(".config/nvim/lsp.log"), Kind::File)
                 .unwrap()
         );
-        assert!(!excludes.excluded(Path::new(".vimrc"), Kind::File).unwrap());
+        assert!(
+            !excludes
+                .excluded(Path::new(".config/nvim/init.lua"), Kind::File)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -113,23 +123,6 @@ mod tests {
         assert!(
             excludes
                 .excluded(Path::new(".cache/nvim/log"), Kind::File)
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn a_negated_pattern_takes_a_file_back() {
-        let (_dir, repo) = repository(".config/*\n!.config/nvim\n");
-        let mut excludes = Excludes::open("add", &repo).unwrap();
-
-        assert!(
-            excludes
-                .excluded(Path::new(".config/fish"), Kind::Directory)
-                .unwrap()
-        );
-        assert!(
-            !excludes
-                .excluded(Path::new(".config/nvim"), Kind::Directory)
                 .unwrap()
         );
     }

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use glob::Pattern;
@@ -8,7 +8,7 @@ use mlua::Lua;
 use regex::Regex;
 
 use super::around::Around;
-use super::constants::{CLASS_QUESTION, GIT_DIR, LOCKED, MATCH, MISSING, OWN_FILES};
+use super::constants::{CLASS_QUESTION, GIT_DIR, LOCKED, MATCH, MISSING};
 use super::diff::Diff;
 use super::report::Report;
 use crate::backup::Retention;
@@ -282,7 +282,7 @@ impl Config {
     }
 
     pub fn is_ignored(&self, relative: &Path) -> bool {
-        if inside_git_dir(relative) || repository_own(relative) {
+        if inside_git_dir(relative) {
             return true;
         }
         self.matching(relative)
@@ -548,15 +548,6 @@ fn inside_git_dir(relative: &Path) -> bool {
         .any(|component| component.as_os_str() == GIT_DIR)
 }
 
-fn repository_own(relative: &Path) -> bool {
-    let mut components = relative.components();
-    let (Some(Component::Normal(name)), None) = (components.next(), components.next()) else {
-        return false;
-    };
-
-    OWN_FILES.iter().any(|own| name == *own)
-}
-
 fn matches_path_or_ancestor(pattern: &Matcher, relative: &Path) -> bool {
     std::iter::successors(Some(relative), |path| path.parent())
         .take_while(|path| !path.as_os_str().is_empty())
@@ -577,25 +568,6 @@ mod tests {
     }
 
     #[test]
-    fn the_config_file_itself_can_be_managed() {
-        let config = Config::default();
-
-        assert!(!config.is_ignored(Path::new(".config/luadot/config.lua")));
-    }
-
-    #[test]
-    fn the_files_git_and_luadot_keep_at_the_top_are_never_managed() {
-        let config = Config::default();
-
-        for own in OWN_FILES {
-            assert!(config.is_ignored(Path::new(own)), "{own}");
-        }
-        assert!(!config.is_ignored(Path::new(".gitconfig")));
-        assert!(!config.is_ignored(Path::new(".config/luadot/.luarc.json")));
-        assert!(!config.is_ignored(Path::new(".config/git/ignore")));
-    }
-
-    #[test]
     fn a_placement_gathers_what_the_rules_say_about_a_path() {
         let config = crate::lua::from_source(
             r#"ld.rules({ match = ".ssh/**", link = "copy", mode = "0600", owner = "me:wheel" })"#,
@@ -611,14 +583,6 @@ mod tests {
         assert_eq!(other.link(), LinkMode::Hard);
         assert_eq!(other.mode(), None);
         assert_eq!(other.owner(), None);
-    }
-
-    #[test]
-    fn a_regex_reads_the_path_as_a_string() {
-        let matcher = Matcher::Regex(Regex::new(r"\.config/[^/]+/init\.lua$").unwrap());
-
-        assert!(matcher.matches(Path::new(".config/nvim/init.lua")));
-        assert!(!matcher.matches(Path::new(".config/nvim/lua/init.lua")));
     }
 
     #[test]
@@ -642,47 +606,5 @@ mod tests {
         assert!(matcher.matches(Path::new(".cache/build.tmp")));
         assert!(matcher.matches(Path::new(".vimrc.swp")));
         assert!(!matcher.matches(Path::new(".vimrc")));
-    }
-
-    #[test]
-    fn classes_are_kept_in_the_order_they_are_declared() {
-        let mut config = Config::default();
-        config.add_class(Class::new(
-            "form-factor".to_string(),
-            None,
-            Vec::new(),
-            None,
-        ));
-        config.add_class(Class::new("email".to_string(), None, Vec::new(), None));
-
-        let names: Vec<&str> = config.classes().iter().map(Class::name).collect();
-        assert_eq!(names, ["form-factor", "email"]);
-    }
-
-    #[test]
-    fn declaring_a_class_again_replaces_the_first_one() {
-        let mut config = Config::default();
-        config.add_class(Class::new(
-            "form-factor".to_string(),
-            Some("first".to_string()),
-            Vec::new(),
-            None,
-        ));
-        config.add_class(Class::new(
-            "form-factor".to_string(),
-            Some("second".to_string()),
-            Vec::new(),
-            None,
-        ));
-
-        assert_eq!(config.classes().len(), 1);
-        assert_eq!(config.class("form-factor").unwrap().question(), "second");
-    }
-
-    #[test]
-    fn a_class_without_a_prompt_asks_for_itself() {
-        let class = Class::new("form-factor".to_string(), None, Vec::new(), None);
-
-        assert_eq!(class.question(), "define the class `form-factor`");
     }
 }

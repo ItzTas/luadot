@@ -6,8 +6,6 @@ pub const CONFIG_FILE: &str = "config.lua";
 
 pub const GIT_DIR: &str = ".git";
 
-pub const OWN_FILES: [&str; 4] = [".gitignore", ".gitattributes", ".gitmodules", ".luarc.json"];
-
 pub const CLASS_QUESTION: &str = "define the class";
 
 pub const MATCH: MatchOptions = MatchOptions {
