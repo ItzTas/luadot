@@ -19,7 +19,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
         )));
     }
 
-    Config::building(lua)?.set_backup_keep(keep);
+    Config::building(lua, |config| config.set_backup_keep(keep))?;
     Ok(())
 }
 

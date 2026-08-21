@@ -13,7 +13,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         }
 
         let rules = rules(&list)?;
-        Config::building(lua)?.add_rules(rules);
+        Config::building(lua, |config| config.add_rules(rules))?;
         Ok(())
     })
 }

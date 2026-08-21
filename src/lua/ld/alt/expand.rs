@@ -2,20 +2,15 @@ use std::path::Path;
 
 use mlua::{Function, Lua, Table};
 
-use super::super::surface::{self, Surface};
-use super::constants::{EXPAND, NAMESPACE};
+use super::constants::EXPAND;
 use super::file::{failed, read, resolve};
 use crate::lua::embed;
 use crate::lua::runtime::environment;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, (name, vars): (String, Option<Table>)| {
-        if surface::inert(lua, &format!("{NAMESPACE}.{EXPAND}"), Surface::Template) {
-            return Ok(None);
-        }
-
         let path = resolve(lua, &name, EXPAND)?;
-        expand(lua, &path, vars).map(Some)
+        expand(lua, &path, vars)
     })
 }
 

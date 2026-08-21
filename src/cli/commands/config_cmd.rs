@@ -44,6 +44,7 @@ fn show() -> Result<()> {
 
     let file = lua::config_path()?;
     let config = lua::load_config()?;
+    let config = utils::configured("config", &config)?;
 
     output::field("repository", repo);
     output::field("config", file.display());
@@ -95,7 +96,8 @@ fn path() -> Result<()> {
 }
 
 fn repo() -> Result<()> {
-    let repo = utils::require_repo("config", lua::load_config()?.repo_dir())?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("config", utils::configured("config", &config)?.repo_dir())?;
     output::line(repo.display());
     Ok(())
 }

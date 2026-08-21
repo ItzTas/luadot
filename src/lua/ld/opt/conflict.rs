@@ -18,7 +18,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
         &CONFLICT_POLICIES,
         "conflict policy",
     )?;
-    Config::building(lua)?.set_conflict(policy);
+    Config::building(lua, |config| config.set_conflict(policy))?;
     Ok(())
 }
 

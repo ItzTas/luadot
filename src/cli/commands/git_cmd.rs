@@ -18,7 +18,8 @@ pub struct GitArgs {
 }
 
 pub fn git_cmd(args: GitArgs) -> Result<()> {
-    let repo = utils::require_repo("git", lua::load_config()?.repo_dir())?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("git", utils::configured("git", &config)?.repo_dir())?;
 
     let status = build_command(&repo, &args.args)
         .status()

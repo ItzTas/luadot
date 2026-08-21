@@ -48,6 +48,7 @@ pub fn class_cmd(args: ClassArgs) -> Result<()> {
 
 fn list() -> Result<()> {
     let config = lua::load_config()?;
+    let config = utils::configured("class", &config)?;
     let state = state::load()?;
 
     if config.classes().is_empty() && state.classes().is_empty() {
@@ -74,6 +75,7 @@ fn list() -> Result<()> {
 
 fn set(name: Option<String>, values: Vec<String>) -> Result<()> {
     let config = lua::load_config()?;
+    let config = utils::configured("class", &config)?;
     let Some(name) = name else {
         return set_missing(&config);
     };

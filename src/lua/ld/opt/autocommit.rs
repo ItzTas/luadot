@@ -11,7 +11,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     }
 
     let enabled = flag(NAMESPACE, &value, AUTOCOMMIT)?;
-    Config::building(lua)?.set_autocommit(enabled);
+    Config::building(lua, |config| config.set_autocommit(enabled))?;
     Ok(())
 }
 

@@ -32,7 +32,8 @@ pub struct RestoreArgs {
 }
 
 pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
-    let root = backup::backups_root(lua::load_config()?.backup_dir())?;
+    let config = lua::load_config()?;
+    let root = backup::backups_root(utils::configured("restore", &config)?.backup_dir())?;
     let taken = backup::taken("restore", &root)?;
     if taken.is_empty() {
         output::note("no backup taken yet");

@@ -18,6 +18,7 @@ pub struct EditArgs {
 
 pub fn edit_cmd(args: EditArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("edit")?;
+    let config = utils::configured("edit", &config)?;
     let in_repo = utils::managed_path("edit", &home, &repo, &args.path)?;
 
     if let Some(script) = template_script(&in_repo) {

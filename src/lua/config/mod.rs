@@ -13,4 +13,4 @@ pub use load::{config_path, load_config};
 pub use load::{from_classes, from_source};
 pub use report::Report;
 pub use status::{StatusCounts, StatusFile};
-pub use types::{Class, Config, Matcher, Rule};
+pub use types::{Class, Config, Matcher, Rule, Shared};

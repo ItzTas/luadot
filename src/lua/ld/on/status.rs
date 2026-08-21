@@ -14,7 +14,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 
         known(&call, &options, &REPORT_KEYS)?;
         let status = report(&call, &options)?;
-        Config::building(lua)?.set_status(status);
+        Config::building(lua, |config| config.set_status(status))?;
 
         Ok(())
     })

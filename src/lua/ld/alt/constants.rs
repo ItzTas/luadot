@@ -16,4 +16,7 @@ pub const GLOB: &str = "glob";
 
 pub const JSON: &str = "json";
 
+pub const DEST_ALONE: &str =
+    "needs a `dest`: only a template knows the file it stands for by itself";
+
 pub const JSON_DEPTH: usize = 64;

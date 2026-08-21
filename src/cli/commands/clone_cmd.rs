@@ -15,7 +15,10 @@ pub struct CloneArgs {
 
 pub fn clone_cmd(args: CloneArgs) -> Result<()> {
     let home = utils::home_dir()?;
-    let configured = lua::load_config()?.repo_dir().map(Path::to_path_buf);
+    let config = lua::load_config()?;
+    let configured = utils::configured("clone", &config)?
+        .repo_dir()
+        .map(Path::to_path_buf);
 
     let dir = utils::destination("clone", &home, args.dir.as_deref(), configured.as_deref())?;
 
@@ -46,7 +49,8 @@ fn offer_bootstrap(repo: &Path) -> Result<()> {
         return Ok(());
     }
 
-    utils::ask_missing("clone", lua::load_config()?.classes())?;
+    let loaded = lua::load_config()?;
+    utils::ask_missing("clone", utils::configured("clone", &loaded)?.classes())?;
 
-    lua::run_bootstrap("clone", repo)
+    lua::run_bootstrap("clone", repo, &loaded)
 }

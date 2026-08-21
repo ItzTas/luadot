@@ -5,20 +5,15 @@ use mlua::{Function, Lua};
 
 use super::super::constants::API;
 use super::super::parse::external;
-use super::super::surface::{self, Surface};
 use super::constants::{GLOB, NAMESPACE};
-use crate::lua::Template;
+use crate::lua::Scope;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, pattern: String| {
-        if surface::inert(lua, &format!("{NAMESPACE}.{GLOB}"), Surface::Template) {
-            return Ok(None);
-        }
-
-        let dir = Template::building(lua)?.dir().to_path_buf();
+        let dir = Scope::building(lua)?.dir().to_path_buf();
         let names = names(&dir, &pattern)?;
 
-        lua.create_sequence_from(names).map(Some)
+        lua.create_sequence_from(names)
     })
 }
 

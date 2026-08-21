@@ -7,6 +7,7 @@ use super::super::path::Paths;
 use super::super::surface;
 use super::constants::{ALL, NAMESPACE};
 use super::scripts::{listing, run};
+use crate::lua::Config;
 use crate::lua::setup;
 
 pub fn function(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
@@ -19,9 +20,10 @@ pub fn function(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
         let order = order(&options)?;
         let (repo, names) = listing(&paths, &command)?;
         let classes = class::current(lua);
+        let shared = Config::shared(lua)?;
 
         for name in setup::ordered(&command, names, &order).map_err(chain)? {
-            run(&paths, &command, repo, &name, &classes)?;
+            run(&paths, &command, repo, &name, &classes, &shared)?;
         }
         Ok(())
     })

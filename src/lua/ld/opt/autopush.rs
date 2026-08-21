@@ -11,7 +11,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     }
 
     let enabled = flag(NAMESPACE, &value, AUTOPUSH)?;
-    Config::building(lua)?.set_autopush(enabled);
+    Config::building(lua, |config| config.set_autopush(enabled))?;
     Ok(())
 }
 

@@ -19,7 +19,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
         )));
     }
 
-    Config::building(lua)?.set_backup_age(age);
+    Config::building(lua, |config| config.set_backup_age(age))?;
     Ok(())
 }
 

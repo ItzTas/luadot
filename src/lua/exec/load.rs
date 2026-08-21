@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use super::constants::{CURRENT_DIR, LUA_EXT, SOURCE_NAME};
+use crate::lua::Shared;
 use crate::lua::ld::{Paths, Surface};
 use crate::lua::script::{run_script, run_source};
 use crate::state::{self, Classes};
@@ -14,7 +15,7 @@ enum Target {
     Source(String),
 }
 
-pub fn run_exec(command: &str, target: &str) -> Result<()> {
+pub fn run_exec(command: &str, target: &str, shared: &Shared) -> Result<()> {
     let home =
         utils::home_dir().with_context(|| format!("{command}: failed to locate your home"))?;
     let config = utils::config_dir()
@@ -28,6 +29,7 @@ pub fn run_exec(command: &str, target: &str) -> Result<()> {
         &config,
         &paths,
         state.classes(),
+        shared,
     )
 }
 
@@ -48,25 +50,34 @@ fn run(
     config: &Path,
     paths: &Paths,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<()> {
     match target {
-        Target::File(path) => run_file(command, path, paths, classes),
+        Target::File(path) => run_file(command, path, paths, classes, shared),
         Target::Source(source) => run_source(
             command,
             Surface::Exec,
             source,
             SOURCE_NAME,
             &[config],
-            paths,
+            &paths.clone().with_dir(Path::new(CURRENT_DIR)),
             classes,
+            shared,
         ),
     }
 }
 
-fn run_file(command: &str, path: &Path, paths: &Paths, classes: &Classes) -> Result<()> {
+fn run_file(
+    command: &str,
+    path: &Path,
+    paths: &Paths,
+    classes: &Classes,
+    shared: &Shared,
+) -> Result<()> {
     let modules = modules(path);
+    let paths = paths.clone().with_dir(&modules);
 
-    run_script(command, Surface::Exec, path, &[&modules], paths, classes)
+    run_script(command, Surface::Exec, path, &[&modules], &paths, classes, shared)
 }
 
 fn modules(path: &Path) -> PathBuf {
@@ -78,6 +89,10 @@ fn modules(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::lua::Config;
+
     use super::*;
     use crate::lua::constants::MODULES_DIR;
 
@@ -92,6 +107,7 @@ mod tests {
             &home.join(".config/luadot"),
             &paths(home),
             &Classes::default(),
+            &Arc::new(Mutex::new(Config::default())),
         )
     }
 

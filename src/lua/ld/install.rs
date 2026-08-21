@@ -6,8 +6,10 @@ use super::surface::Surface;
 use super::{
     alt, argv, class, cmd, crypt, git, on, opt, path, pkg, print, regex, root, setup, sys,
 };
-use crate::lua::Config;
+use std::sync::{Arc, Mutex};
+
 use crate::lua::bundled::lpeg;
+use crate::lua::{Config, Scope, Shared};
 use crate::state::Classes;
 
 type Namespace = fn(&Lua) -> mlua::Result<Table>;
@@ -28,7 +30,11 @@ pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) ->
 
     surface.install(lua);
     class::install(lua, classes);
-    lua.set_app_data(Config::default());
+    lua.set_app_data(Shared::new(Mutex::new(Config::default())));
+    lua.set_app_data(Scope::new(
+        paths.dir().unwrap_or_else(|| paths.config()).to_path_buf(),
+        paths.home().to_path_buf(),
+    ));
 
     let ld = root::table(lua)?;
     for (name, namespace) in namespaces {
@@ -41,6 +47,10 @@ pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) ->
     lpeg::install(lua, &ld)?;
 
     lua.globals().set(API, ld)
+}
+
+pub fn share(lua: &Lua, config: &Shared) {
+    lua.set_app_data(Arc::clone(config));
 }
 
 #[cfg(test)]
@@ -177,19 +187,33 @@ mod tests {
     }
 
     #[test]
-    fn a_template_call_away_from_a_template_yields_nothing() {
+    fn the_alternatives_resolve_against_the_directory_of_the_surface() {
         exec(
             Surface::Config,
             r#"
+            assert(ld.alt.exists("laptop.zsh") == false, "alt.exists answered for a file that is not there")
+            assert(#ld.alt.glob("*.zsh") == 0, "alt.glob found something")
+            assert(ld.alt.json({ n = 1 }) == '{\n  "n": 1\n}', "alt.json needs no directory")
+
+            for _, name in ipairs({ "file", "read", "render", "expand" }) do
+              local ok, err = pcall(ld.alt[name], "laptop.zsh")
+              assert(not ok, "alt." .. name .. " answered without a file")
+              assert(
+                tostring(err):find("/home/u/.config/luadot", 1, true),
+                "alt." .. name .. " looked outside the surface: " .. tostring(err)
+              )
+            end
+            "#,
+        );
+    }
+
+    #[test]
+    fn a_configuration_call_from_a_template_still_does_nothing() {
+        exec(
+            Surface::Template,
+            r#"
             ld.opt.pkg_warn(false)
-            assert(ld.alt.file("laptop.zsh") == nil, "alt.file produced a handle")
-            assert(ld.alt.render("init.tmpl.lua") == nil, "alt.render produced a string")
-            assert(ld.alt.expand("init.tmpl.lua") == nil, "alt.expand produced a string")
-            assert(ld.alt.read("laptop.zsh") == nil, "alt.read produced a string")
-            assert(ld.alt.exists("laptop.zsh") == false, "alt.exists answered for a template")
-            assert(ld.alt.glob("*.zsh") == nil, "alt.glob produced a list")
-            assert(ld.alt.json({ n = 1 }) == '{\n  "n": 1\n}', "alt.json needs no template")
-            ld.alt.out({ content = "generated\n" })
+            ld.crypt.lock({ recipients = "age1example" })
             "#,
         );
     }

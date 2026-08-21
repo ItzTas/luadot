@@ -15,7 +15,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         }
 
         let diff = diff(&call, &options)?;
-        Config::building(lua)?.set_diff(diff);
+        Config::building(lua, |config| config.set_diff(diff))?;
 
         Ok(())
     })

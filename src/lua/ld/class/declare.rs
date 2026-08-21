@@ -13,7 +13,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         }
 
         let class = class(&value)?;
-        Config::building(lua)?.add_class(class);
+        Config::building(lua, |config| config.add_class(class))?;
         Ok(())
     })
 }

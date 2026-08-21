@@ -29,6 +29,7 @@ struct Secret {
 
 pub fn rekey_cmd(args: RekeyArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("rekey")?;
+    let config = utils::configured("rekey", &config)?;
 
     let root = utils::managed_root("rekey", &home, &repo, args.path.as_deref())?;
     let files = utils::managed_files("rekey", &repo, &root, |relative| {

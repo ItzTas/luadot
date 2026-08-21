@@ -3,7 +3,8 @@ use anyhow::{Result, bail};
 use crate::{lua, utils};
 
 pub fn bootstrap_cmd() -> Result<()> {
-    let config = lua::load_config()?;
+    let loaded = lua::load_config()?;
+    let config = utils::configured("bootstrap", &loaded)?;
     let repo = utils::require_repo("bootstrap", config.repo_dir())?;
     let path = lua::bootstrap_path("bootstrap", &repo)?;
 
@@ -13,5 +14,7 @@ pub fn bootstrap_cmd() -> Result<()> {
 
     utils::ask_missing("bootstrap", config.classes())?;
 
-    lua::run_bootstrap("bootstrap", &repo)
+    drop(config);
+
+    lua::run_bootstrap("bootstrap", &repo, &loaded)
 }

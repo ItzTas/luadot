@@ -11,6 +11,6 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     }
 
     let enabled = flag(NAMESPACE, &value, BACKUP)?;
-    Config::building(lua)?.set_backup(enabled);
+    Config::building(lua, |config| config.set_backup(enabled))?;
     Ok(())
 }

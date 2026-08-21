@@ -25,10 +25,10 @@ pub struct Output {
 }
 
 #[derive(Debug, Clone)]
-pub struct Template {
+pub struct Scope {
     dir: PathBuf,
     home: PathBuf,
-    dest: PathBuf,
+    dest: Option<PathBuf>,
     outputs: Vec<Output>,
 }
 
@@ -96,19 +96,24 @@ impl Output {
     }
 }
 
-impl Template {
-    pub fn new(dir: PathBuf, home: PathBuf, dest: PathBuf) -> Self {
+impl Scope {
+    pub fn new(dir: PathBuf, home: PathBuf) -> Self {
         Self {
             dir,
             home,
-            dest,
+            dest: None,
             outputs: Vec::new(),
         }
     }
 
-    pub fn building(lua: &Lua) -> mlua::Result<AppDataRefMut<'_, Template>> {
-        lua.app_data_mut::<Template>()
-            .ok_or_else(|| mlua::Error::external("the template is not available"))
+    pub fn with_dest(mut self, dest: PathBuf) -> Self {
+        self.dest = Some(dest);
+        self
+    }
+
+    pub fn building(lua: &Lua) -> mlua::Result<AppDataRefMut<'_, Scope>> {
+        lua.app_data_mut::<Scope>()
+            .ok_or_else(|| mlua::Error::external("the scope is not available"))
     }
 
     pub fn dir(&self) -> &Path {
@@ -132,12 +137,12 @@ impl Template {
         path.is_file().then_some(path)
     }
 
-    pub fn destination(&self, raw: Option<&str>) -> PathBuf {
+    pub fn destination(&self, raw: Option<&str>) -> Option<PathBuf> {
         let Some(raw) = raw else {
             return self.dest.clone();
         };
 
-        utils::expand(&self.home, Path::new(raw))
+        Some(utils::expand(&self.home, Path::new(raw)))
     }
 }
 
@@ -145,22 +150,19 @@ impl Template {
 mod tests {
     use super::*;
 
-    fn template(dir: &Path) -> Template {
-        Template::new(
-            dir.to_path_buf(),
-            PathBuf::from("/home/u"),
-            PathBuf::from("/home/u/.zshrc"),
-        )
+    fn scope(dir: &Path) -> Scope {
+        Scope::new(dir.to_path_buf(), PathBuf::from("/home/u"))
+            .with_dest(PathBuf::from("/home/u/.zshrc"))
     }
 
     #[test]
-    fn resolve_finds_a_file_inside_the_template() {
+    fn resolve_finds_a_file_inside_the_directory() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join("variants")).unwrap();
         std::fs::write(dir.path().join("variants/laptop.zsh"), "data").unwrap();
 
         assert_eq!(
-            template(dir.path()).resolve("variants/laptop.zsh"),
+            scope(dir.path()).resolve("variants/laptop.zsh"),
             Some(dir.path().join("variants/laptop.zsh"))
         );
     }
@@ -170,56 +172,67 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join("variants")).unwrap();
 
-        let template = template(dir.path());
+        let scope = scope(dir.path());
 
-        assert_eq!(template.resolve("missing.zsh"), None);
-        assert_eq!(template.resolve("variants"), None);
-        assert_eq!(template.resolve("/nowhere/missing.zsh"), None);
+        assert_eq!(scope.resolve("missing.zsh"), None);
+        assert_eq!(scope.resolve("variants"), None);
+        assert_eq!(scope.resolve("/nowhere/missing.zsh"), None);
     }
 
     #[test]
-    fn resolve_reaches_outside_the_template() {
+    fn resolve_reaches_outside_the_directory() {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join(".zshrc.luadot");
         std::fs::create_dir(&dir).unwrap();
         let shared = root.path().join("shared.zsh");
         std::fs::write(&shared, "data").unwrap();
 
-        let template = template(&dir);
+        let scope = scope(&dir);
 
         assert_eq!(
-            template.resolve("../shared.zsh"),
+            scope.resolve("../shared.zsh"),
             Some(dir.join("../shared.zsh"))
         );
-        assert_eq!(
-            template.resolve(&shared.display().to_string()),
-            Some(shared)
-        );
+        assert_eq!(scope.resolve(&shared.display().to_string()), Some(shared));
     }
 
     #[test]
     fn destination_defaults_to_the_mirrored_path() {
         assert_eq!(
-            template(Path::new("/repo/.zshrc.luadot")).destination(None),
-            PathBuf::from("/home/u/.zshrc")
+            scope(Path::new("/repo/.zshrc.luadot")).destination(None),
+            Some(PathBuf::from("/home/u/.zshrc"))
+        );
+    }
+
+    #[test]
+    fn a_scope_that_mirrors_nothing_has_no_default_destination() {
+        let scope = Scope::new(
+            PathBuf::from("/home/u/.config/luadot"),
+            PathBuf::from("/home/u"),
+        );
+
+        assert_eq!(scope.destination(None), None);
+        assert_eq!(
+            scope.destination(Some("~/.netrc")),
+            Some(PathBuf::from("/home/u/.netrc"))
         );
     }
 
     #[test]
     fn destination_expands_a_declared_path() {
-        let template = template(Path::new("/repo/.zshrc.luadot"));
+        let scope = scope(Path::new("/repo/.zshrc.luadot"));
 
         assert_eq!(
-            template.destination(Some("~/.config/zsh/.zshrc")),
-            PathBuf::from("/home/u/.config/zsh/.zshrc")
+            scope.destination(Some("~/.config/zsh/.zshrc")),
+            Some(PathBuf::from("/home/u/.config/zsh/.zshrc"))
         );
         assert_eq!(
-            template.destination(Some(".config/zsh/.zshrc")),
-            PathBuf::from("/home/u/.config/zsh/.zshrc")
+            scope.destination(Some(".config/zsh/.zshrc")),
+            Some(PathBuf::from("/home/u/.config/zsh/.zshrc"))
         );
         assert_eq!(
-            template.destination(Some("/etc/zsh/zshrc")),
-            PathBuf::from("/etc/zsh/zshrc")
+            scope.destination(Some("/etc/zsh/zshrc")),
+            Some(PathBuf::from("/etc/zsh/zshrc"))
         );
     }
 }

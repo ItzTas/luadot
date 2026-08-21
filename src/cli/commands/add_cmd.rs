@@ -19,6 +19,7 @@ pub struct AddArgs {
 
 pub fn add_cmd(args: AddArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("add")?;
+    let config = utils::configured("add", &config)?;
 
     let pairs = plan(&home, &repo, &args.paths, &config)?;
     let lock = config.crypt_lock();

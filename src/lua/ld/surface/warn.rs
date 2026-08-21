@@ -21,6 +21,14 @@ pub fn slow(lua: &Lua, call: &str) {
     output::warn(message);
 }
 
+pub fn slow_in(lua: &Lua, call: &str, home: Surface) {
+    if Surface::current(lua) != Some(home) {
+        return;
+    }
+
+    slow(lua, call);
+}
+
 pub fn inert(lua: &Lua, call: &str, home: Surface) -> bool {
     let Some(surface) = Surface::current(lua) else {
         return false;
@@ -59,19 +67,28 @@ fn silence() -> String {
 }
 
 fn silenced(lua: &Lua) -> bool {
-    lua.app_data_ref::<Config>()
-        .is_some_and(|config| !config.pkg_warn())
+    let Ok(shared) = Config::shared(lua) else {
+        return false;
+    };
+    let Ok(config) = shared.try_lock() else {
+        return false;
+    };
+
+    !config.pkg_warn()
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
+    use crate::lua::Shared;
     use crate::lua::runtime::runtime;
 
     fn running(surface: Surface) -> Lua {
         let lua = runtime().unwrap();
         surface.install(&lua);
-        lua.set_app_data(Config::default());
+        lua.set_app_data(Shared::new(Mutex::new(Config::default())));
         lua
     }
 
@@ -110,16 +127,16 @@ mod tests {
             Surface::Config
         ));
         assert!(inert(
-            &running(Surface::Config),
-            "alt.out",
-            Surface::Template
+            &running(Surface::Template),
+            "crypt.lock",
+            Surface::Config
         ));
     }
 
     #[test]
     fn silencing_the_warning_keeps_the_call_inert() {
         let lua = running(Surface::Bootstrap);
-        lua.app_data_mut::<Config>().unwrap().set_pkg_warn(false);
+        Config::building(&lua, |config| config.set_pkg_warn(false)).unwrap();
 
         assert!(silenced(&lua));
         assert!(inert(&lua, "rules", Surface::Config));

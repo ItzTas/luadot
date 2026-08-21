@@ -21,7 +21,8 @@ pub struct SyncArgs {
 }
 
 pub fn sync_cmd(args: SyncArgs) -> Result<()> {
-    let repo = utils::require_repo("sync", lua::load_config()?.repo_dir())?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("sync", utils::configured("sync", &config)?.repo_dir())?;
     require_git(&repo)?;
 
     git::stage_all("sync", &repo)?;

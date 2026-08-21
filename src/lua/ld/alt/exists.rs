@@ -1,17 +1,9 @@
 use mlua::{Function, Lua};
 
-use super::super::surface::{self, Surface};
-use super::constants::{EXISTS, NAMESPACE};
-use crate::lua::Template;
+use crate::lua::Scope;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, name: String| {
-        if surface::inert(lua, &format!("{NAMESPACE}.{EXISTS}"), Surface::Template) {
-            return Ok(false);
-        }
-
-        Ok(Template::building(lua)?.resolve(&name).is_some())
-    })
+    lua.create_function(|lua, name: String| Ok(Scope::building(lua)?.resolve(&name).is_some()))
 }
 
 #[cfg(test)]

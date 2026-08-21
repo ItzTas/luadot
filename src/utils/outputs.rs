@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use super::constants::SYSTEM_TEXT_MODE;
 use super::paths::{is_root, managed_relative};
 use crate::files::{self, Entry, FileStatus};
-use crate::lua::{self, Config, Content, Output};
+use crate::lua::{self, Config, Content, Output, Shared};
 use crate::state::Classes;
 
 type Inspect = fn(&Path, &Path, Option<u32>) -> Result<FileStatus>;
@@ -16,11 +16,12 @@ pub fn outputs(
     repo: &Path,
     entry: &Entry,
     classes: &Classes,
+    config: &Shared,
 ) -> Result<Vec<Output>> {
     match entry {
-        Entry::Template(dir) => lua::load_template(command, home, repo, dir, classes),
+        Entry::Template(dir) => lua::load_template(command, home, repo, dir, classes, config),
         Entry::Standalone(path) => Ok(vec![lua::load_template_file(
-            command, home, repo, path, classes,
+            command, home, repo, path, classes, config,
         )?]),
         Entry::File(path) => bail!("{command}: {} is not a template", path.display()),
     }
@@ -105,6 +106,12 @@ fn root_status(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    fn configuration() -> Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
     use super::*;
     use crate::files::{ConflictPolicy, LinkMode};
 
@@ -133,6 +140,7 @@ mod tests {
             &repo,
             &Entry::Template(dir),
             &Classes::default(),
+            &configuration(),
         )
         .unwrap();
 
@@ -148,6 +156,7 @@ mod tests {
             Path::new("/repo"),
             &Entry::File(PathBuf::from("/repo/home/.vimrc")),
             &Classes::default(),
+            &configuration(),
         )
         .unwrap_err()
         .to_string();

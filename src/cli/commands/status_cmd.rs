@@ -5,7 +5,7 @@ use clap::Args;
 
 use crate::crypt;
 use crate::files::{self, Entry, FileStatus, Side};
-use crate::lua::{Config, StatusCounts, StatusFile};
+use crate::lua::{Config, Shared, StatusCounts, StatusFile};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
@@ -31,7 +31,8 @@ pub struct StatusArgs {
 struct Counts([u32; STATUS_LABELS.len()]);
 
 pub fn status_cmd(args: StatusArgs) -> Result<()> {
-    let Workspace { config, home, repo } = utils::workspace("status")?;
+    let Workspace { config: shared, home, repo } = utils::workspace("status")?;
+    let config = utils::configured("status", &shared)?;
 
     let root = utils::managed_root("status", &home, &repo, args.path.as_deref())?;
 
@@ -58,8 +59,9 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
     if skipped > 0 || templates.is_empty() {
         return Ok(());
     }
+    drop(config);
 
-    generated_side(&config, &home, &repo, &templates)
+    generated_side(&shared, &home, &repo, &templates)
 }
 
 fn managed_side(
@@ -82,14 +84,15 @@ fn managed_side(
     show(config, &reported)
 }
 
-fn generated_side(config: &Config, home: &Path, repo: &Path, templates: &[Entry]) -> Result<()> {
+fn generated_side(shared: &Shared, home: &Path, repo: &Path, templates: &[Entry]) -> Result<()> {
     let classes = state::load()?.classes().clone();
-    let reported = generated_files(config, home, repo, templates, &classes)?;
+    let reported = generated_files(shared, home, repo, templates, &classes)?;
+    let config = utils::configured("status", shared)?;
 
     output::section(STATUS_GENERATED_HEAD);
-    summary(config, Side::Generated, &reported, templates.len())?;
+    summary(&config, Side::Generated, &reported, templates.len())?;
 
-    show(config, &reported)
+    show(&config, &reported)
 }
 
 fn managed_files(
@@ -145,7 +148,7 @@ fn managed_files(
 }
 
 fn generated_files(
-    config: &Config,
+    shared: &Shared,
     home: &Path,
     repo: &Path,
     templates: &[Entry],
@@ -153,8 +156,11 @@ fn generated_files(
 ) -> Result<Vec<StatusFile>> {
     let mut reported = Vec::new();
     for entry in templates {
-        for output in utils::outputs("status", home, repo, entry, classes)? {
-            let status = utils::output_status("status", config, home, &output)?;
+        for output in utils::outputs("status", home, repo, entry, classes, shared)? {
+            let status = {
+                let config = utils::configured("status", shared)?;
+                utils::output_status("status", &config, home, &output)?
+            };
             let relative = utils::output_relative("status", home, &output)?;
 
             reported.push(StatusFile::new(
@@ -313,6 +319,8 @@ impl Counts {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
 
     use super::*;
 
@@ -381,7 +389,7 @@ mod tests {
         std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
 
         let reported = generated_files(
-            &Config::default(),
+            &Arc::new(Mutex::new(Config::default())),
             &home,
             &repo,
             &[Entry::Template(dir)],
@@ -406,7 +414,7 @@ mod tests {
         std::fs::write(home.join(".zshrc"), "generated\n").unwrap();
 
         let reported = generated_files(
-            &Config::default(),
+            &Arc::new(Mutex::new(Config::default())),
             &home,
             &repo,
             &[Entry::Template(dir)],

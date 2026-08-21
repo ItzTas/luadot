@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use super::constants::BOOTSTRAP_FILE;
+use crate::lua::Shared;
 use crate::lua::ld::{Paths, Surface};
 use crate::lua::script::run_script;
 use crate::state::{self, Classes};
@@ -13,14 +14,14 @@ pub fn bootstrap_path(command: &str, repo: &Path) -> Result<PathBuf> {
         .with_context(|| format!("{command}: failed to locate the bootstrap file"))
 }
 
-pub fn run_bootstrap(command: &str, repo: &Path) -> Result<()> {
+pub fn run_bootstrap(command: &str, repo: &Path, shared: &Shared) -> Result<()> {
     let home = utils::home_dir()?;
     let config = utils::config_dir()?;
     let path = resolve(&home, &config, repo)
         .with_context(|| format!("{command}: failed to locate the bootstrap file"))?;
     let classes = state::load()?.classes().clone();
 
-    run_file(command, &path, &home, &config, repo, &classes)
+    run_file(command, &path, &home, &config, repo, &classes, shared)
 }
 
 fn resolve(home: &Path, config: &Path, repo: &Path) -> Result<PathBuf> {
@@ -34,11 +35,14 @@ fn run_file(
     config: &Path,
     repo: &Path,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<()> {
     let modules = path
         .parent()
         .with_context(|| format!("{command}: {} has no parent directory", path.display()))?;
-    let paths = Paths::new(home, config).with_repo(Some(repo));
+    let paths = Paths::new(home, config)
+        .with_repo(Some(repo))
+        .with_dir(modules);
 
     run_script(
         command,
@@ -47,11 +51,31 @@ fn run_file(
         &[modules],
         &paths,
         classes,
+        shared,
     )
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::lua::{Config, Shared};
+
+    fn shared() -> Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
+    fn run_test(
+        command: &str,
+        path: &Path,
+        home: &Path,
+        config: &Path,
+        repo: &Path,
+        classes: &Classes,
+    ) -> Result<()> {
+        run_file(command, path, home, config, repo, classes, &shared())
+    }
+
     use super::*;
     use crate::lua::constants::MODULES_DIR;
 
@@ -113,7 +137,7 @@ mod tests {
         std::fs::create_dir_all(&modules).unwrap();
         std::fs::write(modules.join("greeting.lua"), r#"return "hello""#).unwrap();
 
-        run_file(
+        run_test(
             "bootstrap",
             &path,
             &home,
@@ -147,11 +171,43 @@ mod tests {
         let mut classes = Classes::default();
         classes.set("form-factor", "laptop");
 
-        run_file("bootstrap", &path, &home, &config, &repo, &classes).unwrap();
+        run_test("bootstrap", &path, &home, &config, &repo, &classes).unwrap();
 
         assert_eq!(
             std::fs::read_to_string(repo.join("class.txt")).unwrap(),
             "laptop"
+        );
+    }
+
+    #[test]
+    fn the_script_knows_the_directory_it_lives_in() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let config = home.join(".config/luadot");
+        let path = write_bootstrap(
+            &home,
+            &repo,
+            r#"
+            local out = assert(io.open(ld.path.repo .. "/dir.txt", "w"))
+            out:write(ld.path.dir)
+            out:close()
+            "#,
+        );
+
+        run_test(
+            "bootstrap",
+            &path,
+            &home,
+            &config,
+            &repo,
+            &Classes::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(repo.join("dir.txt")).unwrap(),
+            path.parent().unwrap().display().to_string()
         );
     }
 
@@ -162,7 +218,7 @@ mod tests {
 
         let err = format!(
             "{:#}",
-            run_file(
+            run_test(
                 "clone",
                 &path,
                 Path::new("/home/u"),
@@ -186,7 +242,7 @@ mod tests {
 
         let err = format!(
             "{:#}",
-            run_file(
+            run_test(
                 "bootstrap",
                 &path,
                 &home,

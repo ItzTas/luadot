@@ -12,7 +12,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     }
 
     let mode = choice(NAMESPACE, &value, LINK, &LINK_MODES, "link mode")?;
-    Config::building(lua)?.set_link(mode);
+    Config::building(lua, |config| config.set_link(mode))?;
     Ok(())
 }
 

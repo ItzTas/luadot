@@ -21,6 +21,15 @@ pub enum TmplAction {
     Alt(AltArgs),
 }
 
+impl TmplArgs {
+    pub fn dry_run(&self) -> bool {
+        match &self.action {
+            TmplAction::New(_) => false,
+            TmplAction::Alt(args) => args.dry_run,
+        }
+    }
+}
+
 pub fn tmpl_cmd(args: TmplArgs) -> Result<()> {
     match args.action {
         TmplAction::New(args) => new::new(args),

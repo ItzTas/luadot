@@ -226,6 +226,26 @@ fn sync_without_a_git_repository_says_how_to_get_one() {
 }
 
 #[test]
+fn a_file_the_configuration_writes_waits_for_a_run_that_is_not_dry() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let generated = home.join(".config/mako/config");
+    write(&repo.join("home/.bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.alt.out({ dest = "~/.config/mako/config", content = "font=monospace\n" })"#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).args(["apply", "--dry-run"]).assert().success();
+    assert!(!generated.exists());
+
+    luadot(&home).arg("apply").assert().success();
+    assert_eq!(read(&generated), "font=monospace\n");
+}
+
+#[test]
 fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_it() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

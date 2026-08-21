@@ -1,16 +1,19 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use glob::Pattern;
-use mlua::{AppDataRefMut, Lua};
+use mlua::Lua;
 use regex::Regex;
 
-use super::constants::{CLASS_QUESTION, GIT_DIR, MATCH};
+use super::constants::{CLASS_QUESTION, GIT_DIR, LOCKED, MATCH, MISSING};
 use super::diff::Diff;
 use super::report::Report;
 use crate::backup::Retention;
 use crate::crypt::{Backend, Identity, Lock, Secrets};
 use crate::files::{ConflictPolicy, LinkMode};
+
+pub type Shared = Arc<Mutex<Config>>;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -31,7 +34,7 @@ pub struct Config {
     crypt_secrets: Secrets,
     diff: Diff,
     status: Report,
-    runtime: Option<Lua>,
+    runtimes: Vec<Lua>,
 }
 
 impl Default for Config {
@@ -54,7 +57,7 @@ impl Default for Config {
             crypt_secrets: Secrets::default(),
             diff: Diff::default(),
             status: Report::default(),
-            runtime: None,
+            runtimes: Vec::new(),
         }
     }
 }
@@ -89,13 +92,24 @@ pub struct Class {
 }
 
 impl Config {
-    pub fn building(lua: &Lua) -> mlua::Result<AppDataRefMut<'_, Config>> {
-        lua.app_data_mut::<Config>()
-            .ok_or_else(|| mlua::Error::external("the configuration is not available"))
+    pub fn shared(lua: &Lua) -> mlua::Result<Shared> {
+        lua.app_data_ref::<Shared>()
+            .map(|shared| Arc::clone(&shared))
+            .ok_or_else(|| mlua::Error::external(MISSING))
+    }
+
+    pub fn building(lua: &Lua, edit: impl FnOnce(&mut Config)) -> mlua::Result<()> {
+        let shared = Self::shared(lua)?;
+        let mut config = shared
+            .try_lock()
+            .map_err(|_| mlua::Error::external(LOCKED))?;
+        edit(&mut config);
+
+        Ok(())
     }
 
     pub fn keep_runtime(&mut self, runtime: Lua) {
-        self.runtime = Some(runtime);
+        self.runtimes.push(runtime);
     }
 
     pub fn set_diff(&mut self, diff: Diff) {

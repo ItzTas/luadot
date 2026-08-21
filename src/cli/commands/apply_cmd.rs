@@ -29,6 +29,7 @@ pub struct ApplyArgs {
 
 pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("apply")?;
+    let config = utils::configured("apply", &config)?;
 
     let root = utils::managed_root("apply", &home, &repo, args.path.as_deref())?;
 
