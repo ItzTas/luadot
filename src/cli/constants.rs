@@ -5,6 +5,8 @@ pub const DEFAULT_FILTER: &str = "warn";
 
 pub const REFRESH_PANICKED: &str = "meta: refreshing the definitions panicked";
 
+pub const GUARD_FAILED: &str = "git: leftover lock files will not be removed on interruption";
+
 pub const VERBOSE_FILTER: &str = "luadot=debug";
 
 pub const TRACE_FILTER: &str = "luadot=trace";

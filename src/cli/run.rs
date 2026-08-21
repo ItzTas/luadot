@@ -6,7 +6,9 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use super::commands;
-use super::constants::{DEFAULT_FILTER, REFRESH_PANICKED, TRACE_FILTER, VERBOSE_FILTER};
+use super::constants::{
+    DEFAULT_FILTER, GUARD_FAILED, REFRESH_PANICKED, TRACE_FILTER, VERBOSE_FILTER,
+};
 use super::types::{Cli, Cmd};
 use crate::git;
 use crate::lua::Command;
@@ -14,7 +16,9 @@ use crate::output;
 use crate::utils;
 
 pub fn run() -> Result<()> {
-    git::guard_locks();
+    if let Err(err) = git::guard_locks() {
+        output::warn(format!("{GUARD_FAILED}: {err}"));
+    }
 
     let cli = Cli::parse();
     init_tracing(cli.verbose);
