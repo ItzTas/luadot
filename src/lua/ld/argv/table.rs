@@ -2,6 +2,8 @@ use std::env;
 
 use mlua::{Lua, Table};
 
+use super::constants::{ARGS, NAME};
+
 pub fn table(lua: &Lua) -> mlua::Result<Table> {
     from(lua, &invocation())
 }
@@ -19,8 +21,8 @@ fn from(lua: &Lua, args: &[String]) -> mlua::Result<Table> {
     let rest = args.get(1..).unwrap_or_default();
 
     let argv = lua.create_table()?;
-    argv.set("name", name)?;
-    argv.set("args", lua.create_sequence_from(rest.iter().cloned())?)?;
+    argv.set(NAME, name)?;
+    argv.set(ARGS, lua.create_sequence_from(rest.iter().cloned())?)?;
 
     Ok(argv)
 }

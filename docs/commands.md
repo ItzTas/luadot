@@ -24,6 +24,7 @@
 | `luadot git <args>...` | Runs git inside the repository. |
 | `luadot push [args]...` | Shorthand for `luadot git push`. |
 | `luadot doc [-l] [call]` | Describes a call of the `ld` interface, `-l` names every one. |
+| `luadot meta [install [dir]]` | Prints the editor definitions of `ld`; `install` writes them and a `.luarc.json` into the configuration directory and the repository, or into one directory. |
 | `luadot completions <shell>` | Prints a completion script for that shell. |
 | `luadot man` | Prints the manual page, the one the packages install. |
 
@@ -35,6 +36,10 @@ writes what that call takes and does, `luadot doc opt` every call under the
 namespace, `luadot doc` all of them. The `ld.` prefix is optional and a piece
 of a name is enough, so `luadot doc backup` finds the four calls carrying the
 word. The text is the one on the pages here, built into the binary.
+
+`luadot meta install` gives lua-language-server the same interface, for
+completion and hover text while editing `config.lua` and the scripts; see
+[editor support](ld.md#editor-support).
 
 The bash, zsh and fish completions hand `luadot git` and `luadot push` over to
 git's own completion, pointed at the managed repository: `luadot git checkout

@@ -6,7 +6,7 @@ use clap::Args;
 use super::super::super::constants::TEMPLATE_SKELETON;
 use super::super::{AddArgs, add_cmd};
 use crate::files;
-use crate::lua::TEMPLATE_FILE;
+use crate::lua::{self, Placed, TEMPLATE_FILE};
 use crate::output;
 use crate::utils::{self, Workspace};
 
@@ -30,11 +30,27 @@ pub fn new(args: NewArgs) -> Result<()> {
 
     create(&template, &managed, args.file)?;
     output::note(format!("created {}", template.display()));
+    if !args.file {
+        settings(&home, &template)?;
+    }
 
     add_cmd(AddArgs {
         paths: vec![argument(&template)?],
     })?;
     report(&repo, &managed)
+}
+
+fn settings(home: &Path, template: &Path) -> Result<()> {
+    match lua::point_at_definitions("tmpl new", template, home, &utils::config_dir()?)? {
+        Placed::Written(path) => output::note(format!("created {}", path.display())),
+        Placed::Merged(path) => output::note(format!("updated {}", path.display())),
+        Placed::Kept(path, _) => output::warn(format!(
+            "tmpl new: {} could not be parsed and was left alone",
+            path.display()
+        )),
+    }
+
+    Ok(())
 }
 
 fn destination(home: &Path, arg: &str) -> Result<PathBuf> {

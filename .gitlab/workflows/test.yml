@@ -30,3 +30,26 @@ vendor:
   image: rust:latest
   script:
     - ./packaging/vendor/update.sh --check
+
+meta:
+  stage: test
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  image: rust:latest
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends cmake
+    - rustup component add clippy
+  script:
+    - cargo clippy --all-targets --features meta -- -D warnings
+    - cargo test --features meta --lib
+    - ./packaging/meta/update.sh --check

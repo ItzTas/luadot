@@ -68,6 +68,8 @@ The other nine keys, all optional:
 | `autocommit` | `true`, `false` | Whether `add` and `rm` commit on their own once one of those files is staged. |
 | `autopush` | `true`, `false` | Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back. |
 
+Any other key is refused, so a typo does not pass as a rule that sets nothing.
+
 Either syntax also matches a directory on behalf of everything under it:
 `{ match = "home/.ssh" }` and `{ regex = "^home/\\.ssh$" }` both cover
 `home/.ssh/keys/id_ed25519`.
@@ -572,6 +574,29 @@ through `ld.argv.args`. A file requires modules from the `lua/` directory next
 to it, a source string from the one in your configuration directory. Neither
 runs `config.lua` first: `exec` is a scratchpad, not a command that configures
 anything.
+
+## Editor support
+
+`luadot meta install` writes `meta/ld.lua`, lua-language-server definitions of
+every call on this page, and a `.luarc.json` that loads them, into
+`~/.config/luadot/` and into the repository. Completion and hover text then
+work in `config.lua`, `bootstrap.lua`, the setup scripts and every
+`luadot.lua`, whichever of the two the editor has open.
+
+```
+luadot meta install
+luadot meta install ~/scripts
+```
+
+A directory of your own takes the place of both. An existing `.luarc.json`
+keeps its keys: `workspace.library` and `runtime.path` gain the entries they
+lack, `runtime.version` becomes `Lua 5.4`. One that does not parse is left
+alone, and the settings are printed for you to merge by hand. The definitions
+come out of the binary, so run the command again after an upgrade; `luadot
+meta` prints them alone.
+
+`ld.cmd.<program>` completes for any name, since the program is only known at
+the call.
 
 ## Every call
 

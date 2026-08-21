@@ -1,3 +1,8 @@
+#[cfg(feature = "meta")]
+use super::super::super::constants::INTEGER_INDEX;
+#[cfg(feature = "meta")]
+use super::super::super::signature::{Field, Kind};
+
 pub const NAMESPACE: &str = "gpu";
 
 pub const VENDOR: &str = "vendor";
@@ -31,3 +36,42 @@ pub const VENDORS: [(&str, &str); 9] = [
     ("0x1414", "microsoft"),
     ("0x1a03", "aspeed"),
 ];
+
+#[cfg(feature = "meta")]
+pub const NAMESPACE_TYPENAME: &str = "ld.sys.gpu";
+
+#[cfg(feature = "meta")]
+pub const DOC: &str =
+    "The first card, and every card as a list: `for _, card in ipairs(ld.sys.gpu)`.";
+
+#[cfg(feature = "meta")]
+pub const CARD_TYPENAME: &str = "ld.Card";
+
+#[cfg(feature = "meta")]
+pub const CARD_DOC: &str = "One graphics card.";
+
+#[cfg(feature = "meta")]
+pub const CARD_FIELDS: [Field; 3] = [
+    Field {
+        name: VENDOR,
+        kind: Kind::String,
+        doc: "A short name (`nvidia`, `amd`, `intel`), or the PCI identifier when the vendor is not a known one.",
+    },
+    Field {
+        name: NAME,
+        kind: Kind::String,
+        doc: "The model as `lspci` reports it, empty when `lspci` is not installed.",
+    },
+    Field {
+        name: DRIVER,
+        kind: Kind::String,
+        doc: "The kernel driver bound to the card.",
+    },
+];
+
+#[cfg(feature = "meta")]
+pub const LIST_FIELDS: [Field; 1] = [Field {
+    name: INTEGER_INDEX,
+    kind: Kind::Named(CARD_TYPENAME),
+    doc: "Every card, in order.",
+}];

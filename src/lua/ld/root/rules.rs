@@ -1,7 +1,8 @@
-use mlua::{Function, Lua, Table};
+use mlua::{Function, Lua, Table, Value};
 
-use super::super::constants::API;
+use super::super::constants::{API, CONFLICT, LINK, MODE, ON_CHANGE};
 use super::super::parse::{conflict_policy, external, link_mode, matcher, mode_bits, owner_name};
+use super::constants::{AUTOCOMMIT, AUTOPUSH, ENCRYPT, IGNORE, OWNER, RULE_KEYS};
 use crate::lua::{Config, Rule};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
@@ -35,16 +36,18 @@ fn rules(list: &Table) -> mlua::Result<Vec<Rule>> {
 }
 
 fn rule(entry: &Table) -> mlua::Result<Rule> {
+    known(entry)?;
+
     let pattern = matcher(entry)?;
-    let link: Option<String> = entry.get("link")?;
-    let conflict: Option<String> = entry.get("conflict")?;
-    let on_change: Option<String> = entry.get("on_change")?;
-    let ignore: Option<bool> = entry.get("ignore")?;
-    let mode: Option<String> = entry.get("mode")?;
-    let owner: Option<String> = entry.get("owner")?;
-    let encrypt: Option<bool> = entry.get("encrypt")?;
-    let autocommit: Option<bool> = entry.get("autocommit")?;
-    let autopush: Option<bool> = entry.get("autopush")?;
+    let link: Option<String> = entry.get(LINK)?;
+    let conflict: Option<String> = entry.get(CONFLICT)?;
+    let on_change: Option<String> = entry.get(ON_CHANGE)?;
+    let ignore: Option<bool> = entry.get(IGNORE)?;
+    let mode: Option<String> = entry.get(MODE)?;
+    let owner: Option<String> = entry.get(OWNER)?;
+    let encrypt: Option<bool> = entry.get(ENCRYPT)?;
+    let autocommit: Option<bool> = entry.get(AUTOCOMMIT)?;
+    let autopush: Option<bool> = entry.get(AUTOPUSH)?;
 
     Ok(
         Rule::new(pattern, link_mode(link)?, conflict_policy(conflict)?)
@@ -56,6 +59,21 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
             .with_autocommit(autocommit)
             .with_autopush(autopush),
     )
+}
+
+fn known(entry: &Table) -> mlua::Result<()> {
+    for pair in entry.clone().pairs::<String, Value>() {
+        let (key, _) = pair.map_err(|_| external("a rule takes named keys"))?;
+
+        if !RULE_KEYS.contains(&key.as_str()) {
+            return Err(external(format!(
+                "unknown key `{key}` (available: {})",
+                RULE_KEYS.join(", ")
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -413,6 +431,17 @@ mod tests {
         );
 
         assert!(err.contains("invalid pattern `[`"));
+    }
+
+    #[test]
+    fn rejects_an_unknown_key() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ { match = ".ssh/**", lnk = "hard" } })"#).unwrap_err()
+        );
+
+        assert!(err.contains("`ld.rules` entry 1: unknown key `lnk`"));
+        assert!(err.contains("available: match, regex, link, conflict, on_change, ignore, mode, owner, encrypt, autocommit, autopush"));
     }
 
     #[test]

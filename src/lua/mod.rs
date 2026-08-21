@@ -5,6 +5,7 @@ mod constants;
 mod embed;
 mod exec;
 mod ld;
+mod meta;
 mod runtime;
 mod scope;
 mod script;
@@ -19,6 +20,11 @@ pub use config::{
 #[cfg(test)]
 pub use config::{from_classes, from_source};
 pub use exec::run_exec;
+#[cfg(feature = "meta")]
+pub use meta::generate as generate_definitions;
+pub use meta::{
+    DEFINITIONS, Placed, install as install_definitions, point as point_at_definitions,
+};
 pub use scope::{Content, Handle, Output, Scope};
 pub use setup::{list_setups, run_setups};
 pub use template::constants::TEMPLATE_FILE;
