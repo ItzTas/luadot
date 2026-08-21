@@ -41,7 +41,10 @@ luadot tmpl new -f ~/.zprofile         -- ~/.zprofile.luadot, a standalone templ
 The template stays where it was written and the repository links it, so
 `~/.zshrc.luadot/luadot.lua` and `~/dotfiles/home/.zshrc.luadot/luadot.lua`
 are the same file. Files you put in a directory template afterwards are yours
-to `add`. A relative path resolves against the current directory and has to
+to `add`. A directory template also gets a `.luarc.json` pointing
+lua-language-server at `~/.config/luadot/meta`, the definitions
+`luadot meta install` writes, so `luadot.lua` completes from either path; see
+[editor support](ld.md#editor-support). A relative path resolves against the current directory and has to
 land inside your home directory. Both forms resolve to an empty file until you
 write them, and neither replaces anything already there.
 
