@@ -36,7 +36,12 @@ pub fn require_repo(command: &str, configured: Option<&Path>) -> Result<PathBuf>
 pub fn managed_path(command: &str, home: &Path, repo: &Path, arg: &str) -> Result<PathBuf> {
     let target =
         std::path::absolute(arg).with_context(|| format!("{command}: invalid path {arg}"))?;
-    let managed = repo_path(home, repo, &target)?;
+    let Ok(managed) = repo_path(home, repo, &target) else {
+        bail!(
+            "{command}: {} is not managed by the repository",
+            target.display()
+        );
+    };
 
     if std::fs::symlink_metadata(&managed).is_ok() {
         return Ok(managed);
@@ -174,8 +179,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        std::fs::create_dir_all(repo.join("home")).unwrap();
-        let tracked = repo.join("home/.bashrc");
+        std::fs::create_dir_all(&repo).unwrap();
+        let tracked = repo.join(".bashrc");
         std::fs::write(&tracked, "data").unwrap();
 
         let arg = home.join(".bashrc").to_string_lossy().into_owned();
@@ -190,13 +195,18 @@ mod tests {
         let repo = dir.path().join("repo");
         std::fs::create_dir_all(&repo).unwrap();
 
-        let arg = home.join(".bashrc").to_string_lossy().into_owned();
-        let err = managed_path("rm", &home, &repo, &arg)
-            .unwrap_err()
-            .to_string();
+        for arg in [home.join(".bashrc"), PathBuf::from("/etc/pacman.conf")] {
+            let err = managed_path("rm", &home, &repo, &arg.to_string_lossy())
+                .unwrap_err()
+                .to_string();
 
-        assert!(err.contains("rm: "));
-        assert!(err.contains("is not managed by the repository"));
+            assert!(err.contains("rm: "), "{}", arg.display());
+            assert!(
+                err.contains("is not managed by the repository"),
+                "{}",
+                arg.display()
+            );
+        }
     }
 
     #[test]
@@ -204,8 +214,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        std::fs::create_dir_all(repo.join("home")).unwrap();
-        let stored = repo.join("home/.netrc.age");
+        std::fs::create_dir_all(&repo).unwrap();
+        let stored = repo.join(".netrc.age");
         std::fs::write(&stored, "cipher").unwrap();
 
         let arg = home.join(".netrc").to_string_lossy().into_owned();
@@ -218,7 +228,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        let template = repo.join("home/.zshrc.luadot");
+        let template = repo.join(".zshrc.luadot");
         std::fs::create_dir_all(&template).unwrap();
         std::fs::write(template.join("luadot.lua"), "return \"\"\n").unwrap();
 
@@ -232,8 +242,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        std::fs::create_dir_all(repo.join("home/.zshrc.luadot")).unwrap();
-        let plain = repo.join("home/.zshrc");
+        std::fs::create_dir_all(repo.join(".zshrc.luadot")).unwrap();
+        let plain = repo.join(".zshrc");
         std::fs::write(&plain, "managed").unwrap();
 
         let arg = home.join(".zshrc").to_string_lossy().into_owned();
@@ -246,8 +256,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        std::fs::create_dir_all(repo.join("home")).unwrap();
-        let tracked = repo.join("home/.bashrc");
+        std::fs::create_dir_all(&repo).unwrap();
+        let tracked = repo.join(".bashrc");
         std::os::unix::fs::symlink(home.join(".bashrc"), &tracked).unwrap();
 
         let arg = home.join(".bashrc").to_string_lossy().into_owned();

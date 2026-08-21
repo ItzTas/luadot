@@ -7,7 +7,7 @@ use super::super::parse::{chain, conflict_policy, external, link_mode, mode_bits
 use super::super::surface::{self, Surface};
 use super::constants::{CONTENT, DEST, DEST_ALONE, FILE, NAMESPACE, OUT};
 use super::file::handle;
-use crate::files::{sync_file, write_file};
+use crate::files::{Placement, sync_file, write_file};
 use crate::hook::Hooks;
 use crate::lua::{Content, Output, Scope};
 use crate::utils::dry_run;
@@ -38,14 +38,10 @@ fn place(output: &Output) -> mlua::Result<()> {
     let call = format!("`{API}.{NAMESPACE}.{OUT}`");
     let policy = output.conflict().unwrap_or_default();
 
+    let placement = Placement::new(output.link().unwrap_or_default()).with_mode(output.mode());
     let outcome = match output.content() {
-        Content::Text(text) => write_file(policy, output.dest(), text, output.mode()),
-        Content::File(source) => sync_file(
-            policy,
-            output.link().unwrap_or_default(),
-            source,
-            output.dest(),
-        ),
+        Content::Text(text) => write_file(policy, placement, output.dest(), text),
+        Content::File(source) => sync_file(policy, placement, source, output.dest()),
     }
     .map_err(|err| {
         external(format!(
@@ -133,17 +129,14 @@ fn content(value: &Value) -> mlua::Result<Content> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     use super::super::super::{Paths, install};
+    use super::super::fixture::{error, template};
     use super::*;
     use crate::lua::from_template;
     use crate::lua::runtime::runtime;
     use crate::state::Classes;
-
-    fn error(dir: &Path, source: &str) -> String {
-        format!("{:#}", from_template(dir, source).unwrap_err())
-    }
 
     fn script(dir: &Path, source: &str) -> mlua::Result<()> {
         let lua = runtime().unwrap();
@@ -179,12 +172,6 @@ mod tests {
             .to_string();
 
         assert!(err.contains("needs a `dest`"));
-    }
-
-    fn template(root: &Path) -> PathBuf {
-        let dir = root.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
     }
 
     #[test]

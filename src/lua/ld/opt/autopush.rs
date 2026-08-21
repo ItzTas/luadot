@@ -20,7 +20,7 @@ mod tests {
     fn pushing_on_its_own_commits_first() {
         let config = from_source("ld.opt.autopush(true)").unwrap();
 
-        assert!(config.autopush(Path::new("home/.bashrc")));
-        assert!(config.autocommit(Path::new("home/.bashrc")));
+        assert!(config.autopush(Path::new(".bashrc")));
+        assert!(config.autocommit(Path::new(".bashrc")));
     }
 }

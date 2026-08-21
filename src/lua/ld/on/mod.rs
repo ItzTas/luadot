@@ -1,3 +1,5 @@
+mod around;
+mod command;
 mod constants;
 #[cfg(feature = "meta")]
 mod describe;
@@ -6,6 +8,7 @@ mod parse;
 mod status;
 mod table;
 
+pub use command::Command;
 pub use constants::NAMESPACE;
 #[cfg(feature = "meta")]
 pub use describe::describe;

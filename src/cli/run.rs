@@ -1,18 +1,57 @@
 use std::io::IsTerminal;
+use std::thread::JoinHandle;
 
 use anyhow::Result;
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use super::commands;
-use super::constants::{DEFAULT_FILTER, TRACE_FILTER, VERBOSE_FILTER};
+use super::constants::{
+    DEFAULT_FILTER, GUARD_FAILED, REFRESH_PANICKED, TRACE_FILTER, VERBOSE_FILTER,
+};
 use super::types::{Cli, Cmd};
+use crate::git;
+use crate::lua::Command;
+use crate::output;
 use crate::utils;
 
 pub fn run() -> Result<()> {
+    if let Err(err) = git::guard_locks() {
+        output::warn(format!("{GUARD_FAILED}: {err}"));
+    }
+
     let cli = Cli::parse();
     init_tracing(cli.verbose);
-    dispatch(cli)
+
+    let refresh = spawn_refresh(&cli.command);
+    let result = dispatch(cli);
+    settle(refresh);
+
+    result
+}
+
+fn spawn_refresh(command: &Cmd) -> Option<JoinHandle<Result<()>>> {
+    if writes_definitions(command) {
+        return None;
+    }
+
+    Some(std::thread::spawn(utils::refresh_definitions))
+}
+
+fn writes_definitions(command: &Cmd) -> bool {
+    matches!(command, Cmd::Meta(_) | Cmd::Init(_) | Cmd::Clone(_))
+}
+
+fn settle(refresh: Option<JoinHandle<Result<()>>>) {
+    let Some(handle) = refresh else {
+        return;
+    };
+    let Ok(outcome) = handle.join() else {
+        return output::warn(REFRESH_PANICKED);
+    };
+    if let Err(err) = outcome {
+        output::warn(format!("{err:#}"));
+    }
 }
 
 fn init_tracing(verbose: u8) {
@@ -34,8 +73,17 @@ fn filter(verbose: u8) -> EnvFilter {
 
 fn dispatch(cli: Cli) -> Result<()> {
     utils::set_dry_run(dry_run(&cli.command));
+    if let Some(command) = customized(&cli.command) {
+        utils::set_command(command);
+    }
 
-    match cli.command {
+    run_command(cli.command)?;
+
+    utils::finished()
+}
+
+fn run_command(command: Cmd) -> Result<()> {
+    match command {
         Cmd::Add(args) => commands::add_cmd(args),
         Cmd::Restore(args) => commands::restore_cmd(args),
         Cmd::Apply(args) => commands::apply_cmd(args),
@@ -71,5 +119,68 @@ fn dry_run(command: &Cmd) -> bool {
         Cmd::Rm(args) => args.dry_run,
         Cmd::Tmpl(args) => args.dry_run(),
         _ => false,
+    }
+}
+
+fn customized(command: &Cmd) -> Option<Command> {
+    match command {
+        Cmd::Add(_) => Some(Command::Add),
+        Cmd::Apply(_) => Some(Command::Apply),
+        Cmd::Bootstrap => Some(Command::Bootstrap),
+        Cmd::Cd => Some(Command::Cd),
+        Cmd::Class(_) => Some(Command::Class),
+        Cmd::Clone(_) => Some(Command::Clone),
+        Cmd::Config(_) => Some(Command::Config),
+        Cmd::Diff(_) => Some(Command::Diff),
+        Cmd::Edit(_) => Some(Command::Edit),
+        Cmd::Exec(_) => Some(Command::Exec),
+        Cmd::Git(_) => Some(Command::Git),
+        Cmd::Init(_) => Some(Command::Init),
+        Cmd::Push(_) => Some(Command::Push),
+        Cmd::Rekey(_) => Some(Command::Rekey),
+        Cmd::Restore(_) => Some(Command::Restore),
+        Cmd::Rm(_) => Some(Command::Rm),
+        Cmd::Setup(_) => Some(Command::Setup),
+        Cmd::Status(_) => Some(Command::Status),
+        Cmd::Sync(_) => Some(Command::Sync),
+        Cmd::Tmpl(args) => Some(args.command()),
+        Cmd::Completions(_) | Cmd::Doc(_) | Cmd::Man | Cmd::Meta(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    fn parsed(args: &[&str]) -> Cmd {
+        Cli::try_parse_from(args).unwrap().command
+    }
+
+    #[test]
+    fn the_commands_describing_luadot_itself_are_not_customized() {
+        assert_eq!(customized(&parsed(&["luadot", "completions", "zsh"])), None);
+        assert_eq!(customized(&parsed(&["luadot", "doc", "ld"])), None);
+        assert_eq!(customized(&parsed(&["luadot", "man"])), None);
+        assert_eq!(customized(&parsed(&["luadot", "meta"])), None);
+    }
+
+    #[test]
+    fn doc_asks_for_a_call_unless_it_only_lists_the_names() {
+        assert!(Cli::try_parse_from(["luadot", "doc"]).is_err());
+        assert!(Cli::try_parse_from(["luadot", "doc", "--list"]).is_ok());
+    }
+
+    #[test]
+    fn a_tmpl_action_is_customized_on_its_own() {
+        assert_eq!(
+            customized(&parsed(&["luadot", "tmpl", "alt"])),
+            Some(Command::TmplAlt)
+        );
+        assert_eq!(
+            customized(&parsed(&["luadot", "tmpl", "new", "~/.zshrc"])),
+            Some(Command::TmplNew)
+        );
     }
 }

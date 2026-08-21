@@ -6,6 +6,8 @@ pub const CONFIG_FILE: &str = "config.lua";
 
 pub const GIT_DIR: &str = ".git";
 
+pub const OWN_FILES: [&str; 4] = [".gitignore", ".gitattributes", ".gitmodules", ".luarc.json"];
+
 pub const CLASS_QUESTION: &str = "define the class";
 
 pub const MATCH: MatchOptions = MatchOptions {
@@ -46,3 +48,7 @@ pub const DIFF_STATES: [(&str, DiffState); 4] = [
 pub const MISSING: &str = "the configuration is not available";
 
 pub const LOCKED: &str = "the configuration is already being changed";
+
+pub const BEFORE: &str = "before";
+
+pub const AFTER: &str = "after";

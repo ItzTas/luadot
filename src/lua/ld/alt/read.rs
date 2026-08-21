@@ -12,19 +12,8 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
-
+    use super::super::fixture::{error, template};
     use crate::lua::{Content, from_template};
-
-    fn template(root: &Path) -> PathBuf {
-        let dir = root.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    fn error(dir: &Path, source: &str) -> String {
-        format!("{:#}", from_template(dir, source).unwrap_err())
-    }
 
     #[test]
     fn yields_the_bytes_of_a_file_of_the_template() {

@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 
 use mlua::{IntoLua, Lua, Value};
 
-use super::constants::{DEFAULT, PATH, SIDE, STATE, SYSTEM, TEMPLATES, TOTAL};
+use super::constants::{DEFAULT, SIDE, TEMPLATES, TOTAL};
+use super::file;
 use crate::files::{FileStatus, Side};
 
 #[derive(Debug, Clone)]
@@ -65,11 +66,7 @@ impl StatusCounts {
 
 impl IntoLua for &StatusFile {
     fn into_lua(self, lua: &Lua) -> mlua::Result<Value> {
-        let file = lua.create_table()?;
-        file.set(PATH, self.path.to_string_lossy().as_ref())?;
-        file.set(SYSTEM, self.system.to_string_lossy().as_ref())?;
-        file.set(SIDE, self.side.dir())?;
-        file.set(STATE, self.state.name())?;
+        let file = file::table(lua, &self.path, &self.system, self.side, self.state.name())?;
 
         Ok(Value::Table(file))
     }
@@ -105,13 +102,13 @@ mod tests {
     fn a_file_carries_where_it_is_and_what_state_it_is_in() {
         let lua = Lua::new();
         let file = StatusFile::new(
-            PathBuf::from("home/.bashrc"),
+            PathBuf::from(".bashrc"),
             PathBuf::from("/home/u/.bashrc"),
             Side::Repository,
             FileStatus::Unlinked,
         );
 
-        assert_eq!(read(&lua, "return subject.path", &file), "home/.bashrc");
+        assert_eq!(read(&lua, "return subject.path", &file), ".bashrc");
         assert_eq!(
             read(&lua, "return subject.system", &file),
             "/home/u/.bashrc"

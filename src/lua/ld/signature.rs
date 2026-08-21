@@ -159,6 +159,13 @@ impl Describe for RecordGenerator {
 pub trait Collect: Sized {
     fn record(self, record: RecordGenerator) -> Self;
 
+    fn namespace(
+        self,
+        name: &str,
+        doc: &str,
+        build: impl FnOnce(RecordGenerator) -> RecordGenerator,
+    ) -> Self;
+
     fn choices<'a>(self, name: &str, doc: &str, names: impl IntoIterator<Item = &'a str>) -> Self;
 
     fn instance(self, name: &str, doc: &str) -> Self;
@@ -169,6 +176,15 @@ impl Collect for TypeWalker {
         self.given_types
             .push(TypeGenerator::Record(Box::new(record)));
         self
+    }
+
+    fn namespace(
+        self,
+        name: &str,
+        doc: &str,
+        build: impl FnOnce(RecordGenerator) -> RecordGenerator,
+    ) -> Self {
+        self.instance(name, doc).record(build(record(name, doc)))
     }
 
     fn choices<'a>(

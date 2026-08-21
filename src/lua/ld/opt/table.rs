@@ -17,12 +17,13 @@ mod tests {
     #[test]
     fn a_table_call_sets_every_option_it_carries() {
         let config = from_source(
-            r#"ld.opt({ link = "symbolic", pkg_warn = false, backup = false, backup_dir = "~/saved", backup_keep = 3, backup_age = "30d", autocommit = true, autopush = true })"#,
+            r#"ld.opt({ link = "symbolic", pkg_warn = false, lfs = false, backup = false, backup_dir = "~/saved", backup_keep = 3, backup_age = "30d", autocommit = true, autopush = true })"#,
         )
         .unwrap();
 
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
         assert!(!config.pkg_warn());
+        assert!(!config.lfs());
         assert!(config.autocommit(Path::new(".bashrc")));
         assert!(config.autopush(Path::new(".bashrc")));
         assert!(!config.backup());
@@ -43,6 +44,7 @@ mod tests {
 
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
         assert!(config.pkg_warn());
+        assert!(config.lfs());
         assert!(!config.autocommit(Path::new(".bashrc")));
         assert!(config.backup());
         assert_eq!(config.backup_dir(), None);
@@ -59,7 +61,7 @@ mod tests {
 
         assert!(err.contains("unknown option `lnik`"));
         assert!(err.contains(
-            "available: autocommit, autopush, backup, backup_age, backup_dir, backup_keep, conflict, link, passphrase_warn, pkg_warn, repo_dir"
+            "available: autocommit, autopush, backup, backup_age, backup_dir, backup_keep, conflict, lfs, link, passphrase_warn, pkg_warn, repo_dir"
         ));
     }
 

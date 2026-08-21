@@ -9,4 +9,4 @@ mod write;
 pub use constants::DEFINITIONS;
 #[cfg(feature = "meta")]
 pub use generate::generate;
-pub use write::{Placed, install, point};
+pub use write::{Placed, install, point, refresh};

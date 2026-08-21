@@ -2,10 +2,9 @@ use std::path::PathBuf;
 
 use mlua::{IntoLua, Lua, Value};
 
-use super::constants::{
-    CONTENT, DEFAULT, DIFF_STATES, DRIFTED, MODE, PATH, SIDE, SOURCE, STATE, SYSTEM, TOTAL,
-};
+use super::constants::{CONTENT, DEFAULT, DIFF_STATES, DRIFTED, MODE, SIDE, SOURCE, SYSTEM, TOTAL};
 use super::custom::Custom;
+use super::file;
 use super::report::Report;
 use crate::files::Side;
 
@@ -185,11 +184,7 @@ impl DiffCounts {
 
 impl IntoLua for &DiffFile {
     fn into_lua(self, lua: &Lua) -> mlua::Result<Value> {
-        let file = lua.create_table()?;
-        file.set(PATH, self.path.to_string_lossy().as_ref())?;
-        file.set(SYSTEM, self.system.to_string_lossy().as_ref())?;
-        file.set(SIDE, self.side.dir())?;
-        file.set(STATE, self.state.name())?;
+        let file = file::table(lua, &self.path, &self.system, self.side, self.state.name())?;
 
         let content = lua.create_table()?;
         content.set(SOURCE, lua.create_string(&self.content)?)?;
@@ -228,7 +223,7 @@ mod tests {
 
     fn file() -> DiffFile {
         DiffFile::new(
-            PathBuf::from("home/.bashrc"),
+            PathBuf::from(".bashrc"),
             PathBuf::from("/home/u/.bashrc"),
             Side::Repository,
             DiffState::Differs,
@@ -256,7 +251,7 @@ mod tests {
         let lua = Lua::new();
         let file = file();
 
-        assert_eq!(read(&lua, "return subject.path", &file), "home/.bashrc");
+        assert_eq!(read(&lua, "return subject.path", &file), ".bashrc");
         assert_eq!(
             read(&lua, "return subject.system", &file),
             "/home/u/.bashrc"
@@ -279,7 +274,7 @@ mod tests {
     fn a_file_the_system_does_not_hold_carries_one_side_only() {
         let lua = Lua::new();
         let file = DiffFile::new(
-            PathBuf::from("home/.bashrc"),
+            PathBuf::from(".bashrc"),
             PathBuf::from("/home/u/.bashrc"),
             Side::Repository,
             DiffState::Missing,

@@ -239,7 +239,7 @@ mod tests {
             Lock::Keys,
             &recipients,
             Some(Path::new("/home/u/.netrc")),
-            Path::new("/repo/home/.netrc.age"),
+            Path::new("/repo/.netrc.age"),
         );
 
         assert_eq!(invocation.get_program(), OsStr::new("age"));
@@ -252,7 +252,7 @@ mod tests {
                 "--recipient",
                 "age1second",
                 "--output",
-                "/repo/home/.netrc.age",
+                "/repo/.netrc.age",
                 "/home/u/.netrc",
             ]
         );
@@ -266,7 +266,7 @@ mod tests {
             Lock::Keys,
             &recipients,
             Some(Path::new("/home/u/.netrc")),
-            Path::new("/repo/home/.netrc.gpg"),
+            Path::new("/repo/.netrc.gpg"),
         );
 
         assert_eq!(invocation.get_program(), OsStr::new("gpg"));
@@ -280,7 +280,7 @@ mod tests {
                 "--recipient",
                 "me@example.com",
                 "--output",
-                "/repo/home/.netrc.gpg",
+                "/repo/.netrc.gpg",
                 "/home/u/.netrc",
             ]
         );
@@ -294,7 +294,7 @@ mod tests {
             Lock::Keys,
             &recipients,
             None,
-            Path::new("/repo/root/etc/wg0.conf.age"),
+            Path::new("/repo/.config/wg0.conf.age"),
         );
 
         assert_eq!(
@@ -304,7 +304,7 @@ mod tests {
                 "--recipient",
                 "age1first",
                 "--output",
-                "/repo/root/etc/wg0.conf.age",
+                "/repo/.config/wg0.conf.age",
             ]
         );
     }
@@ -317,7 +317,7 @@ mod tests {
             Lock::Passphrase,
             &recipients,
             Some(Path::new("/home/u/.netrc")),
-            Path::new("/repo/home/.netrc.age"),
+            Path::new("/repo/.netrc.age"),
         );
 
         assert_eq!(
@@ -326,7 +326,7 @@ mod tests {
                 "--encrypt",
                 "--passphrase",
                 "--output",
-                "/repo/home/.netrc.age",
+                "/repo/.netrc.age",
                 "/home/u/.netrc",
             ]
         );
@@ -350,7 +350,7 @@ mod tests {
             Backend::Age,
             Lock::Keys,
             Some(Path::new("/home/u/key.txt")),
-            Path::new("/repo/home/.netrc.age"),
+            Path::new("/repo/.netrc.age"),
             None,
         );
 
@@ -360,7 +360,7 @@ mod tests {
                 "--decrypt",
                 "--identity",
                 "/home/u/key.txt",
-                "/repo/home/.netrc.age",
+                "/repo/.netrc.age",
             ]
         );
     }
@@ -373,7 +373,7 @@ mod tests {
             Lock::Keys,
             &[],
             Path::new("/home/u/.netrc"),
-            Path::new("/repo/home/.netrc.age"),
+            Path::new("/repo/.netrc.age"),
         )
         .unwrap_err()
         .to_string();

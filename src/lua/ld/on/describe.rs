@@ -2,13 +2,15 @@ use tealr::TypeWalker;
 
 use super::super::signature::{Collect, Describe, Field, Kind, record};
 use super::constants::{
-    CONTENT_DOC, CONTENT_TYPENAME, COUNT_DOC, COUNTS_FIELDS, DIFF_COUNTS_DOC, DIFF_COUNTS_FIELDS,
-    DIFF_COUNTS_TYPENAME, DIFF_FIELDS, DIFF_FILE_DOC, DIFF_FILE_FIELDS, DIFF_FILE_TYPENAME,
-    DIFF_OPTIONS_DOC, DIFF_OPTIONS_TYPENAME, DIFF_STATE_DOC, DIFF_STATE_TYPENAME, DOC, FILE_FIELDS,
-    MODE_DOC, MODE_TYPENAME, NAMESPACE_TYPENAME, SIDE_DOC, SIDE_FIELDS, SIDE_TYPENAME, SIDES,
-    SIGNATURES, STATUS_COUNTS_DOC, STATUS_COUNTS_FIELDS, STATUS_COUNTS_TYPENAME, STATUS_FIELDS,
-    STATUS_FILE_DOC, STATUS_FILE_FIELDS, STATUS_FILE_TYPENAME, STATUS_OPTIONS_DOC,
-    STATUS_OPTIONS_TYPENAME, STATUS_STATE_DOC, STATUS_STATE_TYPENAME, STATUS_STATES,
+    AROUND_DOC, AROUND_FIELDS, AROUND_TYPENAME, CONTENT_DOC, CONTENT_TYPENAME, COUNT_DOC,
+    COUNTS_FIELDS, DIFF_COUNTS_DOC, DIFF_COUNTS_FIELDS, DIFF_COUNTS_TYPENAME, DIFF_FIELDS,
+    DIFF_FILE_DOC, DIFF_FILE_FIELDS, DIFF_FILE_TYPENAME, DIFF_OPTIONS_DOC, DIFF_OPTIONS_TYPENAME,
+    DIFF_STATE_DOC, DIFF_STATE_TYPENAME, DOC, FILE_FIELDS, MODE_DOC, MODE_TYPENAME,
+    NAMESPACE_TYPENAME, SIDE_DOC, SIDE_FIELDS, SIDE_TYPENAME, SIDES, SIGNATURES, STATUS_COUNTS_DOC,
+    STATUS_COUNTS_FIELDS, STATUS_COUNTS_TYPENAME, STATUS_FIELDS, STATUS_FILE_DOC,
+    STATUS_FILE_FIELDS, STATUS_FILE_TYPENAME, STATUS_OPTIONS_DOC, STATUS_OPTIONS_TYPENAME,
+    STATUS_STATE_DOC, STATUS_STATE_TYPENAME, STATUS_STATES, TMPL_DOC, TMPL_SIGNATURES,
+    TMPL_TYPENAME,
 };
 use crate::lua::config::constants::DIFF_STATES;
 
@@ -25,8 +27,13 @@ pub fn describe(walker: TypeWalker) -> TypeWalker {
             STATUS_STATE_DOC,
             STATUS_STATES.iter().map(|state| state.name()),
         )
-        .instance(NAMESPACE_TYPENAME, DOC)
-        .record(record(NAMESPACE_TYPENAME, DOC).functions(&SIGNATURES))
+        .namespace(NAMESPACE_TYPENAME, DOC, |record| {
+            record.functions(&SIGNATURES)
+        })
+        .namespace(TMPL_TYPENAME, TMPL_DOC, |record| {
+            record.functions(&TMPL_SIGNATURES)
+        })
+        .record(record(AROUND_TYPENAME, AROUND_DOC).fields(&AROUND_FIELDS))
         .record(record(DIFF_OPTIONS_TYPENAME, DIFF_OPTIONS_DOC).fields(&DIFF_FIELDS))
         .record(record(STATUS_OPTIONS_TYPENAME, STATUS_OPTIONS_DOC).fields(&STATUS_FIELDS))
         .record(
@@ -67,23 +74,31 @@ fn counts() -> Vec<Field> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::constants::{DIFF_KEYS, FUNCTIONS, REPORT_KEYS};
+    use super::super::constants::{AROUND_KEYS, DIFF_KEYS, FUNCTIONS, STATUS_KEYS, TMPL_FUNCTIONS};
     use super::*;
 
     #[test]
     fn every_function_is_described_in_the_order_it_is_registered() {
-        let registered: Vec<&str> = FUNCTIONS.iter().map(|(name, _)| *name).collect();
+        let registered: Vec<&str> = FUNCTIONS.iter().map(|(name, _, _)| *name).collect();
         let described: Vec<&str> = SIGNATURES.iter().map(|signature| signature.name).collect();
+        assert_eq!(described, registered);
 
+        let registered: Vec<&str> = TMPL_FUNCTIONS.iter().map(|(name, _, _)| *name).collect();
+        let described: Vec<&str> = TMPL_SIGNATURES
+            .iter()
+            .map(|signature| signature.name)
+            .collect();
         assert_eq!(described, registered);
     }
 
     #[test]
     fn every_key_of_each_command_is_described_in_the_order_it_is_read() {
+        let around: Vec<&str> = AROUND_FIELDS.iter().map(|field| field.name).collect();
         let diff: Vec<&str> = DIFF_FIELDS.iter().map(|field| field.name).collect();
         let status: Vec<&str> = STATUS_FIELDS.iter().map(|field| field.name).collect();
 
+        assert_eq!(around, AROUND_KEYS);
         assert_eq!(diff, DIFF_KEYS);
-        assert_eq!(status, REPORT_KEYS);
+        assert_eq!(status, STATUS_KEYS);
     }
 }

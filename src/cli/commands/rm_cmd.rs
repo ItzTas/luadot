@@ -75,12 +75,7 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
     let mut backup = {
         let config = utils::configured("rm", &shared)?;
         match config.backup() {
-            true => Some(Backup::open(
-                "rm",
-                &home,
-                config.backup_dir(),
-                config.retention(),
-            )?),
+            true => Some(Backup::open("rm", config.backup_dir(), config.retention())?),
             false => None,
         }
     };
@@ -400,19 +395,13 @@ fn detach_encrypted(
     let contents = crypt::decrypt("rm", backend, lock, identity.path("rm")?, source)
         .with_context(|| format!("rm: failed to decrypt {}", source.display()))?;
 
-    if utils::is_root(stripped) {
-        crypt::place_system(
-            "rm",
-            files::ConflictPolicy::Overwrite,
-            &contents,
-            dest,
-            config.mode(stripped),
-            config.owner(stripped),
-        )?;
-        return Ok(Detached::Restored);
-    }
-
-    crypt::place("rm", files::ConflictPolicy::Overwrite, &contents, dest)?;
+    crypt::place(
+        "rm",
+        files::ConflictPolicy::Overwrite,
+        config.placement(stripped),
+        &contents,
+        dest,
+    )?;
     Ok(Detached::Restored)
 }
 
@@ -470,13 +459,6 @@ impl Counts {
 }
 
 fn restore(source: &Path, dest: &Path) -> Result<()> {
-    match restore_plain(source, dest) {
-        Err(err) if files::permission_denied(&err) => files::escalate_entry("rm", source, dest),
-        other => other,
-    }
-}
-
-fn restore_plain(source: &Path, dest: &Path) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("rm: failed to create {}", parent.display()))?;
@@ -596,14 +578,14 @@ mod tests {
         write(&source, "data");
         std::os::unix::fs::symlink(&source, &dest).unwrap();
 
-        let mut backup = Some(Backup::at("rm", &home, saved.clone()));
+        let mut backup = Some(Backup::at("rm", saved.clone()));
         assert_eq!(
             detach(&source, &dest, &mut backup).unwrap(),
             Detached::Restored
         );
 
         assert_eq!(
-            std::fs::read_link(saved.join("home/.zshrc")).unwrap(),
+            std::fs::read_link(saved.join(dest.strip_prefix("/").unwrap())).unwrap(),
             source
         );
         assert_eq!(backup.unwrap().saved(), 1);
@@ -659,7 +641,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        let nvim = repo.join("home/.config/nvim");
+        let nvim = repo.join(".config/nvim");
         std::fs::create_dir_all(nvim.join("lua")).unwrap();
         write(&nvim.join("init.lua"), "init");
         write(&nvim.join("lua").join("plugins.lua"), "plugins");
@@ -685,7 +667,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        let template = repo.join("home/.zshrc.luadot");
+        let template = repo.join(".zshrc.luadot");
         std::fs::create_dir_all(&template).unwrap();
         write(&template.join("luadot.lua"), "return \"\"\n");
         write(&template.join("laptop.zsh"), "laptop");
@@ -701,7 +683,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        let template = repo.join("home/.zshrc.luadot");
+        let template = repo.join(".zshrc.luadot");
         std::fs::create_dir_all(&template).unwrap();
         std::fs::create_dir_all(&home).unwrap();
         write(&template.join("luadot.lua"), r#"return "generated\n""#);
@@ -730,7 +712,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        let template = repo.join("home/.zshrc.luadot");
+        let template = repo.join(".zshrc.luadot");
         std::fs::create_dir_all(&template).unwrap();
         std::fs::create_dir_all(&home).unwrap();
         write(&template.join("laptop.zsh"), "laptop\n");
@@ -768,7 +750,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
-        let template = repo.join("home/.zprofile.luadot");
+        let template = repo.join(".zprofile.luadot");
         std::fs::create_dir_all(template.parent().unwrap()).unwrap();
         std::fs::create_dir_all(&home).unwrap();
         write(&template, "export HOST=1\n");

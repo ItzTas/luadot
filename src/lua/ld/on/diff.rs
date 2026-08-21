@@ -2,17 +2,20 @@ use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::API;
 use super::super::parse::external;
-use super::constants::{ARGS, DIFF, DIFF_KEYS, NAMESPACE, TOOL};
-use super::parse::{known, report};
+use super::command::Command;
+use super::constants::{ARGS, DIFF_KEYS, NAMESPACE, TOOL};
+use super::parse::{around, known, report};
 use crate::lua::{Config, Diff, Tool};
 
-pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, options: Table| {
-        let call = format!("{NAMESPACE}.{DIFF}");
+pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
+    lua.create_function(move |lua, options: Table| {
+        let call = format!("{NAMESPACE}.{}", command.path());
         let diff = diff(&call, &options)?;
-        Config::building(lua, |config| config.set_diff(diff))?;
-
-        Ok(())
+        let around = around(&call, &options)?;
+        Config::building(lua, |config| {
+            config.set_diff(diff);
+            config.set_around(command, around);
+        })
     })
 }
 
@@ -131,7 +134,7 @@ mod tests {
         );
 
         assert!(err.contains("`ld.on.diff`: unknown key `entries`"));
-        assert!(err.contains("available: args, entry, render, summary, tool"));
+        assert!(err.contains("available: after, args, before, entry, render, summary, tool"));
     }
 
     #[test]

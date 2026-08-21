@@ -55,15 +55,8 @@ pub fn handle(data: &AnyUserData) -> mlua::Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
-
+    use super::super::fixture::template;
     use crate::lua::{Content, from_template};
-
-    fn template(root: &Path) -> PathBuf {
-        let dir = root.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
 
     #[test]
     fn reports_a_file_the_template_does_not_hold() {

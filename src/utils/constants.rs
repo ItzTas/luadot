@@ -1,14 +1,16 @@
 pub const APP_DIR: &str = "luadot";
 
-pub const HOME_PREFIX: &str = "home";
-
-pub const ROOT_PREFIX: &str = "root";
-
 pub const DEFAULT_EDITOR: &str = "vi";
 
 pub const DEFAULT_REPO_DIR: &str = "repo";
 
 pub const SYSTEM_TEXT_MODE: u32 = 0o644;
+
+pub const DEFINITIONS_WROTE: &str = "wrote";
+
+pub const DEFINITIONS_MERGED: &str = "merged";
+
+pub const DEFINITIONS_KEPT: &str = "could not be parsed and was left alone; add this to it:";
 
 pub const HOSTNAME_FILES: [&str; 2] = ["/proc/sys/kernel/hostname", "/etc/hostname"];
 

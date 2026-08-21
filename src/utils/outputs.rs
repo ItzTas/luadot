@@ -2,13 +2,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-use super::constants::SYSTEM_TEXT_MODE;
-use super::paths::{is_root, managed_relative};
-use crate::files::{self, Entry, FileStatus};
+use super::paths::managed_relative;
+use crate::files::{self, Entry, FileStatus, Placement};
 use crate::lua::{self, Config, Content, Output, Shared};
 use crate::state::Classes;
-
-type Inspect = fn(&Path, &Path, Option<u32>) -> Result<FileStatus>;
 
 pub fn outputs(
     command: &str,
@@ -33,16 +30,15 @@ pub fn output_status(
     home: &Path,
     output: &Output,
 ) -> Result<FileStatus> {
-    inspected(files::inspect_system, command, config, home, output)
-}
+    let dest = output.dest();
+    let relative = output_relative(command, home, output)?;
+    let placement = output_placement(config, &relative, output);
 
-pub fn escalated_output_status(
-    command: &str,
-    config: &Config,
-    home: &Path,
-    output: &Output,
-) -> Result<FileStatus> {
-    inspected(files::escalated_status, command, config, home, output)
+    match output.content() {
+        Content::File(source) => files::file_status(placement, source, dest),
+        Content::Text(text) => files::text_status(dest, text, placement.mode()),
+    }
+    .with_context(|| format!("{command}: failed to inspect {}", dest.display()))
 }
 
 pub fn output_relative(command: &str, home: &Path, output: &Output) -> Result<PathBuf> {
@@ -50,58 +46,16 @@ pub fn output_relative(command: &str, home: &Path, output: &Output) -> Result<Pa
         .with_context(|| format!("{command}: failed to place {}", output.dest().display()))
 }
 
-pub fn generated_mode(config: &Config, relative: &Path, output: &Output) -> Option<u32> {
-    if is_root(relative) {
-        return Some(
-            output
-                .mode()
-                .or_else(|| config.mode(relative))
-                .unwrap_or(SYSTEM_TEXT_MODE),
-        );
-    }
-
-    output.mode()
-}
-
-fn inspected(
-    inspect: Inspect,
-    command: &str,
-    config: &Config,
-    home: &Path,
+pub fn output_placement<'a>(
+    config: &'a Config,
+    relative: &'a Path,
     output: &Output,
-) -> Result<FileStatus> {
-    let dest = output.dest();
-    let relative = output_relative(command, home, output)?;
-    let failed = || format!("{command}: failed to inspect {}", dest.display());
+) -> Placement<'a> {
+    let placement = config.placement(relative);
 
-    if is_root(&relative) {
-        return root_status(inspect, config, &relative, output).with_context(failed);
-    }
-
-    let mode = output.link().unwrap_or_else(|| config.link_mode(&relative));
-    match output.content() {
-        Content::File(source) => files::file_status(mode, source, dest),
-        Content::Text(text) => files::text_status(dest, text, output.mode()),
-    }
-    .with_context(failed)
-}
-
-fn root_status(
-    inspect: Inspect,
-    config: &Config,
-    relative: &Path,
-    output: &Output,
-) -> Result<FileStatus> {
-    let staged;
-    let (source, mode) = match output.content() {
-        Content::File(source) => (source.as_path(), config.mode(relative)),
-        Content::Text(text) => {
-            staged = files::stage_text(text)?;
-            (staged.path(), generated_mode(config, relative, output))
-        }
-    };
-
-    inspect(source, output.dest(), mode)
+    placement
+        .with_link(output.link().unwrap_or_else(|| placement.link()))
+        .with_mode(output.mode().or_else(|| placement.mode()))
 }
 
 #[cfg(test)]
@@ -131,7 +85,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
+        let dir = repo.join(".zshrc.luadot");
         write(&dir.join("luadot.lua"), r#"return "generated\n""#);
 
         let resolved = outputs(
@@ -154,7 +108,7 @@ mod tests {
             "status",
             Path::new("/home/u"),
             Path::new("/repo"),
-            &Entry::File(PathBuf::from("/repo/home/.vimrc")),
+            &Entry::File(PathBuf::from("/repo/.vimrc")),
             &Classes::default(),
             &configuration(),
         )
@@ -194,7 +148,7 @@ mod tests {
     fn a_selected_file_is_compared_through_the_link_mode() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
-        let source = root.path().join("repo/home/.zshrc.luadot/laptop.zsh");
+        let source = root.path().join("repo/.zshrc.luadot/laptop.zsh");
         let dest = home.join(".zshrc");
         write(&source, "laptop\n");
         std::fs::create_dir_all(&home).unwrap();
@@ -232,19 +186,44 @@ mod tests {
     }
 
     #[test]
-    fn a_generated_system_file_falls_back_to_the_system_mode() {
-        let config = Config::default();
-        let relative = Path::new("root/etc/motd");
-        let output = text(PathBuf::from("/etc/motd"), "welcome\n");
+    fn a_destination_outside_the_home_directory_is_refused() {
+        let err = output_relative(
+            "tmpl alt",
+            Path::new("/home/u"),
+            &text(PathBuf::from("/etc/motd"), "welcome\n"),
+        )
+        .unwrap_err();
 
         assert_eq!(
-            generated_mode(&config, relative, &output),
-            Some(SYSTEM_TEXT_MODE)
+            format!("{err:#}"),
+            "tmpl alt: failed to place /etc/motd: outside your home directory /home/u"
         );
-        assert_eq!(
-            generated_mode(&config, relative, &output.clone().with_mode(Some(0o600))),
-            Some(0o600)
-        );
+    }
+
+    #[test]
+    fn the_output_decides_its_link_and_mode_before_the_rules_do() {
+        let config = lua::from_source(
+            r#"ld.rules({ match = ".netrc", link = "copy", mode = "0640", owner = "me" })"#,
+        )
+        .unwrap();
+        let relative = Path::new(".netrc");
+        let output = text(PathBuf::from("/home/u/.netrc"), "x");
+
+        let placement = output_placement(&config, relative, &output);
+        assert_eq!(placement.link(), LinkMode::Copy);
+        assert_eq!(placement.mode(), Some(0o640));
+        assert_eq!(placement.owner(), Some("me"));
+
+        let declared = Output::new(
+            PathBuf::from("/home/u/.netrc"),
+            Content::Text("x".to_string()),
+            Some(LinkMode::Symbolic),
+            None,
+        )
+        .with_mode(Some(0o600));
+        let placement = output_placement(&config, relative, &declared);
+        assert_eq!(placement.link(), LinkMode::Symbolic);
+        assert_eq!(placement.mode(), Some(0o600));
     }
 
     #[test]
@@ -253,11 +232,7 @@ mod tests {
 
         assert_eq!(
             output_relative("status", home, &text(PathBuf::from("/home/u/.zshrc"), "x")).unwrap(),
-            PathBuf::from("home/.zshrc")
-        );
-        assert_eq!(
-            output_relative("status", home, &text(PathBuf::from("/etc/motd"), "x")).unwrap(),
-            PathBuf::from("root/etc/motd")
+            PathBuf::from(".zshrc")
         );
     }
 }

@@ -1,16 +1,31 @@
 # The repository
 
-The repository mirrors the machine under two directories: `home/` holds what
-lives in your home directory, `root/` the rest of the filesystem, path for
-path. `add` chooses between them by the path it is given:
+The repository mirrors your home directory, path for path: `add` puts
+`~/.zshrc` at `.zshrc` and `~/.config/nvim/init.lua` at
+`.config/nvim/init.lua`, and `apply` puts them back. A path outside your home
+directory is refused:
 
 ```
-luadot add ~/.zshrc          -- lands in home/.zshrc
-luadot add /etc/pacman.conf  -- lands in root/etc/pacman.conf
+$ luadot add /etc/pacman.conf
+add: cannot manage /etc/pacman.conf: outside your home directory /home/u
 ```
 
-Anything at the top level outside the two directories (the repository's own
-README, a license) is never applied anywhere.
+## The repository's own files
+
+A few files at the top level belong to the repository rather than to your
+home directory, and are never applied: `.git/`, `.gitignore`,
+`.gitattributes`, `.gitmodules`, and the `.luarc.json` that `init`, `clone`
+and `meta install` write. Anything else at the top level is a dotfile, so a
+README or a license needs an `ignore` rule:
+
+```lua
+ld.rules({ match = { "README.md", "LICENSE" }, ignore = true })
+```
+
+`.gitattributes` is partly luadot's own: `add` keeps its `# luadot:lfs` block
+in step with the rules carrying `lfs = true`, and stages it along with what it
+mirrored. Lines outside that block are yours. See
+[the ld interface](ld.md#git-lfs).
 
 ## What git refuses to keep
 
@@ -21,7 +36,7 @@ stops the run:
 
 ```
 $ luadot add ~/.cache
-add: /home/u/.cache lands on home/.cache, which the repository's .gitignore excludes
+add: /home/u/.cache lands on .cache, which the repository's .gitignore excludes
 ```
 
 Walking a directory is quieter: the excluded files are left out and the rest
@@ -30,30 +45,26 @@ leaves the logs behind. Nested `.gitignore` files, negated patterns,
 `.git/info/exclude` and the global excludes file all count, exactly as git
 reads them; a repository git does not track excludes nothing.
 
-## System files
+## Mode and owner
 
-Files under `root/` go through the same commands, with two differences.
-
-They are always plain copies, never links: a hard link would leave the
-repository's copy owned by root, and a symlink into your home directory breaks
-while your home is unavailable.
-
-Writing them usually takes privilege: every operation is tried as you first,
-and only when the filesystem answers "permission denied" does luadot run
-`sudo` for that one file (`install` to place it, `cat` to read it). A run that
-never touches a privileged path never asks for a password.
-
-Mode and owner come from the rules:
+Two rule keys decide what a placed file looks like on disk, whatever `link`
+says:
 
 ```lua
 ld.rules({
-  { match = "root/etc/**", mode = "0644", owner = "root:root" },
-  { match = "root/etc/sudoers.d/**", mode = "0440" },
+  { match = ".ssh/**", mode = "0600" },
+  { match = ".local/bin/**", mode = "0755", owner = "me:wheel" },
 })
 ```
 
-Without a `mode`, the repository file's own permission bits are applied.
-Without an `owner`, the file belongs to whoever wrote it: you when no
-privilege was needed, root when sudo was. `status` reports a system file it
-cannot read as `unreadable` and moves on; `apply` and `diff` read it through
-`sudo cat`.
+`mode` is the permission bits, three or four octal digits. A file carrying
+other bits reports as `differs`, `diff` prints both modes, and `apply` puts
+the bits back. Git keeps only the executable bit, so this is how a key stays
+`600` after a clone. A hard link or a symlink shares its inode with the
+repository's copy, so the bits land there too. Without a `mode`, a copy gets
+the repository file's own bits and nothing is compared.
+
+`owner` is `"user"` or `"user:group"`, set through `chown` once the file is
+placed. luadot never asks for privilege: a user you cannot chown to stops the
+run with chown's own message, a group you belong to works. Without an
+`owner`, the file belongs to you.

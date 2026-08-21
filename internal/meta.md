@@ -2,8 +2,9 @@
 
 `meta/ld.lua` is a lua-language-server stub of the whole `ld` interface,
 committed and embedded in the binary through the `include_str!` in
-`src/lua/meta/constants.rs`. `luadot meta` prints it, `luadot meta install`
-writes it beside a `.luarc.json`.
+`src/lua/meta/constants.rs`. `luadot meta` prints it; `luadot meta install`,
+`luadot init` and `luadot clone` write it into the data directory and point a
+`.luarc.json` at it.
 
 ## Where it comes from
 

@@ -8,6 +8,7 @@ mod conflict;
 mod constants;
 #[cfg(feature = "meta")]
 mod describe;
+mod lfs;
 mod link;
 mod passphrase_warn;
 mod pkg_warn;

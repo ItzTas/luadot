@@ -2,8 +2,9 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use tracing::debug;
 
-use super::constants::{DEFINITIONS, DEFINITIONS_DIR, DEFINITIONS_FILE, LUARC_FILE};
+use super::constants::{DEFINITIONS, DEFINITIONS_DIR, DEFINITIONS_FILE, LUARC_FILE, STAGED_SUFFIX};
 use super::luarc::{library, merged};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -13,18 +14,28 @@ pub enum Placed {
     Kept(PathBuf, String),
 }
 
-pub fn install(command: &str, dir: &Path) -> Result<Vec<Placed>> {
-    let definitions = dir.join(DEFINITIONS_DIR).join(DEFINITIONS_FILE);
+pub fn install(command: &str, data: &Path) -> Result<Placed> {
+    let definitions = data.join(DEFINITIONS_DIR).join(DEFINITIONS_FILE);
     write(command, &definitions, DEFINITIONS)?;
 
-    Ok(vec![
-        Placed::Written(definitions),
-        settings(command, &dir.join(LUARC_FILE), DEFINITIONS_DIR)?,
-    ])
+    Ok(Placed::Written(definitions))
 }
 
-pub fn point(command: &str, dir: &Path, home: &Path, config: &Path) -> Result<Placed> {
-    settings(command, &dir.join(LUARC_FILE), &library(home, config))
+pub fn point(command: &str, dir: &Path, home: &Path, data: &Path) -> Result<Placed> {
+    settings(command, &dir.join(LUARC_FILE), &library(home, data))
+}
+
+pub fn refresh(command: &str, data: &Path) -> Result<()> {
+    let definitions = data.join(DEFINITIONS_DIR).join(DEFINITIONS_FILE);
+    let Some(current) = read(command, &definitions)? else {
+        return Ok(());
+    };
+    if current == DEFINITIONS {
+        return Ok(());
+    }
+
+    debug!(path = %definitions.display(), "refreshing the definitions");
+    replace(command, &definitions, DEFINITIONS)
 }
 
 fn settings(command: &str, path: &Path, library: &str) -> Result<Placed> {
@@ -60,9 +71,26 @@ fn write(command: &str, path: &Path, text: &str) -> Result<()> {
         .with_context(|| format!("{command}: failed to write {}", path.display()))
 }
 
+fn replace(command: &str, path: &Path, text: &str) -> Result<()> {
+    let staged = path.with_extension(format!("{STAGED_SUFFIX}.{}", std::process::id()));
+    std::fs::write(&staged, text)
+        .with_context(|| format!("{command}: failed to write {}", staged.display()))?;
+    std::fs::rename(&staged, path)
+        .with_context(|| format!("{command}: failed to replace {}", path.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refresh_writes_nothing_where_no_definitions_were_installed() {
+        let dir = tempfile::tempdir().unwrap();
+
+        refresh("meta", dir.path()).unwrap();
+
+        assert!(!dir.path().join(DEFINITIONS_DIR).exists());
+    }
 
     #[test]
     fn a_settings_file_that_does_not_parse_is_left_alone() {
@@ -70,19 +98,14 @@ mod tests {
         let luarc = dir.path().join(LUARC_FILE);
         std::fs::write(&luarc, "{ // a comment\n}\n").unwrap();
 
-        let placed = install("meta", dir.path()).unwrap();
+        let placed = point("meta", dir.path(), dir.path(), dir.path()).unwrap();
 
         assert_eq!(
             std::fs::read_to_string(&luarc).unwrap(),
             "{ // a comment\n}\n"
         );
         assert!(
-            matches!(&placed[1], Placed::Kept(path, wanted) if path == &luarc && wanted.contains(DEFINITIONS_DIR))
-        );
-        assert_eq!(
-            std::fs::read_to_string(dir.path().join(DEFINITIONS_DIR).join(DEFINITIONS_FILE))
-                .unwrap(),
-            DEFINITIONS
+            matches!(&placed, Placed::Kept(path, wanted) if path == &luarc && wanted.contains(DEFINITIONS_DIR))
         );
     }
 }

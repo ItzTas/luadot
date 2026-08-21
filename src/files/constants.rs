@@ -6,9 +6,7 @@ pub const TEMPLATE_SUFFIX: &str = ".luadot";
 
 pub const MODE_BITS: u32 = 0o7777;
 
-pub const SUDO: &str = "sudo";
-
-pub const STDIN_PATH: &str = "/dev/stdin";
+pub const CHOWN: &str = "chown";
 
 pub const MIRROR_PREFIX: &str = "luadot-diff";
 

@@ -15,11 +15,28 @@ test:
       - .cargo/
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends cmake
-    - rustup component add clippy
+    - rustup component add clippy rustfmt
   script:
-    - cargo build --verbose
-    - cargo clippy --all-targets -- -D warnings
-    - cargo test --verbose
+    - cargo fmt --check
+    - cargo build --locked --verbose
+    - cargo clippy --locked --all-targets -- -D warnings
+    - cargo test --locked --verbose
+
+deny:
+  stage: test
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  image: rust:latest
+  variables:
+    CARGO_DENY_VERSION: "0.20.2"
+    CARGO_DENY_TARGET: x86_64-unknown-linux-musl
+  before_script:
+    - archive="cargo-deny-$CARGO_DENY_VERSION-$CARGO_DENY_TARGET"
+    - curl -fsSL "https://github.com/EmbarkStudios/cargo-deny/releases/download/$CARGO_DENY_VERSION/$archive.tar.gz" | tar -xz -C /usr/local/bin --strip-components=1 "$archive/cargo-deny"
+  script:
+    - cargo deny check
 
 vendor:
   stage: test
@@ -50,6 +67,6 @@ meta:
     - apt-get update && apt-get install -y --no-install-recommends cmake
     - rustup component add clippy
   script:
-    - cargo clippy --all-targets --features meta -- -D warnings
-    - cargo test --features meta --lib
+    - cargo clippy --locked --all-targets --features meta -- -D warnings
+    - cargo test --locked --features meta --lib
     - ./packaging/meta/update.sh --check

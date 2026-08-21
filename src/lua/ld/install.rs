@@ -90,8 +90,11 @@ mod tests {
         for _, name in ipairs({ "note", "warn", "error", "section", "entry", "field" }) do
           assert(type(ld.print[name]) == "function", "print." .. name .. " is missing")
         end
-        for _, name in ipairs({ "diff", "status" }) do
+        for _, name in ipairs({ "add", "apply", "bootstrap", "cd", "class", "clone", "config", "diff", "edit", "exec", "git", "init", "push", "rekey", "restore", "rm", "setup", "status", "sync" }) do
           assert(type(ld.on[name]) == "function", "on." .. name .. " is missing")
+        end
+        for _, name in ipairs({ "alt", "new" }) do
+          assert(type(ld.on.tmpl[name]) == "function", "on.tmpl." .. name .. " is missing")
         end
         assert(type(ld.argv.name) == "string", "argv.name is missing")
         assert(type(ld.argv.args) == "table", "argv.args is missing")

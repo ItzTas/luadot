@@ -8,8 +8,9 @@ use super::constants::{
 
 pub fn describe(walker: TypeWalker) -> TypeWalker {
     walker
-        .instance(NAMESPACE_TYPENAME, DOC)
-        .record(record(NAMESPACE_TYPENAME, DOC).functions(&SIGNATURES))
+        .namespace(NAMESPACE_TYPENAME, DOC, |record| {
+            record.functions(&SIGNATURES)
+        })
         .record(record(OUTPUT_TYPENAME, OUTPUT_DOC).fields(&OUTPUT_FIELDS))
         .record(record(FILE_TYPENAME, FILE_DOC))
 }

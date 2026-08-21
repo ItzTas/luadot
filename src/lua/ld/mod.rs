@@ -5,6 +5,8 @@ mod cmd;
 mod constants;
 mod crypt;
 mod exec;
+#[cfg(test)]
+mod fixture;
 mod git;
 mod install;
 mod on;
@@ -31,6 +33,7 @@ pub use constants::API;
 #[cfg(feature = "meta")]
 pub use constants::{CALL_METHOD, NIL};
 pub use install::{install, share};
+pub use on::Command;
 pub use path::Paths;
 #[cfg(all(test, feature = "meta"))]
 pub use signature::{Kind, Param};

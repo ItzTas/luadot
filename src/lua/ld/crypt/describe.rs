@@ -14,12 +14,9 @@ pub fn describe(walker: TypeWalker) -> TypeWalker {
             IDENTITY_KIND_DOC,
             IDENTITY_TYPES.iter().map(|(name, _)| *name),
         )
-        .instance(NAMESPACE_TYPENAME, DOC)
-        .record(
-            record(NAMESPACE_TYPENAME, DOC)
-                .functions(&SIGNATURES)
-                .call(&CALL),
-        )
+        .namespace(NAMESPACE_TYPENAME, DOC, |record| {
+            record.functions(&SIGNATURES).call(&CALL)
+        })
         .record(record(OPTIONS_TYPENAME, OPTIONS_DOC).options(&SIGNATURES))
         .record(record(KEYS_TYPENAME, KEYS_DOC).fields(&KEYS_FIELDS))
         .record(record(IDENTITY_TYPENAME, IDENTITY_DOC).fields(&IDENTITY_FIELDS))

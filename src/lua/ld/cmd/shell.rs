@@ -21,16 +21,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::table::table;
-    use crate::lua::runtime::runtime;
-
-    fn eval(source: &str) -> mlua::Result<String> {
-        let lua = runtime().unwrap();
-        let cmd = table(&lua).unwrap();
-        lua.globals().set("cmd", cmd).unwrap();
-
-        lua.load(source).eval()
-    }
+    use super::super::fixture::eval;
 
     #[test]
     fn the_line_goes_through_the_shell() {

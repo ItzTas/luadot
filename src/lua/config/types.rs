@@ -1,17 +1,20 @@
+use std::collections::BTreeMap;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use glob::Pattern;
 use mlua::Lua;
 use regex::Regex;
 
-use super::constants::{CLASS_QUESTION, GIT_DIR, LOCKED, MATCH, MISSING};
+use super::around::Around;
+use super::constants::{CLASS_QUESTION, GIT_DIR, LOCKED, MATCH, MISSING, OWN_FILES};
 use super::diff::Diff;
 use super::report::Report;
 use crate::backup::Retention;
 use crate::crypt::{Backend, Identity, Lock, Secrets};
-use crate::files::{ConflictPolicy, LinkMode};
+use crate::files::{ConflictPolicy, LinkMode, Placement};
+use crate::lua::ld::Command;
 
 pub type Shared = Arc<Mutex<Config>>;
 
@@ -25,6 +28,7 @@ pub struct Config {
     passphrase_warn: bool,
     autocommit: bool,
     autopush: bool,
+    lfs: bool,
     backup: bool,
     backup_dir: Option<PathBuf>,
     backup_keep: Option<u32>,
@@ -34,6 +38,7 @@ pub struct Config {
     crypt_secrets: Secrets,
     diff: Diff,
     status: Report,
+    around: BTreeMap<Command, Around>,
     runtimes: Vec<Lua>,
 }
 
@@ -48,6 +53,7 @@ impl Default for Config {
             passphrase_warn: true,
             autocommit: false,
             autopush: false,
+            lfs: true,
             backup: true,
             backup_dir: None,
             backup_keep: None,
@@ -57,6 +63,7 @@ impl Default for Config {
             crypt_secrets: Secrets::default(),
             diff: Diff::default(),
             status: Report::default(),
+            around: BTreeMap::new(),
             runtimes: Vec::new(),
         }
     }
@@ -79,6 +86,7 @@ pub struct Rule {
     mode: Option<u32>,
     owner: Option<String>,
     encrypt: Option<bool>,
+    lfs: Option<bool>,
     autocommit: Option<bool>,
     autopush: Option<bool>,
 }
@@ -128,6 +136,14 @@ impl Config {
         &self.status
     }
 
+    pub fn set_around(&mut self, command: Command, around: Around) {
+        self.around.entry(command).or_default().merge(around);
+    }
+
+    pub fn around(&self, command: Command) -> Option<&Around> {
+        self.around.get(&command)
+    }
+
     pub fn set_link(&mut self, link: LinkMode) {
         self.link = link;
     }
@@ -159,6 +175,14 @@ impl Config {
 
     pub fn set_autopush(&mut self, autopush: bool) {
         self.autopush = autopush;
+    }
+
+    pub fn set_lfs(&mut self, lfs: bool) {
+        self.lfs = lfs;
+    }
+
+    pub fn lfs(&self) -> bool {
+        self.lfs
     }
 
     pub fn set_backup(&mut self, backup: bool) {
@@ -258,13 +282,19 @@ impl Config {
     }
 
     pub fn is_ignored(&self, relative: &Path) -> bool {
-        if inside_git_dir(relative) {
+        if inside_git_dir(relative) || repository_own(relative) {
             return true;
         }
         self.matching(relative)
             .filter_map(Rule::ignore)
             .next_back()
             .unwrap_or(false)
+    }
+
+    pub fn placement<'a>(&'a self, relative: &'a Path) -> Placement<'a> {
+        Placement::new(self.link_mode(relative))
+            .with_mode(self.mode(relative))
+            .with_owner(self.owner(relative))
     }
 
     pub fn link_mode(&self, relative: &Path) -> LinkMode {
@@ -324,6 +354,20 @@ impl Config {
             .unwrap_or(false)
     }
 
+    pub fn lfs_patterns(&self) -> Vec<(String, bool)> {
+        if !self.lfs {
+            return Vec::new();
+        }
+
+        self.rules
+            .iter()
+            .filter_map(|rule| rule.lfs().map(|tracked| (rule.pattern(), tracked)))
+            .flat_map(|(pattern, tracked)| {
+                globs(pattern).into_iter().map(move |glob| (glob, tracked))
+            })
+            .collect()
+    }
+
     fn matching<'a>(&'a self, relative: &'a Path) -> impl DoubleEndedIterator<Item = &'a Rule> {
         self.rules
             .iter()
@@ -365,6 +409,7 @@ impl Rule {
             mode: None,
             owner: None,
             encrypt: None,
+            lfs: None,
             autocommit: None,
             autopush: None,
         }
@@ -392,6 +437,11 @@ impl Rule {
 
     pub fn with_encrypt(mut self, encrypt: Option<bool>) -> Self {
         self.encrypt = encrypt;
+        self
+    }
+
+    pub fn with_lfs(mut self, lfs: Option<bool>) -> Self {
+        self.lfs = lfs;
         self
     }
 
@@ -437,6 +487,10 @@ impl Rule {
         self.encrypt
     }
 
+    pub fn lfs(&self) -> Option<bool> {
+        self.lfs
+    }
+
     pub fn autocommit(&self) -> Option<bool> {
         self.autocommit
     }
@@ -480,10 +534,27 @@ impl Class {
     }
 }
 
+fn globs(matcher: &Matcher) -> Vec<String> {
+    match matcher {
+        Matcher::Glob(pattern) => vec![pattern.as_str().to_string()],
+        Matcher::Any(matchers) => matchers.iter().flat_map(globs).collect(),
+        Matcher::Regex(_) => Vec::new(),
+    }
+}
+
 fn inside_git_dir(relative: &Path) -> bool {
     relative
         .components()
         .any(|component| component.as_os_str() == GIT_DIR)
+}
+
+fn repository_own(relative: &Path) -> bool {
+    let mut components = relative.components();
+    let (Some(Component::Normal(name)), None) = (components.next(), components.next()) else {
+        return false;
+    };
+
+    OWN_FILES.iter().any(|own| name == *own)
 }
 
 fn matches_path_or_ancestor(pattern: &Matcher, relative: &Path) -> bool {
@@ -510,6 +581,36 @@ mod tests {
         let config = Config::default();
 
         assert!(!config.is_ignored(Path::new(".config/luadot/config.lua")));
+    }
+
+    #[test]
+    fn the_files_git_and_luadot_keep_at_the_top_are_never_managed() {
+        let config = Config::default();
+
+        for own in OWN_FILES {
+            assert!(config.is_ignored(Path::new(own)), "{own}");
+        }
+        assert!(!config.is_ignored(Path::new(".gitconfig")));
+        assert!(!config.is_ignored(Path::new(".config/luadot/.luarc.json")));
+        assert!(!config.is_ignored(Path::new(".config/git/ignore")));
+    }
+
+    #[test]
+    fn a_placement_gathers_what_the_rules_say_about_a_path() {
+        let config = crate::lua::from_source(
+            r#"ld.rules({ match = ".ssh/**", link = "copy", mode = "0600", owner = "me:wheel" })"#,
+        )
+        .unwrap();
+
+        let key = config.placement(Path::new(".ssh/id_ed25519"));
+        assert_eq!(key.link(), LinkMode::Copy);
+        assert_eq!(key.mode(), Some(0o600));
+        assert_eq!(key.owner(), Some("me:wheel"));
+
+        let other = config.placement(Path::new(".bashrc"));
+        assert_eq!(other.link(), LinkMode::Hard);
+        assert_eq!(other.mode(), None);
+        assert_eq!(other.owner(), None);
     }
 
     #[test]

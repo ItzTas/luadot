@@ -23,8 +23,8 @@ pub fn merged(existing: Option<&str>, library: &str) -> serde_json::Result<Strin
     Ok(text)
 }
 
-pub fn library(home: &Path, config: &Path) -> String {
-    let definitions = config.join(DEFINITIONS_DIR);
+pub fn library(home: &Path, data: &Path) -> String {
+    let definitions = data.join(DEFINITIONS_DIR);
 
     match definitions.strip_prefix(home) {
         Ok(relative) => Path::new(TILDE).join(relative).display().to_string(),
@@ -111,12 +111,12 @@ mod tests {
         let home = Path::new("/home/u");
 
         assert_eq!(
-            library(home, Path::new("/home/u/.config/luadot")),
-            "~/.config/luadot/meta"
+            library(home, Path::new("/home/u/.local/share/luadot")),
+            "~/.local/share/luadot/meta"
         );
         assert_eq!(
-            library(home, Path::new("/etc/xdg/luadot")),
-            "/etc/xdg/luadot/meta"
+            library(home, Path::new("/usr/share/luadot")),
+            "/usr/share/luadot/meta"
         );
     }
 }

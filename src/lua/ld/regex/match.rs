@@ -20,15 +20,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::table::table;
-    use crate::lua::runtime::runtime;
-
-    fn eval(source: &str) -> mlua::Result<String> {
-        let lua = runtime().unwrap();
-        lua.globals().set("regex", table(&lua).unwrap()).unwrap();
-
-        lua.load(source).eval()
-    }
+    use super::super::fixture::eval;
 
     #[test]
     fn yields_the_whole_match_before_its_groups() {

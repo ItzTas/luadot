@@ -14,12 +14,15 @@ pub const OWNER: &str = "owner";
 
 pub const ENCRYPT: &str = "encrypt";
 
+pub const LFS: &str = "lfs";
+
 pub const AUTOCOMMIT: &str = "autocommit";
 
 pub const AUTOPUSH: &str = "autopush";
 
-pub const RULE_KEYS: [&str; 11] = [
-    MATCH, REGEX, LINK, CONFLICT, ON_CHANGE, IGNORE, MODE, OWNER, ENCRYPT, AUTOCOMMIT, AUTOPUSH,
+pub const RULE_KEYS: [&str; 12] = [
+    MATCH, REGEX, LINK, CONFLICT, ON_CHANGE, IGNORE, MODE, OWNER, ENCRYPT, LFS, AUTOCOMMIT,
+    AUTOPUSH,
 ];
 
 #[cfg(feature = "meta")]
@@ -59,11 +62,11 @@ pub const SIGNATURES: [Signature; 1] = [Signature {
         ]),
     }],
     returns: &[],
-    doc: "Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, marks them as encrypted, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.",
+    doc: "Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.",
 }];
 
 #[cfg(feature = "meta")]
-pub const RULE_FIELDS: [Field; 11] = [
+pub const RULE_FIELDS: [Field; 12] = [
     Field {
         name: MATCH,
         kind: PATTERNS,
@@ -77,7 +80,7 @@ pub const RULE_FIELDS: [Field; 11] = [
     Field {
         name: LINK,
         kind: Kind::Optional(&Kind::Named(LINK_MODE_TYPENAME)),
-        doc: "How the matching files are placed. Files under `root/` are always copies, whatever it says.",
+        doc: "How the matching files are placed.",
     },
     Field {
         name: CONFLICT,
@@ -97,17 +100,22 @@ pub const RULE_FIELDS: [Field; 11] = [
     Field {
         name: MODE,
         kind: Kind::Optional(&Kind::String),
-        doc: "Three or four octal digits, the permission bits a matching file under `root/` is placed with. An encrypted file carries `600` without it.",
+        doc: "Three or four octal digits, the permission bits a matching file is placed with, and put back when they drift. An encrypted file carries `600` without it.",
     },
     Field {
         name: OWNER,
         kind: Kind::Optional(&Kind::String),
-        doc: "`\"user\"` or `\"user:group\"`, who owns a matching file under `root/`.",
+        doc: "`\"user\"` or `\"user:group\"`, who owns a matching file once placed, set through `chown`.",
     },
     Field {
         name: ENCRYPT,
         kind: Kind::Optional(&Kind::Boolean),
         doc: "Whether `add` stores the matching files encrypted.",
+    },
+    Field {
+        name: LFS,
+        kind: Kind::Optional(&Kind::Boolean),
+        doc: "Whether the matching files are stored in Git LFS. Needs `match`, since `.gitattributes` has no regular expressions, and does not go with `encrypt`. luadot writes the patterns into the repository's `.gitattributes`, between the `# luadot:lfs` markers.",
     },
     Field {
         name: AUTOCOMMIT,

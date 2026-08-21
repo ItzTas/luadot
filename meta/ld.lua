@@ -78,13 +78,14 @@
 ---@class ld.Rule
 ---@field match? string|string[] A glob relative to the repository root, or a table of them: `*` matches within a segment, `**` crosses segments.
 ---@field regex? string|string[] A regular expression in Rust's syntax, or a table of them, matched against the path as written with no anchoring of its own.
----@field link? ld.LinkMode How the matching files are placed. Files under `root/` are always copies, whatever it says.
+---@field link? ld.LinkMode How the matching files are placed.
 ---@field conflict? ld.Conflict Answer when the system copy differs.
 ---@field on_change? string A command line that runs after `apply` or `tmpl alt` created or replaced one of those files.
 ---@field ignore? boolean Whether the matching files are left unmanaged.
----@field mode? string Three or four octal digits, the permission bits a matching file under `root/` is placed with. An encrypted file carries `600` without it.
----@field owner? string `"user"` or `"user:group"`, who owns a matching file under `root/`.
+---@field mode? string Three or four octal digits, the permission bits a matching file is placed with, and put back when they drift. An encrypted file carries `600` without it.
+---@field owner? string `"user"` or `"user:group"`, who owns a matching file once placed, set through `chown`.
 ---@field encrypt? boolean Whether `add` stores the matching files encrypted.
+---@field lfs? boolean Whether the matching files are stored in Git LFS. Needs `match`, since `.gitattributes` has no regular expressions, and does not go with `encrypt`. luadot writes the patterns into the repository's `.gitattributes`, between the `# luadot:lfs` markers.
 ---@field autocommit? boolean Whether `add` and `rm` commit on their own once one of those files is staged.
 ---@field autopush? boolean Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back.
 
@@ -92,7 +93,7 @@
 ---@class ld.Output
 ---@field content string|ld.File What lands on the system: a string is written, a file is linked. Required.
 ---@field dest? string Where it lands; `~/` and a relative path both start at your home directory. Defaults to the mirrored path.
----@field link? ld.LinkMode How an `ld.alt.file` is placed. Defaults to the configured mode. A destination under `/` is always a copy.
+---@field link? ld.LinkMode How an `ld.alt.file` is placed. Defaults to the configured mode.
 ---@field conflict? ld.Conflict Answer when the destination already holds something else. Defaults to the configured policy.
 ---@field mode? string Three or four octal digits, the permissions of the generated file, `"600"` for one holding a secret. Only for generated content: an `ld.alt.file` keeps its own mode.
 ---@field on_change? string A command line run through `sh -c` after the file is created or replaced, and only then. Wins over an `on_change` rule matching the same path.
@@ -122,23 +123,32 @@
 ---@field type? ld.IdentityType Says outright whether the words name a file or a command.
 ---@field [integer] string The path, or the program and its arguments.
 
----What `diff` prints and which program compares the two sides. Whatever a function returns is written as a line; a function returning nothing writes nothing.
+---A function to run before the command and one after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
+---@class ld.Around
+---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.
+---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.
+
+---What `diff` prints and which program compares the two sides, and a function to run before and after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.DiffOptions
+---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.
 ---@field args? string|string[] Extra arguments for whichever program compares the two sides; right after `diff` when git runs.
+---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.
 ---@field entry? (fun(file: ld.DiffFile): string?)|false Runs for every drifted file, in place of the line the command would have written. `false` silences the line.
 ---@field render? (fun(files: ld.DiffFile[]): string?)|false Runs once, with every drifted file, and takes the whole report over; nothing is compared afterwards. `false` reports the files without diffing them.
 ---@field summary? (fun(counts: ld.DiffCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
 ---@field tool? string|string[] The program comparing the two sides instead of `git diff`, with its arguments; it gets the two sides as two directories, its last two arguments. Exit status 0 or 1 counts as success.
 
----What `status` prints. Whatever a function returns is written as a line; a function returning nothing writes nothing.
+---What `status` prints, and a function to run before and after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.StatusOptions
+---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.
+---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.
 ---@field entry? (fun(file: ld.StatusFile): string?)|false Runs for every inspected file, synced ones included, in place of the line and the sections the command would have written. `false` silences them.
 ---@field render? (fun(files: ld.StatusFile[]): string?)|false Runs once, with every inspected file, and takes the whole report over.
 ---@field summary? (fun(counts: ld.StatusCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
 
 ---A drifted file, as `diff` hands it to `entry` and `render`.
 ---@class ld.DiffFile
----@field path string The path as the repository writes it: `home/.bashrc`.
+---@field path string The path as the repository writes it: `.bashrc`.
 ---@field system string The absolute path of the system copy.
 ---@field side ld.Side `"repository"` for a managed file, `"generated"` for one a template produced.
 ---@field state ld.DiffState Where the file stands.
@@ -147,7 +157,7 @@
 
 ---An inspected file, synced or not, as `status` hands it to `entry` and `render`.
 ---@class ld.StatusFile
----@field path string The path as the repository writes it: `home/.bashrc`.
+---@field path string The path as the repository writes it: `.bashrc`.
 ---@field system string The absolute path of the system copy.
 ---@field side ld.Side `"repository"` for a managed file, `"generated"` for one a template produced.
 ---@field state ld.StatusState Where the file stands.
@@ -190,6 +200,7 @@
 ---@field backup_dir? string Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`.
 ---@field backup_keep? integer How many backups to keep, one or more; the oldest ones are dropped once there are more. Defaults to keeping every one of them.
 ---@field conflict? ld.Conflict Default answer when `apply` finds a differing file already on the system.
+---@field lfs? boolean Whether luadot installs the Git LFS filters and writes the `.gitattributes` the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
 ---@field link? ld.LinkMode Default strategy used to link a managed file.
 ---@field passphrase_warn? boolean Whether passphrase mode says it is weaker than keys. Defaults to `true`.
 ---@field pkg_warn? boolean Whether a call is warned about where it is slow or has no effect. Defaults to `true`.
@@ -227,7 +238,7 @@
 ---@field re table LPeg's `re` module, the table `require("re")` returns, loaded when first reached.
 ld = {}
 
----Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, marks them as encrypted, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.
+---Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.
 ---@param rules ld.Rule|ld.Rule[]
 function ld.rules(rules) end
 
@@ -316,17 +327,97 @@ function ld.crypt.lock(lock) end
 ---@overload fun(...: string): string
 ld.git = {}
 
----Replaces what a command prints. One call per command; a second call replaces only the keys it carries, and the two commands are customized apart.
+---One call per command, taking a table: a function to run `before` and one `after` for every command, and what `status` and `diff` print. A second call replaces only the keys it carries, and every command is customized apart.
 ---@class ld.on
 ld.on = {}
 
----Says what `diff` prints and which program compares the two sides.
+---Runs a function before and after `add`.
+---@param options ld.Around
+function ld.on.add(options) end
+
+---Runs a function before and after `apply`.
+---@param options ld.Around
+function ld.on.apply(options) end
+
+---Runs a function before and after `bootstrap`.
+---@param options ld.Around
+function ld.on.bootstrap(options) end
+
+---Runs a function before and after `cd`.
+---@param options ld.Around
+function ld.on.cd(options) end
+
+---Runs a function before and after `class`.
+---@param options ld.Around
+function ld.on.class(options) end
+
+---Runs a function before and after `clone`.
+---@param options ld.Around
+function ld.on.clone(options) end
+
+---Runs a function before and after `config`.
+---@param options ld.Around
+function ld.on.config(options) end
+
+---Says what `diff` prints and which program compares the two sides, and runs a function before and after it.
 ---@param options ld.DiffOptions
 function ld.on.diff(options) end
 
----Says what `status` prints, line by line.
+---Runs a function before and after `edit`.
+---@param options ld.Around
+function ld.on.edit(options) end
+
+---Runs a function before and after `exec`.
+---@param options ld.Around
+function ld.on.exec(options) end
+
+---Runs a function before and after `git`.
+---@param options ld.Around
+function ld.on.git(options) end
+
+---Runs a function before and after `init`.
+---@param options ld.Around
+function ld.on.init(options) end
+
+---Runs a function before and after `push`.
+---@param options ld.Around
+function ld.on.push(options) end
+
+---Runs a function before and after `rekey`.
+---@param options ld.Around
+function ld.on.rekey(options) end
+
+---Runs a function before and after `restore`.
+---@param options ld.Around
+function ld.on.restore(options) end
+
+---Runs a function before and after `rm`.
+---@param options ld.Around
+function ld.on.rm(options) end
+
+---Runs a function before and after `setup`.
+---@param options ld.Around
+function ld.on.setup(options) end
+
+---Says what `status` prints, line by line, and runs a function before and after it.
 ---@param options ld.StatusOptions
 function ld.on.status(options) end
+
+---Runs a function before and after `sync`.
+---@param options ld.Around
+function ld.on.sync(options) end
+
+---The two `tmpl` actions, customized apart.
+---@class ld.on.tmpl
+ld.on.tmpl = {}
+
+---Runs a function before and after `tmpl alt`.
+---@param options ld.Around
+function ld.on.tmpl.alt(options) end
+
+---Runs a function before and after `tmpl new`.
+---@param options ld.Around
+function ld.on.tmpl.new(options) end
 
 ---The options of a run. Each setter takes one value; called with a table, `ld.opt` sets every key the table carries.
 ---@class ld.opt
@@ -360,6 +451,10 @@ function ld.opt.backup_keep(count) end
 ---Default answer when `apply` finds a differing file already on the system.
 ---@param policy ld.Conflict
 function ld.opt.conflict(policy) end
+
+---Whether luadot installs the Git LFS filters and writes the `.gitattributes` the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
+---@param enabled boolean
+function ld.opt.lfs(enabled) end
 
 ---Default strategy used to link a managed file.
 ---@param mode ld.LinkMode
@@ -480,7 +575,7 @@ function ld.regex.split(text, pattern, limit) end
 ---@return string
 function ld.regex.escape(text) end
 
----The setup scripts of the repository, under `home/.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`, and warns elsewhere.
+---The setup scripts of the repository, under `.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`, and warns elsewhere.
 ---@class ld.setup
 ---@overload fun(name: string)
 ld.setup = {}

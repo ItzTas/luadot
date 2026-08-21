@@ -7,6 +7,8 @@ use clap::{Args, Subcommand};
 use alt::AltArgs;
 use new::NewArgs;
 
+use crate::lua::Command;
+
 #[derive(Debug, Args)]
 pub struct TmplArgs {
     #[command(subcommand)]
@@ -26,6 +28,13 @@ impl TmplArgs {
         match &self.action {
             TmplAction::New(_) => false,
             TmplAction::Alt(args) => args.dry_run,
+        }
+    }
+
+    pub fn command(&self) -> Command {
+        match &self.action {
+            TmplAction::New(_) => Command::TmplNew,
+            TmplAction::Alt(_) => Command::TmplAlt,
         }
     }
 }

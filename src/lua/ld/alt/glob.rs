@@ -57,14 +57,9 @@ fn name(dir: &Path, path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::fixture::template;
     use super::*;
     use crate::lua::{Content, from_template};
-
-    fn template(root: &Path) -> PathBuf {
-        let dir = root.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
 
     fn write(path: &Path, contents: &str) {
         if let Some(parent) = path.parent() {

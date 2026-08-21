@@ -12,7 +12,8 @@ use super::super::constants::{
 pub struct DocArgs {
     #[arg(
         value_name = "CALL",
-        help = "The call to describe, `ld.` optional; a namespace answers with everything under it"
+        required_unless_present = "list",
+        help = "The call to describe, `ld.` optional; a namespace answers with everything under it, `ld` with every call"
     )]
     pub call: Option<String>,
     #[arg(short, long, help = "Print the name of every call, one per line")]

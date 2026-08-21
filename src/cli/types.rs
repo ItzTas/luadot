@@ -15,9 +15,8 @@ use super::commands::{
 machine you clone it to. The configuration is a Lua script instead of a static file, so one \
 repository answers for a laptop, a desktop and a server without a branch or a copy per machine.\n\
 \n\
-The repository mirrors your machines: home/ for your home directory, root/ for the rest of the \
-filesystem. Rules decide how each file is placed: linked hard, symbolic or copied, ignored, \
-encrypted, or generated per machine by a template.",
+The repository mirrors your home directory, path for path. Rules decide how each file is placed: \
+linked hard, symbolic or copied, ignored, encrypted, or generated per machine by a template.",
     arg_required_else_help = true
 )]
 pub struct Cli {

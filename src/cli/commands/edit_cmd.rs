@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn a_template_directory_is_edited_through_its_script() {
         let repo = tempfile::tempdir().unwrap();
-        let template = repo.path().join("home/.zshrc.luadot");
+        let template = repo.path().join(".zshrc.luadot");
         std::fs::create_dir_all(&template).unwrap();
 
         assert_eq!(
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn a_standalone_template_is_edited_as_it_stands() {
         let repo = tempfile::tempdir().unwrap();
-        let template = repo.path().join("home/.zprofile.luadot");
+        let template = repo.path().join(".zprofile.luadot");
         std::fs::create_dir_all(template.parent().unwrap()).unwrap();
         std::fs::write(&template, "export HOST=1\n").unwrap();
 
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn a_managed_file_is_edited_as_it_stands() {
         let repo = tempfile::tempdir().unwrap();
-        let file = repo.path().join("home/.vimrc");
+        let file = repo.path().join(".vimrc");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "set number\n").unwrap();
 

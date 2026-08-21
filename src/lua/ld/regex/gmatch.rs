@@ -31,15 +31,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::table::table;
-    use crate::lua::runtime::runtime;
-
-    fn eval(source: &str) -> mlua::Result<String> {
-        let lua = runtime().unwrap();
-        lua.globals().set("regex", table(&lua).unwrap()).unwrap();
-
-        lua.load(source).eval()
-    }
+    use super::super::fixture::eval;
 
     #[test]
     fn carries_the_groups_of_each_match() {

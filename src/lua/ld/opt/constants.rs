@@ -4,7 +4,7 @@ use super::super::constants::{CALL_METHOD, CONFLICT_TYPENAME, LINK_MODE_TYPENAME
 use super::super::signature::{Kind, Param, Signature};
 use super::super::table::Setter;
 use super::{
-    autocommit, autopush, backup, backup_age, backup_dir, backup_keep, conflict, link,
+    autocommit, autopush, backup, backup_age, backup_dir, backup_keep, conflict, lfs, link,
     passphrase_warn, pkg_warn, repo_dir,
 };
 
@@ -26,6 +26,8 @@ pub const BACKUP_KEEP: &str = "backup_keep";
 
 pub const CONFLICT: &str = "conflict";
 
+pub const LFS: &str = "lfs";
+
 pub const LINK: &str = "link";
 
 pub const PASSPHRASE_WARN: &str = "passphrase_warn";
@@ -34,7 +36,7 @@ pub const PKG_WARN: &str = "pkg_warn";
 
 pub const REPO_DIR: &str = "repo_dir";
 
-pub const SETTERS: [(&str, Setter); 11] = [
+pub const SETTERS: [(&str, Setter); 12] = [
     (AUTOCOMMIT, autocommit::set),
     (AUTOPUSH, autopush::set),
     (BACKUP, backup::set),
@@ -42,6 +44,7 @@ pub const SETTERS: [(&str, Setter); 11] = [
     (BACKUP_DIR, backup_dir::set),
     (BACKUP_KEEP, backup_keep::set),
     (CONFLICT, conflict::set),
+    (LFS, lfs::set),
     (LINK, link::set),
     (PASSPHRASE_WARN, passphrase_warn::set),
     (PKG_WARN, pkg_warn::set),
@@ -84,7 +87,7 @@ pub const CALL: Signature = Signature {
 };
 
 #[cfg(feature = "meta")]
-pub const SIGNATURES: [Signature; 11] = [
+pub const SIGNATURES: [Signature; 12] = [
     Signature {
         name: AUTOCOMMIT,
         params: &[ENABLED],
@@ -135,6 +138,12 @@ pub const SIGNATURES: [Signature; 11] = [
         }],
         returns: &[],
         doc: "Default answer when `apply` finds a differing file already on the system.",
+    },
+    Signature {
+        name: LFS,
+        params: &[ENABLED],
+        returns: &[],
+        doc: "Whether luadot installs the Git LFS filters and writes the `.gitattributes` the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.",
     },
     Signature {
         name: LINK,

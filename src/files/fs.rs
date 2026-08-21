@@ -51,6 +51,10 @@ pub fn link_target(command: &str, source: &Path) -> Result<(Metadata, Option<Pat
     Ok((meta, Some(target)))
 }
 
+pub fn read_contents(command: &str, path: &Path) -> Result<Vec<u8>> {
+    std::fs::read(path).with_context(|| format!("{command}: failed to read {}", path.display()))
+}
+
 pub fn regular_file(path: &Path) -> Option<Metadata> {
     let meta = std::fs::symlink_metadata(path).ok()?;
 
@@ -59,6 +63,16 @@ pub fn regular_file(path: &Path) -> Option<Metadata> {
 
 pub fn mode_bits(meta: &Metadata) -> u32 {
     meta.permissions().mode() & MODE_BITS
+}
+
+pub fn effective_mode(command: &str, source: &Path, mode: Option<u32>) -> Result<u32> {
+    if let Some(mode) = mode {
+        return Ok(mode);
+    }
+
+    let meta = std::fs::metadata(source)
+        .with_context(|| format!("{command}: failed to inspect {}", source.display()))?;
+    Ok(mode_bits(&meta))
 }
 
 pub fn write_mode(command: &str, dest: &Path, contents: &[u8], mode: u32) -> Result<()> {
@@ -76,4 +90,25 @@ pub fn write_mode(command: &str, dest: &Path, contents: &[u8], mode: u32) -> Res
 
     std::fs::set_permissions(dest, Permissions::from_mode(mode))
         .with_context(|| format!("{command}: failed to set the mode of {}", dest.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_effective_mode_is_the_one_given_or_the_bits_of_the_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        std::fs::write(&source, "x").unwrap();
+        std::fs::set_permissions(&source, Permissions::from_mode(0o640)).unwrap();
+
+        assert_eq!(effective_mode("diff", &source, Some(0o600)).unwrap(), 0o600);
+        assert_eq!(effective_mode("diff", &source, None).unwrap(), 0o640);
+
+        let err = effective_mode("diff", &dir.path().join("missing"), None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("diff: failed to inspect"));
+    }
 }

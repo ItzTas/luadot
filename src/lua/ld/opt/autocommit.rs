@@ -20,7 +20,7 @@ mod tests {
     fn turns_the_commit_on_for_every_file() {
         let config = from_source("ld.opt.autocommit(true)").unwrap();
 
-        assert!(config.autocommit(Path::new("home/.bashrc")));
-        assert!(!config.autopush(Path::new("home/.bashrc")));
+        assert!(config.autocommit(Path::new(".bashrc")));
+        assert!(!config.autopush(Path::new(".bashrc")));
     }
 }
