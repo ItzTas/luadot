@@ -1689,6 +1689,39 @@ fn every_command_that_resolves_a_template_lets_it_reach_the_configuration() {
 }
 
 #[test]
+fn meta_install_writes_the_definitions_and_the_settings_where_the_configuration_is_edited() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(
+        &repo.join(".luarc.json"),
+        "{\n  \"diagnostics.globals\": [\"vim\"]\n}\n",
+    );
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args(["meta", "install"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("merged"));
+
+    let definitions = read(&home.join(".config/luadot/meta/ld.lua"));
+    assert!(definitions.starts_with("---@meta\n"));
+    assert_eq!(read(&repo.join("meta/ld.lua")), definitions);
+    assert!(read(&home.join(".config/luadot/.luarc.json")).contains("\"workspace.library\""));
+
+    let merged = read(&repo.join(".luarc.json"));
+    assert!(merged.contains("\"diagnostics.globals\""));
+    assert!(merged.contains("\"meta\""));
+
+    luadot(&home)
+        .arg("meta")
+        .assert()
+        .success()
+        .stdout(predicate::str::diff(definitions));
+}
+
+#[test]
 fn an_option_a_template_sets_reaches_the_file_that_template_produces() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
