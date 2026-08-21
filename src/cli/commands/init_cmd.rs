@@ -30,6 +30,7 @@ pub fn init_cmd(args: InitArgs) -> Result<()> {
     state::save(&current)?;
 
     output::note(format!("created {}", dir.display()));
+    utils::offer_definitions("init", &dir);
 
     Ok(())
 }

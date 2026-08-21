@@ -38,6 +38,7 @@ pub fn clone_cmd(args: CloneArgs) -> Result<()> {
     }
 
     output::note(format!("cloned {}", dir.display()));
+    utils::offer_definitions("clone", &dir);
 
     offer_bootstrap(&dir)
 }
