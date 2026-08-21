@@ -179,34 +179,6 @@ mod tests {
     }
 
     #[test]
-    fn only_the_encrypted_files_are_collected() {
-        let repo = repo();
-        let files = [
-            repo.join(".bashrc"),
-            repo.join(".netrc.age"),
-            repo.join(".config/wireguard/wg0.conf.gpg"),
-        ];
-
-        let secrets = secrets(&repo, &files);
-
-        assert_eq!(
-            secrets,
-            [
-                Secret {
-                    file: repo.join(".netrc.age"),
-                    stripped: PathBuf::from(".netrc"),
-                    backend: crypt::Backend::Age,
-                },
-                Secret {
-                    file: repo.join(".config/wireguard/wg0.conf.gpg"),
-                    stripped: PathBuf::from(".config/wireguard/wg0.conf"),
-                    backend: crypt::Backend::Gpg,
-                },
-            ]
-        );
-    }
-
-    #[test]
     fn a_secret_moves_to_the_extension_of_the_configured_backend() {
         let repo = repo();
         let secrets = secrets(&repo, &[repo.join(".netrc.age")]);

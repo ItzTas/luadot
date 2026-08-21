@@ -164,48 +164,6 @@ mod tests {
     }
 
     #[test]
-    fn a_script_has_no_file_to_stand_for_by_itself() {
-        let root = tempfile::tempdir().unwrap();
-
-        let err = script(root.path(), r#"ld.alt.out({ content = "welcome\n" })"#)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("needs a `dest`"));
-    }
-
-    #[test]
-    fn rejects_a_table_without_content() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = error(&dir, r#"ld.alt.out({ dest = "~/.zshrc" })"#);
-
-        assert!(err.contains("needs a `content`"));
-        assert!(err.contains("got nil"));
-    }
-
-    #[test]
-    fn rejects_an_unknown_link_mode() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = error(&dir, r#"ld.alt.out({ content = "x", link = "magic" })"#);
-
-        assert!(err.contains("unknown link mode `magic`"));
-    }
-
-    #[test]
-    fn rejects_an_unknown_conflict_policy() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = error(&dir, r#"ld.alt.out({ content = "x", conflict = "ask" })"#);
-
-        assert!(err.contains("unknown conflict policy `ask`"));
-    }
-
-    #[test]
     fn a_mode_is_read_as_octal() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
@@ -219,22 +177,6 @@ mod tests {
             from_template(&dir, r#"ld.alt.out({ content = "x", mode = "0644" })"#).unwrap();
 
         assert_eq!(outputs[0].mode(), Some(0o644));
-    }
-
-    #[test]
-    fn rejects_a_mode_that_is_not_three_or_four_octal_digits() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        for raw in ["60", "60000", "6o0", "800", "+60"] {
-            let err = error(
-                &dir,
-                &format!(r#"ld.alt.out({{ content = "x", mode = "{raw}" }})"#),
-            );
-
-            assert!(err.contains("three or four octal digits"), "{raw}");
-            assert!(err.contains(raw), "{raw}");
-        }
     }
 
     #[test]

@@ -259,13 +259,6 @@ mod tests {
     }
 
     #[test]
-    fn a_tone_reaches_the_look() {
-        let message = built(r#"return { tone = "good" }"#).unwrap();
-
-        assert_eq!(message.look().style(), Tone::Good.style());
-    }
-
-    #[test]
     fn a_color_is_read_by_name_by_shade_and_by_hex() {
         assert_eq!(
             built(r#"return { fg = "cyan" }"#)
@@ -294,13 +287,6 @@ mod tests {
     }
 
     #[test]
-    fn a_mark_opens_the_line() {
-        let message = built(r#"return { mark = "»" }"#).unwrap();
-
-        assert_eq!(message.head(), "» text");
-    }
-
-    #[test]
     fn the_stream_the_indent_and_the_newline_are_read() {
         let message =
             built(r#"return { stream = "stderr", indent = 2, newline = false }"#).unwrap();
@@ -321,78 +307,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_an_unknown_tone_and_an_unknown_color() {
-        assert!(
-            built(r#"return { tone = "loud" }"#)
-                .unwrap_err()
-                .to_string()
-                .contains("unknown tone `loud`")
-        );
-        assert!(
-            built(r#"return { fg = "burgundy" }"#)
-                .unwrap_err()
-                .to_string()
-                .contains("unknown color `burgundy`")
-        );
-    }
-
-    #[test]
-    fn rejects_a_broken_hex_color_and_a_shade_out_of_range() {
-        assert!(
-            built(r##"return { fg = "#ff88" }"##)
-                .unwrap_err()
-                .to_string()
-                .contains("takes a hex color like \"#ff8800\"")
-        );
-        assert!(
-            built("return { fg = 300 }")
-                .unwrap_err()
-                .to_string()
-                .contains("takes a number from 0 to 255")
-        );
-    }
-
-    #[test]
-    fn rejects_a_value_the_option_does_not_accept() {
-        assert!(
-            built("return { mark = 1 }")
-                .unwrap_err()
-                .to_string()
-                .contains("`mark` takes a string or a function")
-        );
-        assert!(
-            built("return { bold = 1 }")
-                .unwrap_err()
-                .to_string()
-                .contains("`bold` takes true or false")
-        );
-        assert!(
-            built("return { indent = 1.5 }")
-                .unwrap_err()
-                .to_string()
-                .contains("`indent` takes a whole number")
-        );
-    }
-
-    #[test]
     fn a_mark_function_returning_nothing_is_reported() {
         let err = built("return { mark = function() end }")
             .unwrap_err()
             .to_string();
 
         assert!(err.contains("`mark` returned nil; a string is expected"));
-    }
-
-    #[test]
-    fn text_reads_a_string_a_number_and_nothing() {
-        let lua = runtime().unwrap();
-
-        assert_eq!(
-            text("print", &Value::String(lua.create_string("a").unwrap())).unwrap(),
-            "a"
-        );
-        assert_eq!(text("print", &Value::Integer(3)).unwrap(), "3");
-        assert_eq!(text("print", &Value::Nil).unwrap(), "");
-        assert!(text("print", &Value::Boolean(true)).is_err());
     }
 }

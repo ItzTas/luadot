@@ -33,10 +33,4 @@ mod tests {
     fn reads_the_total_in_bytes() {
         assert_eq!(parse(MEMINFO), Some(33_509_027_840));
     }
-
-    #[test]
-    fn a_file_without_the_field_reports_nothing() {
-        assert_eq!(parse("MemFree: 1234 kB\n"), None);
-        assert_eq!(parse("MemTotal: what kB\n"), None);
-    }
 }

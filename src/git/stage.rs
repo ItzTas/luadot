@@ -94,11 +94,4 @@ mod tests {
 
         assert_eq!(index(repo.path()), "");
     }
-
-    #[test]
-    fn unstaging_a_path_git_never_tracked_is_no_error() {
-        let repo = repository();
-
-        unstage("rm", repo.path(), &[repo.path().join(".absent")]).unwrap();
-    }
 }

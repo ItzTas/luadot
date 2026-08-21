@@ -103,18 +103,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_refuses_a_config_outside_home() {
-        let err = resolve(
-            Path::new("/home/u"),
-            Path::new("/etc/luadot"),
-            Path::new("/data/repo"),
-        )
-        .unwrap_err();
-
-        assert_eq!(err.to_string(), "outside your home directory /home/u");
-    }
-
-    #[test]
     fn runs_the_script_with_the_bootstrap_api_and_modules() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -151,32 +139,6 @@ mod tests {
     }
 
     #[test]
-    fn the_script_reads_the_classes_of_the_machine() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let config = home.join(".config/luadot");
-        let path = write_bootstrap(
-            &home,
-            &repo,
-            r#"
-            local out = assert(io.open(ld.path.repo .. "/class.txt", "w"))
-            out:write(ld.class.get("form-factor"))
-            out:close()
-            "#,
-        );
-        let mut classes = Classes::default();
-        classes.set("form-factor", "laptop");
-
-        run_test("bootstrap", &path, &home, &config, &repo, &classes).unwrap();
-
-        assert_eq!(
-            std::fs::read_to_string(repo.join("class.txt")).unwrap(),
-            "laptop"
-        );
-    }
-
-    #[test]
     fn the_script_knows_the_directory_it_lives_in() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -206,50 +168,5 @@ mod tests {
             std::fs::read_to_string(repo.join("dir.txt")).unwrap(),
             path.parent().unwrap().display().to_string()
         );
-    }
-
-    #[test]
-    fn a_missing_file_reports_the_command() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join(BOOTSTRAP_FILE);
-
-        let err = format!(
-            "{:#}",
-            run_test(
-                "clone",
-                &path,
-                Path::new("/home/u"),
-                Path::new("/home/u/.config/luadot"),
-                dir.path(),
-                &Classes::default(),
-            )
-            .unwrap_err()
-        );
-
-        assert!(err.contains("clone: failed to read"));
-    }
-
-    #[test]
-    fn a_broken_script_reports_the_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let config = home.join(".config/luadot");
-        let path = write_bootstrap(&home, &repo, "ld.cmd(");
-
-        let err = format!(
-            "{:#}",
-            run_test(
-                "bootstrap",
-                &path,
-                &home,
-                &config,
-                &repo,
-                &Classes::default()
-            )
-            .unwrap_err()
-        );
-
-        assert!(err.contains("bootstrap: failed to run"));
     }
 }

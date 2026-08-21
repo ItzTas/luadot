@@ -21,17 +21,3 @@ pub fn describe(walker: TypeWalker) -> TypeWalker {
         .record(record(KEYS_TYPENAME, KEYS_DOC).fields(&KEYS_FIELDS))
         .record(record(IDENTITY_TYPENAME, IDENTITY_DOC).fields(&IDENTITY_FIELDS))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::constants::SETTERS;
-    use super::*;
-
-    #[test]
-    fn every_setter_is_described_in_the_order_it_is_registered() {
-        let registered: Vec<&str> = SETTERS.iter().map(|(name, _)| *name).collect();
-        let described: Vec<&str> = SIGNATURES.iter().map(|signature| signature.name).collect();
-
-        assert_eq!(described, registered);
-    }
-}

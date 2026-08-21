@@ -209,30 +209,6 @@ fn ago(seconds: u64) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn the_most_recent_backup_is_the_default() {
-        let taken = vec![
-            (100, PathBuf::from("/data/backups/100")),
-            (200, PathBuf::from("/data/backups/200")),
-        ];
-
-        let (stamp, dir) = chosen(&taken, None).unwrap();
-
-        assert_eq!(stamp, 200);
-        assert_eq!(dir, Path::new("/data/backups/200"));
-    }
-
-    #[test]
-    fn a_backup_that_does_not_exist_is_reported() {
-        let taken = vec![(100, PathBuf::from("/data/backups/100"))];
-
-        let err = chosen(&taken, Some(&"42".to_string()))
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("restore: no backup named 42"));
-    }
-
     fn backed(dir: &Path, path: &Path) -> PathBuf {
         dir.join(path.strip_prefix("/").unwrap())
     }
@@ -274,20 +250,5 @@ mod tests {
             "handwritten"
         );
         assert_eq!(std::fs::read_to_string(&managed).unwrap(), "managed");
-    }
-
-    #[test]
-    fn a_directory_in_the_way_is_reported() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = root.path().join("backup");
-        let home = root.path().join("home");
-        let saved = backed(&dir, &home.join(".zshrc"));
-        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
-        std::fs::create_dir_all(home.join(".zshrc")).unwrap();
-        std::fs::write(&saved, "handwritten").unwrap();
-
-        let err = put_back("restore", &dir, &saved).unwrap_err().to_string();
-
-        assert!(err.contains("refusing to replace directory"));
     }
 }

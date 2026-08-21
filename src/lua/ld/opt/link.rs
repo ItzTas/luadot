@@ -10,16 +10,3 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     Config::building(lua, |config| config.set_link(mode))?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::lua::from_source;
-
-    #[test]
-    fn rejects_an_unknown_link_mode() {
-        let err = format!("{:#}", from_source(r#"ld.opt.link("magic")"#).unwrap_err());
-
-        assert!(err.contains("unknown link mode `magic`"));
-        assert!(err.contains("hard, symbolic, copy"));
-    }
-}

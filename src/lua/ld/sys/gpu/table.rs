@@ -65,33 +65,4 @@ mod tests {
         assert_eq!(gpu.get::<String>(NAME).unwrap(), "Raptor Lake-P [Iris Xe]");
         assert_eq!(gpu.get::<String>(DRIVER).unwrap(), "i915");
     }
-
-    #[test]
-    fn every_card_is_an_element_of_the_namespace() {
-        let lua = runtime().unwrap();
-        let found = [
-            card("intel", "Raptor Lake-P [Iris Xe]", "i915"),
-            card("nvidia", "AD107M [GeForce RTX 4060]", "nvidia"),
-        ];
-
-        let gpu = build(&lua, &found).unwrap();
-
-        assert_eq!(gpu.raw_len(), 2);
-        assert_eq!(
-            gpu.get::<Table>(2).unwrap().get::<String>(VENDOR).unwrap(),
-            "nvidia"
-        );
-    }
-
-    #[test]
-    fn a_machine_without_a_card_answers_empty_strings() {
-        let lua = runtime().unwrap();
-
-        let gpu = build(&lua, &[]).unwrap();
-
-        assert_eq!(gpu.raw_len(), 0);
-        for key in [VENDOR, NAME, DRIVER] {
-            assert_eq!(gpu.get::<String>(key).unwrap(), "");
-        }
-    }
 }

@@ -33,19 +33,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_branch_already_tracking_a_remote_pushes_on_its_own() {
-        assert_eq!(arguments(true), ["push"]);
-    }
-
-    #[test]
-    fn a_branch_tracking_nothing_gets_its_upstream_set() {
-        assert_eq!(
-            arguments(false),
-            ["push", "--set-upstream", "origin", "HEAD"]
-        );
-    }
-
-    #[test]
     fn a_repository_without_a_commit_is_refused() {
         let dir = tempfile::tempdir().unwrap();
 

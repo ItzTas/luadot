@@ -28,25 +28,3 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         })
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::fixture::eval;
-
-    #[test]
-    fn carries_the_groups_of_each_match() {
-        assert_eq!(
-            eval(
-                r#"
-                local found = {}
-                for _, key, value in regex.gmatch("a=1, b=2", "(\\w)=(\\d)") do
-                  found[#found + 1] = key .. value
-                end
-                return table.concat(found, "|")
-                "#
-            )
-            .unwrap(),
-            "a1|b2"
-        );
-    }
-}

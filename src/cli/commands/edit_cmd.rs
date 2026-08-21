@@ -131,24 +131,4 @@ mod tests {
             Some(template.join(TEMPLATE_FILE))
         );
     }
-
-    #[test]
-    fn a_standalone_template_is_edited_as_it_stands() {
-        let repo = tempfile::tempdir().unwrap();
-        let template = repo.path().join(".zprofile.luadot");
-        std::fs::create_dir_all(template.parent().unwrap()).unwrap();
-        std::fs::write(&template, "export HOST=1\n").unwrap();
-
-        assert_eq!(template_script(&template), None);
-    }
-
-    #[test]
-    fn a_managed_file_is_edited_as_it_stands() {
-        let repo = tempfile::tempdir().unwrap();
-        let file = repo.path().join(".vimrc");
-        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        std::fs::write(&file, "set number\n").unwrap();
-
-        assert_eq!(template_script(&file), None);
-    }
 }

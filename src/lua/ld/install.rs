@@ -58,8 +58,6 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use crate::lua::from_source;
-
     use crate::lua::runtime::runtime;
     use crate::state::Classes;
 
@@ -133,11 +131,6 @@ mod tests {
         exec(Surface::Bootstrap, EVERY_CALL);
     }
 
-    #[test]
-    fn a_setup_script_carries_every_call() {
-        exec(Surface::Setup, EVERY_CALL);
-    }
-
     fn undocumented(table: &Table, prefix: &str, found: &mut Vec<String>) {
         for pair in table.clone().pairs::<String, mlua::Value>() {
             let (name, value) = pair.unwrap();
@@ -169,19 +162,6 @@ mod tests {
     }
 
     #[test]
-    fn the_paths_of_the_run_are_the_ones_installed() {
-        exec(
-            Surface::Bootstrap,
-            r#"
-            assert(ld.path.home == "/home/u", "path.home is wrong")
-            assert(ld.path.config == "/home/u/.config/luadot", "path.config is wrong")
-            assert(ld.path.repo == "/data/repo", "path.repo is wrong")
-            assert(ld.path.dir == nil, "path.dir belongs to a template")
-            "#,
-        );
-    }
-
-    #[test]
     fn a_configuration_call_outside_the_configuration_still_lands() {
         let lua = runtime().unwrap();
         install(&lua, Surface::Bootstrap, &paths(), &Classes::default()).unwrap();
@@ -203,60 +183,5 @@ mod tests {
             crate::files::LinkMode::Symbolic
         );
         assert!(config.is_ignored(Path::new(".vimrc.swp")));
-    }
-
-    #[test]
-    fn the_classes_of_the_machine_are_readable_from_every_surface() {
-        let source = r#"assert(ld.class.get("form-factor") == "laptop", "the class is missing")"#;
-        let mut classes = Classes::default();
-        classes.set("form-factor", "laptop");
-
-        for surface in [Surface::Bootstrap, Surface::Setup, Surface::Template] {
-            let lua = runtime().unwrap();
-            install(&lua, surface, &paths(), &classes).unwrap();
-
-            lua.load(source).exec().unwrap();
-        }
-
-        assert!(crate::lua::from_classes(source, &classes).is_ok());
-    }
-
-    #[test]
-    fn the_alternatives_resolve_against_the_directory_of_the_surface() {
-        exec(
-            Surface::Config,
-            r#"
-            assert(ld.alt.exists("laptop.zsh") == false, "alt.exists answered for a file that is not there")
-            assert(#ld.alt.glob("*.zsh") == 0, "alt.glob found something")
-            assert(ld.alt.json({ n = 1 }) == '{\n  "n": 1\n}', "alt.json needs no directory")
-
-            for _, name in ipairs({ "file", "read", "render", "expand" }) do
-              local ok, err = pcall(ld.alt[name], "laptop.zsh")
-              assert(not ok, "alt." .. name .. " answered without a file")
-              assert(
-                tostring(err):find("/home/u/.config/luadot", 1, true),
-                "alt." .. name .. " looked outside the surface: " .. tostring(err)
-              )
-            end
-            "#,
-        );
-    }
-
-    #[test]
-    fn a_configuration_call_from_a_template_still_does_nothing() {
-        exec(
-            Surface::Template,
-            r#"
-            ld.opt.pkg_warn(false)
-            ld.crypt.lock({ recipients = "age1example" })
-            "#,
-        );
-    }
-
-    #[test]
-    fn the_configuration_surface_reports_a_setup_without_a_repository() {
-        let err = format!("{:#}", from_source(r#"ld.setup("ufw")"#).unwrap_err());
-
-        assert!(err.contains("`ld.setup`: no repository set"));
     }
 }

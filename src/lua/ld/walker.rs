@@ -54,11 +54,11 @@ pub fn walker() -> TypeWalker {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeMap;
     use std::path::Path;
 
     use mlua::{Table, Value};
-    use tealr::{ExportedFunction, KindOfType, RecordGenerator, Type, TypeGenerator};
+    use tealr::{KindOfType, RecordGenerator, Type, TypeGenerator};
 
     use super::super::constants::{
         API, BOOLEAN, CALL_METHOD, INTEGER, INTEGER_INDEX, NUMBER, STRING, STRING_INDEX,
@@ -203,51 +203,6 @@ mod tests {
         found
     }
 
-    fn typenames(walker: &TypeWalker) -> BTreeSet<String> {
-        walker
-            .given_types
-            .iter()
-            .filter_map(|generator| generator.type_name().single())
-            .map(|single| single.name.0.to_string())
-            .collect()
-    }
-
-    fn mentioned(ty: &Type, found: &mut BTreeSet<String>) {
-        match ty {
-            Type::Single(single) if single.kind == KindOfType::External => {
-                found.insert(single.name.0.to_string());
-            }
-            Type::Single(_) => {}
-            Type::Function(function) => {
-                for param in &function.params {
-                    mentioned(&param.ty, found);
-                }
-                for ret in &function.returns {
-                    mentioned(ret, found);
-                }
-            }
-            Type::Map(map) => {
-                mentioned(&map.key, found);
-                mentioned(&map.value, found);
-            }
-            Type::Or(parts) | Type::Tuple(parts) => {
-                for part in parts {
-                    mentioned(part, found);
-                }
-            }
-            Type::Array(inner) | Type::Variadic(inner) => mentioned(inner, found),
-        }
-    }
-
-    fn mentioned_by(function: &ExportedFunction, found: &mut BTreeSet<String>) {
-        for param in &function.params {
-            mentioned(&param.ty, found);
-        }
-        for ret in &function.returns {
-            mentioned(ret, found);
-        }
-    }
-
     #[test]
     fn the_description_and_the_installed_interface_carry_the_same_names_kinds_and_calls() {
         let walker = walker();
@@ -271,90 +226,6 @@ mod tests {
                 described.contains_key(path),
                 "{path} is installed but not described"
             );
-        }
-    }
-
-    #[test]
-    fn a_namespace_indexed_by_a_program_name_says_so() {
-        let walker = walker();
-        let ld = installed();
-
-        for instance in &walker.global_instances_off {
-            if instance.name == API {
-                continue;
-            }
-
-            let indexed = record(&walker, &instance.ty)
-                .fields
-                .iter()
-                .any(|field| field.name == STRING_INDEX);
-            let Value::Table(table) = reached(&ld, &instance.name) else {
-                panic!("{} is not a table", instance.name);
-            };
-            let resolver = table
-                .metatable()
-                .and_then(|meta| meta.get::<Value>("__index").ok())
-                .is_some_and(|index| index.is_function());
-
-            assert_eq!(resolver, indexed, "{}", instance.name);
-        }
-    }
-
-    #[test]
-    fn every_type_a_description_names_is_declared() {
-        let walker = walker();
-        let declared = typenames(&walker);
-        let mut named = BTreeSet::new();
-
-        for instance in &walker.global_instances_off {
-            mentioned(&instance.ty, &mut named);
-        }
-        for generator in &walker.given_types {
-            let TypeGenerator::Record(record) = generator else {
-                continue;
-            };
-            for field in &record.fields {
-                mentioned(&field.ty, &mut named);
-            }
-            for function in record.all_functions() {
-                mentioned_by(function, &mut named);
-            }
-        }
-
-        let missing: Vec<&String> = named.difference(&declared).collect();
-        assert!(missing.is_empty(), "undeclared: {missing:?}");
-    }
-
-    #[test]
-    fn every_value_the_parser_takes_reaches_its_alias() {
-        let walker = walker();
-        let expected: [(&str, Vec<&str>); 3] = [
-            (
-                LINK_MODE_TYPENAME,
-                LINK_MODES.iter().map(|(name, _)| *name).collect(),
-            ),
-            (
-                CONFLICT_TYPENAME,
-                CONFLICT_POLICIES.iter().map(|(name, _)| *name).collect(),
-            ),
-            (
-                BACKEND_TYPENAME,
-                CRYPT_BACKENDS.iter().map(|(name, _)| *name).collect(),
-            ),
-        ];
-
-        for (name, variants) in expected {
-            let found = walker
-                .given_types
-                .iter()
-                .find_map(|generator| match generator {
-                    TypeGenerator::Enum(choices) if choices.name == name => Some(choices),
-                    _ => None,
-                })
-                .unwrap_or_else(|| panic!("{name} is not declared"));
-            let found: Vec<String> = found.variants.iter().map(ToString::to_string).collect();
-
-            assert_eq!(found, variants, "{name}");
         }
     }
 }

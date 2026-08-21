@@ -11,9 +11,9 @@ mod types;
 pub use around::{Around, Moment};
 pub use custom::{Call, Custom};
 pub use diff::{Diff, DiffCounts, DiffFile, DiffState, Tool};
-pub use load::{config_path, load_config};
 #[cfg(test)]
-pub use load::{from_classes, from_source};
+pub use load::from_source;
+pub use load::{config_path, load_config};
 pub use report::Report;
 pub use status::{StatusCounts, StatusFile};
 pub use types::{Class, Config, Matcher, Rule, Shared};

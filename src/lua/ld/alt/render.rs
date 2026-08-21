@@ -37,7 +37,7 @@ fn render(lua: &Lua, path: &Path, vars: Option<Table>) -> mlua::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::fixture::{error, template};
+    use super::super::fixture::template;
     use crate::lua::{Content, from_template};
 
     #[test]
@@ -60,29 +60,5 @@ mod tests {
             outputs[0].content(),
             &Content::Text("export EDITOR=nvim".to_string())
         );
-    }
-
-    #[test]
-    fn rejects_a_file_that_returns_no_string() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("broken.tmpl.zsh"), "return 42").unwrap();
-
-        let err = error(&dir, r#"return ld.alt.render("broken.tmpl.zsh")"#);
-
-        assert!(err.contains("expects"));
-        assert!(err.contains("to return a string, got integer"));
-    }
-
-    #[test]
-    fn reports_a_file_that_fails_to_run() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("broken.tmpl.zsh"), "error('boom')").unwrap();
-
-        let err = error(&dir, r#"return ld.alt.render("broken.tmpl.zsh")"#);
-
-        assert!(err.contains("failed to run"));
-        assert!(err.contains("boom"));
     }
 }

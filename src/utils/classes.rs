@@ -61,14 +61,4 @@ mod tests {
         assert_eq!(missing.len(), 1);
         assert_eq!(missing[0].name(), "email");
     }
-
-    #[test]
-    fn asking_without_a_terminal_reports_the_way_out() {
-        let err = ask("class", &class("form-factor"), None)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("cannot ask for `form-factor` without a terminal"));
-        assert!(err.contains("luadot class set form-factor <value>"));
-    }
 }

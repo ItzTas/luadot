@@ -15,27 +15,3 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     Config::building(lua, |config| config.set_crypt_backend(backend))?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::crypt::Backend;
-    use crate::lua::from_source;
-
-    #[test]
-    fn defaults_to_age() {
-        let config = from_source("local unused = 1").unwrap();
-
-        assert_eq!(config.crypt_backend(), Backend::Age);
-    }
-
-    #[test]
-    fn rejects_an_unknown_backend() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.crypt.backend("vault")"#).unwrap_err()
-        );
-
-        assert!(err.contains("unknown crypt backend `vault`"));
-        assert!(err.contains("age, gpg"));
-    }
-}

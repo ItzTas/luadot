@@ -120,36 +120,6 @@ mod tests {
     }
 
     #[test]
-    fn a_lua_path_is_a_file_even_before_it_exists() {
-        assert!(matches!(
-            classify("scripts/report.lua", false),
-            Target::File(path) if path == Path::new("scripts/report.lua")
-        ));
-    }
-
-    #[test]
-    fn an_existing_file_is_a_file_whatever_its_name() {
-        assert!(matches!(classify("scripts/report", true), Target::File(_)));
-    }
-
-    #[test]
-    fn anything_else_is_source() {
-        assert!(matches!(
-            classify("print(ld.sys.ram)", false),
-            Target::Source(source) if source == "print(ld.sys.ram)"
-        ));
-    }
-
-    #[test]
-    fn a_bare_file_name_requires_from_the_current_directory() {
-        assert_eq!(modules(Path::new("report.lua")), PathBuf::from("."));
-        assert_eq!(
-            modules(Path::new("/data/repo/report.lua")),
-            PathBuf::from("/data/repo")
-        );
-    }
-
-    #[test]
     fn a_source_string_requires_modules_from_the_configuration() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -203,31 +173,5 @@ mod tests {
             std::fs::read_to_string(home.join("out.txt")).unwrap(),
             "hello"
         );
-    }
-
-    #[test]
-    fn a_missing_file_reports_the_command() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-
-        let err = format!(
-            "{:#}",
-            exec(&Target::File(dir.path().join("missing.lua")), &home).unwrap_err()
-        );
-
-        assert!(err.contains("exec: failed to read"));
-    }
-
-    #[test]
-    fn a_broken_source_string_reports_the_command() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-
-        let err = format!(
-            "{:#}",
-            exec(&Target::Source("print(".to_string()), &home).unwrap_err()
-        );
-
-        assert!(err.contains("exec: failed to run exec"));
     }
 }

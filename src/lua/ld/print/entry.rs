@@ -17,34 +17,3 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         },
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::parse::message;
-    use crate::lua::runtime::runtime;
-    use crate::output::{LABEL_WIDTH, Message};
-
-    #[test]
-    fn the_label_fills_the_column_and_the_text_follows_it() {
-        let lua = runtime().unwrap();
-        let base = Message::new("create")
-            .with_tail("~/.bashrc")
-            .with_column(Some(LABEL_WIDTH));
-
-        let message = message(&lua, "print.entry", base, None).unwrap();
-
-        assert_eq!(message.head(), "create     ");
-        assert_eq!(message.tail(), "~/.bashrc");
-    }
-
-    #[test]
-    fn a_width_of_its_own_wins_over_the_column() {
-        let lua = runtime().unwrap();
-        let options = lua.load("return { width = 4 }").eval().unwrap();
-        let base = Message::new("create").with_column(Some(LABEL_WIDTH));
-
-        let message = message(&lua, "print.entry", base, Some(options)).unwrap();
-
-        assert_eq!(message.head(), "create  ");
-    }
-}

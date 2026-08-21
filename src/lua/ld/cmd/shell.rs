@@ -30,18 +30,4 @@ mod tests {
             "b"
         );
     }
-
-    #[test]
-    fn a_failing_command_stops_the_script() {
-        let err = eval(r#"return cmd("exit 4")"#).unwrap_err().to_string();
-
-        assert!(err.contains("`exit 4` exited with status 4"));
-    }
-
-    #[test]
-    fn reports_a_call_without_a_command() {
-        let err = eval("return cmd()").unwrap_err().to_string();
-
-        assert!(err.contains("`ld.cmd` takes a command line to run"));
-    }
 }

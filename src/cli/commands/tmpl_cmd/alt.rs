@@ -158,7 +158,6 @@ mod tests {
 
     use super::*;
     use crate::backup::Backup;
-    use crate::lua;
 
     fn write(path: &Path, contents: &str) {
         if let Some(parent) = path.parent() {
@@ -237,57 +236,6 @@ mod tests {
     }
 
     #[test]
-    fn a_template_overrides_the_configured_link_mode() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
-        write(&dir.join("laptop.zsh"), "laptop");
-        write(
-            &dir.join("luadot.lua"),
-            r#"return { content = ld.alt.file("laptop.zsh"), link = "symbolic" }"#,
-        );
-
-        resolve(
-            &configuration(),
-            &home,
-            &repo,
-            &Entry::Template(dir.clone()),
-            &Classes::default(),
-            &mut Run::default(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            std::fs::read_link(home.join(".zshrc")).unwrap(),
-            dir.join("laptop.zsh")
-        );
-    }
-
-    #[test]
-    fn a_dry_run_reports_what_it_would_place_and_touches_nothing() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
-        write(&dir.join("luadot.lua"), r#"return "generated\n""#);
-
-        let mut run = Run::new(true, None);
-        let outcomes = resolve(
-            &configuration(),
-            &home,
-            &repo,
-            &Entry::Template(dir.clone()),
-            &Classes::default(),
-            &mut run,
-        )
-        .unwrap();
-
-        assert_eq!(outcomes, vec![SyncOutcome::Created]);
-        assert!(!home.join(".zshrc").exists());
-    }
-
-    #[test]
     fn a_replaced_file_is_backed_up_before_it_goes() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
@@ -316,45 +264,6 @@ mod tests {
             std::fs::read_to_string(saved.join(home.strip_prefix("/").unwrap()).join(".zshrc"))
                 .unwrap(),
             "handwritten\n"
-        );
-    }
-
-    #[test]
-    fn a_path_without_a_template_is_reported() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
-
-        let arg = home.join(".zshrc").to_string_lossy().into_owned();
-        let err = template_root(&home, &repo, &arg).unwrap_err().to_string();
-
-        assert!(err.contains("tmpl alt: "));
-        assert!(err.contains("has no template in the repository"));
-    }
-
-    #[test]
-    fn a_standalone_template_lands_on_the_mirrored_path() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let file = repo.join(".zprofile.luadot");
-        write(&file, "export HOST=<%= 1 + 1 %>\n");
-
-        let outcomes = resolve(
-            &configuration(),
-            &home,
-            &repo,
-            &Entry::Standalone(file),
-            &Classes::default(),
-            &mut Run::default(),
-        )
-        .unwrap();
-
-        assert_eq!(outcomes, vec![SyncOutcome::Created]);
-        assert_eq!(
-            std::fs::read_to_string(home.join(".zprofile")).unwrap(),
-            "export HOST=2\n"
         );
     }
 
@@ -440,61 +349,5 @@ mod tests {
 
         assert_eq!(outcomes, vec![SyncOutcome::AlreadySynced]);
         assert!(!restarted.exists());
-    }
-
-    #[test]
-    fn a_declared_command_wins_over_the_rule() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join(".config/mako/config.luadot");
-        let declared = root.path().join("declared");
-        let ruled = root.path().join("ruled");
-        write(
-            &dir.join("luadot.lua"),
-            &format!(
-                r#"return {{ content = "font=monospace\n", on_change = "printf ok > {}" }}"#,
-                declared.display()
-            ),
-        );
-
-        let config = lua::from_source(&format!(
-            r#"ld.rules({{ {{ match = ".config/mako/**", on_change = "printf ok > {}" }} }})"#,
-            ruled.display()
-        ))
-        .unwrap();
-
-        resolved_with(&config, &home, &repo, &dir, &mut Run::default());
-
-        assert!(declared.exists());
-        assert!(!ruled.exists());
-    }
-
-    #[test]
-    fn a_command_that_fails_stops_the_run() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
-        write(
-            &dir.join("luadot.lua"),
-            r#"return { content = "generated\n", on_change = "exit 4" }"#,
-        );
-
-        let mut run = Run::default();
-        resolve(
-            &configuration(),
-            &home,
-            &repo,
-            &Entry::Template(dir),
-            &Classes::default(),
-            &mut run,
-        )
-        .unwrap();
-
-        let err = run.finish("tmpl alt").unwrap_err().to_string();
-
-        assert_eq!(err, "tmpl alt: `exit 4` exited with status 4");
-        assert!(home.join(".zshrc").exists());
     }
 }

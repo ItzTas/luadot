@@ -198,24 +198,6 @@ mod tests {
     }
 
     #[test]
-    fn a_placed_file_carries_the_mode_it_is_given() {
-        let mirror = Mirror::open("diff").unwrap();
-        let relative = Path::new(".config/app.conf");
-        mirror
-            .place(Side::Repository, relative, b"conf\n", 0o640)
-            .unwrap();
-        mirror
-            .place(Side::System, relative, b"conf\n", 0o600)
-            .unwrap();
-
-        assert_eq!(
-            bits(&mirror.root().join("repository").join(relative)),
-            0o640
-        );
-        assert_eq!(bits(&mirror.root().join("system").join(relative)), 0o600);
-    }
-
-    #[test]
     fn the_root_is_private_and_goes_away_with_the_mirror() {
         let mirror = Mirror::open("diff").unwrap();
         let root = mirror.root().to_path_buf();

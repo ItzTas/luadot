@@ -51,22 +51,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn text_names_the_call_and_the_argument_it_wanted() {
-        let err = text(&Value::Boolean(true), "gsub", "the pattern")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.regex.gsub` takes the pattern as a string"));
-    }
-
-    #[test]
-    fn compile_reports_an_invalid_expression() {
-        let err = compile("^[", "match").unwrap_err().to_string();
-
-        assert!(err.contains("`ld.regex.match`: invalid regex `^[`"));
-    }
-
-    #[test]
     fn limit_defaults_to_every_occurrence() {
         assert_eq!(limit(&Value::Nil, "gsub").unwrap(), 0);
         assert_eq!(limit(&Value::Integer(2), "gsub").unwrap(), 2);

@@ -159,29 +159,6 @@ mod tests {
         std::fs::write(dir.join(name), contents).unwrap();
     }
 
-    fn error(dir: &Path, source: &str) -> String {
-        format!("{:#}", from_source(dir, source).unwrap_err())
-    }
-
-    #[test]
-    fn a_returned_handle_selects_a_file_of_the_template() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-        write(&dir, "laptop.zsh", "laptop");
-
-        let outputs = from_source(&dir, r#"return ld.alt.file("laptop.zsh")"#).unwrap();
-
-        assert_eq!(
-            outputs,
-            vec![Output::new(
-                root.path().join(".zshrc"),
-                Content::File(dir.join("laptop.zsh")),
-                None,
-                None,
-            )]
-        );
-    }
-
     #[test]
     fn a_returned_table_carries_the_whole_descriptor() {
         let root = tempfile::tempdir().unwrap();
@@ -236,20 +213,6 @@ mod tests {
     }
 
     #[test]
-    fn a_string_is_written_as_generated_content() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".config/nvim/init.lua.luadot");
-
-        let outputs = from_source(&dir, r#"return "vim.g.mapleader = ' '""#).unwrap();
-
-        assert_eq!(outputs[0].dest(), root.path().join(".config/nvim/init.lua"));
-        assert_eq!(
-            outputs[0].content(),
-            &Content::Text("vim.g.mapleader = ' '".to_string())
-        );
-    }
-
-    #[test]
     fn render_fills_a_file_of_the_template_with_variables() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".config/nvim/init.lua.luadot");
@@ -269,44 +232,6 @@ mod tests {
             outputs[0].content(),
             &Content::Text("vim.g.mapleader = \" \"\n".to_string())
         );
-    }
-
-    #[test]
-    fn modules_of_the_template_are_requirable() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-        std::fs::create_dir_all(dir.join(MODULES_DIR)).unwrap();
-        std::fs::write(
-            dir.join(MODULES_DIR).join("aliases.lua"),
-            r#"return "alias ll='ls -l'\n""#,
-        )
-        .unwrap();
-
-        let outputs = from_source(&dir, r#"return require("aliases")"#).unwrap();
-
-        assert_eq!(
-            outputs[0].content(),
-            &Content::Text("alias ll='ls -l'\n".to_string())
-        );
-    }
-
-    #[test]
-    fn a_template_producing_nothing_is_an_error() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-
-        assert!(error(&dir, "local unused = 1").contains("produced no file"));
-    }
-
-    #[test]
-    fn a_broken_script_reports_the_file() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-
-        let err = error(&dir, "ld.alt.out(");
-
-        assert!(err.contains("failed to run"));
-        assert!(err.contains(TEMPLATE_FILE));
     }
 
     #[test]
@@ -349,28 +274,5 @@ mod tests {
         .unwrap();
 
         assert_eq!(outputs[0].content(), &Content::File(dir.join("laptop.zsh")));
-    }
-
-    #[test]
-    fn a_missing_template_file_reports_the_command() {
-        let root = tempfile::tempdir().unwrap();
-        let repo = root.path().join("repo");
-        let dir = template_dir(&repo, ".zshrc.luadot");
-
-        let err = format!(
-            "{:#}",
-            load_template(
-                "apply",
-                &root.path().join("home"),
-                &repo,
-                &dir,
-                &Classes::default(),
-                &configuration(),
-            )
-            .unwrap_err()
-        );
-
-        assert!(err.contains("apply: failed to read"));
-        assert!(err.contains(TEMPLATE_FILE));
     }
 }

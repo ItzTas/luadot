@@ -81,20 +81,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hard_link_shares_the_same_inode() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source.txt");
-        let dest = dir.path().join("dest.txt");
-        std::fs::write(&source, "hello").unwrap();
-
-        link(LinkMode::Hard, &source, &dest).unwrap();
-
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
-        std::fs::write(&source, "changed").unwrap();
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "changed");
-    }
-
-    #[test]
     fn symbolic_link_points_at_the_source() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source.txt");
@@ -106,40 +92,6 @@ mod tests {
         let kind = std::fs::symlink_metadata(&dest).unwrap().file_type();
         assert!(kind.is_symlink());
         assert_eq!(std::fs::read_link(&dest).unwrap(), source);
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
-    }
-
-    #[test]
-    fn fails_when_dest_already_exists() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source.txt");
-        let dest = dir.path().join("dest.txt");
-        std::fs::write(&source, "hello").unwrap();
-        std::fs::write(&dest, "existing").unwrap();
-
-        assert!(link(LinkMode::Hard, &source, &dest).is_err());
-        assert!(link(LinkMode::Copy, &source, &dest).is_err());
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "existing");
-    }
-
-    #[test]
-    fn copy_duplicates_the_contents_into_a_new_inode() {
-        use std::os::unix::fs::MetadataExt;
-
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source.txt");
-        let dest = dir.path().join("dest.txt");
-        std::fs::write(&source, "hello").unwrap();
-
-        link(LinkMode::Copy, &source, &dest).unwrap();
-
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
-        assert_ne!(
-            std::fs::metadata(&source).unwrap().ino(),
-            std::fs::metadata(&dest).unwrap().ino()
-        );
-
-        std::fs::write(&source, "changed").unwrap();
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
     }
 

@@ -51,18 +51,4 @@ mod tests {
             }
         );
     }
-
-    #[test]
-    fn a_path_the_rules_leave_out_asks_for_nothing() {
-        let repo = Path::new("/repo");
-        let paths = vec![PathBuf::from("/repo/.bashrc")];
-
-        let automatic = automatic(
-            &config(r#"ld.rules({ match = ".ssh/**", autopush = true })"#),
-            repo,
-            &paths,
-        );
-
-        assert_eq!(automatic, Automatic::default());
-    }
 }

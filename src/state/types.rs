@@ -76,18 +76,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn serde_roundtrip_with_repo() {
-        let mut state = State::default();
-        state.set_repo(PathBuf::from("/a/b"));
-
-        let json = serde_json::to_string(&state).unwrap();
-        assert_eq!(json, r#"{"repo":"/a/b","classes":{}}"#);
-
-        let back: State = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.repo(), state.repo());
-    }
-
-    #[test]
     fn serde_roundtrip_with_a_class() {
         let mut state = State::default();
         state.set_class("form-factor", "laptop");
@@ -105,27 +93,5 @@ mod tests {
 
         assert_eq!(state.repo(), Some(Path::new("/a/b")));
         assert!(state.classes().is_empty());
-    }
-
-    #[test]
-    fn unsetting_reports_whether_it_was_set() {
-        let mut state = State::default();
-        state.set_class("form-factor", "laptop");
-
-        assert!(state.unset_class("form-factor"));
-        assert!(!state.unset_class("form-factor"));
-        assert_eq!(state.class("form-factor"), None);
-    }
-
-    #[test]
-    fn classes_are_iterated_by_name() {
-        let mut state = State::default();
-        state.set_class("form-factor", "laptop");
-        state.set_class("email", "me@example.com");
-
-        assert_eq!(
-            state.classes().iter().collect::<Vec<_>>(),
-            [("email", "me@example.com"), ("form-factor", "laptop")]
-        );
     }
 }

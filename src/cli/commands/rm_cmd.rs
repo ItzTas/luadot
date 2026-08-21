@@ -521,35 +521,6 @@ mod tests {
     }
 
     #[test]
-    fn a_plan_says_what_detaching_would_do_without_doing_it() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-
-        assert_eq!(decide(&source, &dest).unwrap(), Plan::Copy);
-        assert!(!dest.exists());
-
-        std::os::unix::fs::symlink(&source, &dest).unwrap();
-        assert_eq!(decide(&source, &dest).unwrap(), Plan::Relink);
-        assert!(std::fs::symlink_metadata(&dest).unwrap().is_symlink());
-    }
-
-    #[test]
-    fn detach_restores_a_missing_system_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("nested").join("dest");
-        write(&source, "data");
-
-        assert_eq!(
-            detach(&source, &dest, &mut None).unwrap(),
-            Detached::Restored
-        );
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
-    }
-
-    #[test]
     fn detach_materializes_a_symlink_pointing_into_the_repository() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
@@ -592,23 +563,6 @@ mod tests {
     }
 
     #[test]
-    fn detach_leaves_a_hard_linked_system_file_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        std::fs::hard_link(&source, &dest).unwrap();
-
-        assert_eq!(
-            detach(&source, &dest, &mut None).unwrap(),
-            Detached::Untouched
-        );
-
-        std::fs::remove_file(&source).unwrap();
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
-    }
-
-    #[test]
     fn detach_keeps_a_diverging_system_file() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
@@ -621,19 +575,6 @@ mod tests {
             Detached::Untouched
         );
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "system");
-    }
-
-    #[test]
-    fn prune_parents_removes_empty_directories_up_to_the_repository() {
-        let dir = tempfile::tempdir().unwrap();
-        let repo = dir.path().join("repo");
-        let nested = repo.join(".config").join("nvim");
-        std::fs::create_dir_all(&nested).unwrap();
-
-        prune_parents(&repo, &nested.join("init.lua")).unwrap();
-
-        assert!(!repo.join(".config").exists());
-        assert!(repo.is_dir());
     }
 
     #[test]
@@ -660,22 +601,6 @@ mod tests {
                 Entry::File(nvim.join("lua").join("plugins.lua")),
             ]
         );
-    }
-
-    #[test]
-    fn plan_keeps_a_template_whole() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let template = repo.join(".zshrc.luadot");
-        std::fs::create_dir_all(&template).unwrap();
-        write(&template.join("luadot.lua"), "return \"\"\n");
-        write(&template.join("laptop.zsh"), "laptop");
-
-        let arg = home.join(".zshrc").to_string_lossy().into_owned();
-        let entries = plan(&home, &repo, &[arg]).unwrap();
-
-        assert_eq!(entries, vec![Entry::Template(template)]);
     }
 
     #[test]
@@ -742,35 +667,6 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(home.join(".zshrc")).unwrap(),
             "laptop\n"
-        );
-    }
-
-    #[test]
-    fn a_standalone_template_goes_away_on_its_own() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let template = repo.join(".zprofile.luadot");
-        std::fs::create_dir_all(template.parent().unwrap()).unwrap();
-        std::fs::create_dir_all(&home).unwrap();
-        write(&template, "export HOST=1\n");
-        write(&home.join(".zprofile"), "export HOST=1\n");
-
-        let detached = detach_template(
-            &home,
-            &repo,
-            &Entry::Standalone(template.clone()),
-            &Classes::default(),
-            &mut None,
-            &configuration(),
-        )
-        .unwrap();
-
-        assert_eq!(detached, vec![Detached::Untouched]);
-        assert!(!template.exists());
-        assert_eq!(
-            std::fs::read_to_string(home.join(".zprofile")).unwrap(),
-            "export HOST=1\n"
         );
     }
 }

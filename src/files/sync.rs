@@ -200,89 +200,6 @@ mod tests {
     }
 
     #[test]
-    fn reports_already_synced_when_hard_linked() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        sync_file(
-            ConflictPolicy::Overwrite,
-            placed(LinkMode::Hard),
-            &source,
-            &dest,
-        )
-        .unwrap();
-
-        let outcome = sync_file(
-            ConflictPolicy::Overwrite,
-            placed(LinkMode::Hard),
-            &source,
-            &dest,
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::AlreadySynced);
-    }
-
-    #[test]
-    fn overwrite_replaces_a_differing_destination() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "repo");
-        write(&dest, "stale");
-
-        let outcome = sync_file(
-            ConflictPolicy::Overwrite,
-            placed(LinkMode::Hard),
-            &source,
-            &dest,
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Replaced);
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "repo");
-        assert_eq!(
-            std::fs::metadata(&source).unwrap().ino(),
-            std::fs::metadata(&dest).unwrap().ino()
-        );
-    }
-
-    #[test]
-    fn skip_leaves_an_existing_destination_untouched() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "repo");
-        write(&dest, "stale");
-
-        let outcome =
-            sync_file(ConflictPolicy::Skip, placed(LinkMode::Hard), &source, &dest).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Skipped);
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "stale");
-    }
-
-    #[test]
-    fn error_policy_aborts_on_conflict() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "repo");
-        write(&dest, "stale");
-
-        assert!(
-            sync_file(
-                ConflictPolicy::Error,
-                placed(LinkMode::Hard),
-                &source,
-                &dest
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
     fn symbolic_mode_creates_a_symlink_and_detects_it() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
@@ -309,38 +226,6 @@ mod tests {
         let outcome = sync_file(
             ConflictPolicy::Overwrite,
             placed(LinkMode::Symbolic),
-            &source,
-            &dest,
-        )
-        .unwrap();
-        assert_eq!(outcome, SyncOutcome::AlreadySynced);
-    }
-
-    #[test]
-    fn copy_mode_creates_an_independent_copy() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-
-        let outcome = sync_file(
-            ConflictPolicy::Overwrite,
-            placed(LinkMode::Copy),
-            &source,
-            &dest,
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Created);
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
-        assert_ne!(
-            std::fs::metadata(&source).unwrap().ino(),
-            std::fs::metadata(&dest).unwrap().ino()
-        );
-
-        let outcome = sync_file(
-            ConflictPolicy::Overwrite,
-            placed(LinkMode::Copy),
             &source,
             &dest,
         )

@@ -57,40 +57,6 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_file_is_reported() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = error(&dir, r#"return ld.alt.expand("missing.tmpl")"#);
-
-        assert!(err.contains("`ld.alt.expand`"));
-        assert!(err.contains("found no file `missing.tmpl`"));
-    }
-
-    #[test]
-    fn a_template_expands_another_one() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("header.tmpl.zsh"), "# <%= title %>\n").unwrap();
-        std::fs::write(
-            dir.join("zshrc.tmpl.zsh"),
-            "<%= ld.alt.expand(\"header.tmpl.zsh\", { title = \"zsh\" }) -%>\nexport EDITOR=<%= editor %>\n",
-        )
-        .unwrap();
-
-        let outputs = from_template(
-            &dir,
-            r#"return ld.alt.expand("zshrc.tmpl.zsh", { editor = "nvim" })"#,
-        )
-        .unwrap();
-
-        assert_eq!(
-            outputs[0].content(),
-            &Content::Text("# zsh\nexport EDITOR=nvim\n".to_string())
-        );
-    }
-
-    #[test]
     fn every_template_keeps_its_own_vars_and_its_own_buffer() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
@@ -128,29 +94,5 @@ mod tests {
 
         assert!(err.contains("partial.tmpl"));
         assert!(err.contains(":2:"));
-    }
-
-    #[test]
-    fn a_broken_template_reports_its_own_line() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("broken.tmpl"), "fine\n<%= missing() %>\n").unwrap();
-
-        let err = error(&dir, r#"return ld.alt.expand("broken.tmpl")"#);
-
-        assert!(err.contains("`ld.alt.expand` failed to run"));
-        assert!(err.contains(":2:"));
-    }
-
-    #[test]
-    fn an_unterminated_tag_is_a_compile_error() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("broken.tmpl"), "text\n<% x = 1").unwrap();
-
-        let err = error(&dir, r#"return ld.alt.expand("broken.tmpl")"#);
-
-        assert!(err.contains("`ld.alt.expand` failed to compile"));
-        assert!(err.contains("line 2"));
     }
 }

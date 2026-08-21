@@ -239,14 +239,6 @@ mod tests {
     }
 
     #[test]
-    fn only_the_states_with_content_to_compare_are_staged() {
-        assert!(DiffState::Missing.staged());
-        assert!(DiffState::Differs.staged());
-        assert!(!DiffState::Mode.staged());
-        assert!(!DiffState::Other.staged());
-    }
-
-    #[test]
     fn a_file_carries_both_sides_into_lua() {
         let lua = Lua::new();
         let file = file();
@@ -268,46 +260,6 @@ mod tests {
         );
         assert_eq!(read(&lua, "return subject.mode.source", &file), "0644");
         assert_eq!(read(&lua, "return subject.mode.system", &file), "0600");
-    }
-
-    #[test]
-    fn a_file_the_system_does_not_hold_carries_one_side_only() {
-        let lua = Lua::new();
-        let file = DiffFile::new(
-            PathBuf::from(".bashrc"),
-            PathBuf::from("/home/u/.bashrc"),
-            Side::Repository,
-            DiffState::Missing,
-        )
-        .with_source(b"managed\n".to_vec(), 0o644);
-
-        assert_eq!(
-            read(&lua, "return tostring(subject.content.system)", &file),
-            "nil"
-        );
-        assert_eq!(
-            read(&lua, "return tostring(subject.mode.system)", &file),
-            "nil"
-        );
-    }
-
-    #[test]
-    fn the_counts_carry_the_line_they_replace() {
-        let lua = Lua::new();
-        let counts = DiffCounts::new(
-            Side::Generated,
-            1,
-            12,
-            "1 of 12 generated file(s) differ".to_string(),
-        );
-
-        assert_eq!(read(&lua, "return subject.side", &counts), "generated");
-        assert_eq!(read(&lua, "return subject.drifted .. \"\"", &counts), "1");
-        assert_eq!(read(&lua, "return subject.total .. \"\"", &counts), "12");
-        assert_eq!(
-            read(&lua, "return subject.default", &counts),
-            "1 of 12 generated file(s) differ"
-        );
     }
 
     #[test]

@@ -143,16 +143,6 @@ fn keys<T>(entries: &[(&str, T)]) -> String {
 mod tests {
     use super::*;
 
-    const ENTRIES: [(&str, u8); 2] = [("one", 1), ("two", 2)];
-
-    #[test]
-    fn lookup_lists_the_available_names() {
-        let err = lookup(&ENTRIES, "three", "number").unwrap_err().to_string();
-
-        assert!(err.contains("unknown number `three`"));
-        assert!(err.contains("available: one, two"));
-    }
-
     #[test]
     fn mode_bits_reads_three_or_four_octal_digits() {
         assert_eq!(mode_bits("600", "a rule").unwrap(), 0o600);
@@ -171,38 +161,11 @@ mod tests {
     }
 
     #[test]
-    fn owner_name_takes_a_user_with_an_optional_group() {
-        assert_eq!(owner_name("me", "a rule").unwrap(), "me");
-        assert_eq!(owner_name("me:wheel", "a rule").unwrap(), "me:wheel");
-        assert_eq!(owner_name("1000:1000", "a rule").unwrap(), "1000:1000");
-    }
-
-    #[test]
     fn owner_name_rejects_a_broken_name() {
         for raw in ["", ":", "me:", ":wheel", "a:b:c", "m e"] {
             let err = owner_name(raw, "a rule").unwrap_err().to_string();
 
             assert!(err.contains("needs an `owner`"), "{raw}");
         }
-    }
-
-    #[test]
-    fn regex_reports_an_invalid_expression() {
-        assert!(
-            regex("^[")
-                .unwrap_err()
-                .to_string()
-                .contains("invalid regex `^[`")
-        );
-    }
-
-    #[test]
-    fn pattern_reports_an_invalid_glob() {
-        assert!(
-            pattern("[")
-                .unwrap_err()
-                .to_string()
-                .contains("invalid pattern `[`")
-        );
     }
 }

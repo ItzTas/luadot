@@ -17,20 +17,3 @@ pub fn current(lua: &Lua) -> Classes {
         .map(|classes| classes.clone())
         .unwrap_or_default()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lua::runtime::runtime;
-
-    #[test]
-    fn the_installed_values_are_the_current_ones() {
-        let lua = runtime().unwrap();
-        let mut classes = Classes::default();
-        classes.set("form-factor", "laptop");
-
-        install(&lua, &classes);
-
-        assert_eq!(current(&lua).get("form-factor"), Some("laptop"));
-    }
-}

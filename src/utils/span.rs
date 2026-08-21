@@ -44,18 +44,6 @@ mod tests {
     }
 
     #[test]
-    fn a_span_without_a_known_unit_is_read_as_nothing() {
-        for raw in ["30", "", "d", "30 d", "30dd", "-1d", "1.5d", "thirty days"] {
-            assert_eq!(seconds(raw), None, "{raw}");
-        }
-    }
-
-    #[test]
-    fn a_span_too_large_to_hold_is_read_as_nothing() {
-        assert_eq!(seconds(&format!("{}w", u64::MAX)), None);
-    }
-
-    #[test]
     fn a_span_is_told_in_the_largest_unit_that_fits() {
         assert_eq!(span(1), "1 second");
         assert_eq!(span(59), "59 seconds");

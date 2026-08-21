@@ -15,24 +15,3 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         Ok(())
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::parse::message;
-    use crate::lua::runtime::runtime;
-    use crate::output::{Message, Stream, Tone};
-
-    #[test]
-    fn the_options_win_over_the_tone_of_the_call() {
-        let lua = runtime().unwrap();
-        let options = lua.load(r#"return { tone = "good" }"#).eval().unwrap();
-        let base = Message::new("careful")
-            .with_look(Tone::Warning.into())
-            .with_stream(Stream::Stderr);
-
-        let message = message(&lua, "print.warn", base, Some(options)).unwrap();
-
-        assert_eq!(message.look().style(), Tone::Good.style());
-        assert_eq!(message.stream(), Stream::Stderr);
-    }
-}

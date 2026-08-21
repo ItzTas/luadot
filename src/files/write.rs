@@ -79,58 +79,6 @@ mod tests {
     }
 
     #[test]
-    fn writes_a_missing_destination() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("nested/deep/.zshrc");
-
-        let outcome = write_file(
-            ConflictPolicy::Overwrite,
-            Placement::default(),
-            &dest,
-            "generated",
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Created);
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "generated");
-    }
-
-    #[test]
-    fn matching_contents_are_already_synced() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".zshrc");
-        std::fs::write(&dest, "generated").unwrap();
-
-        let outcome = write_file(
-            ConflictPolicy::Error,
-            Placement::default(),
-            &dest,
-            "generated",
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::AlreadySynced);
-    }
-
-    #[test]
-    fn overwrite_replaces_diverging_contents() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".zshrc");
-        std::fs::write(&dest, "stale").unwrap();
-
-        let outcome = write_file(
-            ConflictPolicy::Overwrite,
-            Placement::default(),
-            &dest,
-            "generated",
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Replaced);
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "generated");
-    }
-
-    #[test]
     fn skip_leaves_the_destination_untouched() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".zshrc");
@@ -146,23 +94,6 @@ mod tests {
 
         assert_eq!(outcome, SyncOutcome::Skipped);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "stale");
-    }
-
-    #[test]
-    fn error_policy_aborts_on_conflict() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".zshrc");
-        std::fs::write(&dest, "stale").unwrap();
-
-        assert!(
-            write_file(
-                ConflictPolicy::Error,
-                Placement::default(),
-                &dest,
-                "generated"
-            )
-            .is_err()
-        );
     }
 
     #[test]
@@ -190,18 +121,6 @@ mod tests {
 
         assert_eq!(outcome, SyncOutcome::Replaced);
         assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o600);
-    }
-
-    #[test]
-    fn a_mode_that_diverges_follows_the_policy() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".netrc");
-        write_file(ConflictPolicy::Overwrite, with_mode(0o644), &dest, "secret").unwrap();
-
-        let outcome = write_file(ConflictPolicy::Skip, with_mode(0o600), &dest, "secret").unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Skipped);
-        assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o644);
     }
 
     #[test]

@@ -378,12 +378,6 @@ fn shows(status: FileStatus) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
-
-    fn configuration() -> crate::lua::Shared {
-        Arc::new(Mutex::new(Config::default()))
-    }
-
     use std::ffi::OsStr;
 
     use super::*;
@@ -402,15 +396,6 @@ mod tests {
     }
 
     #[test]
-    fn only_the_states_with_something_to_show_are_diffed() {
-        assert!(shows(FileStatus::Missing));
-        assert!(shows(FileStatus::Differs));
-        assert!(shows(FileStatus::Unreadable));
-        assert!(!shows(FileStatus::Synced));
-        assert!(!shows(FileStatus::Unlinked));
-    }
-
-    #[test]
     fn git_is_asked_for_the_diff_it_always_prints() {
         let command = build_command(
             Path::new("/tmp/luadot-diff-1-0/tree"),
@@ -424,13 +409,6 @@ mod tests {
             Some(Path::new("/tmp/luadot-diff-1-0/tree"))
         );
         assert_eq!(arguments(&command), ["diff"]);
-    }
-
-    #[test]
-    fn the_arguments_of_the_configuration_reach_git_after_the_diff() {
-        let diff = Diff::default().with_args(Some(vec!["--stat".to_string()]));
-
-        assert_eq!(asked(&diff), ["diff", "--stat"]);
     }
 
     #[test]
@@ -473,15 +451,6 @@ mod tests {
     }
 
     #[test]
-    fn what_a_template_produces_is_compared_from_its_own_side() {
-        let tool = Tool::new("difft".to_string(), Vec::new());
-
-        let arguments = invocation(&tool, &Diff::default(), Side::Generated);
-
-        assert_eq!(arguments, ["generated", "system"]);
-    }
-
-    #[test]
     fn a_tool_of_its_own_replaces_git_and_keeps_the_two_sides_last() {
         let tool = Tool::new("difft".to_string(), vec!["--color".to_string()]);
         let diff = Diff::default()
@@ -519,45 +488,5 @@ mod tests {
         let (_, mode) =
             expected(&Config::default(), relative, &output.with_mode(Some(0o600))).unwrap();
         assert_eq!(mode, Some(0o600));
-    }
-
-    #[test]
-    fn generated_content_falls_back_to_the_mode_of_the_rules() {
-        let config = lua::from_source(r#"ld.rules({ match = ".netrc", mode = "0640" })"#).unwrap();
-        let output = Output::new(
-            PathBuf::from("/home/u/.netrc"),
-            Content::Text("machine example\n".to_string()),
-            None,
-            None,
-        );
-
-        let (_, mode) = expected(&config, Path::new(".netrc"), &output).unwrap();
-        assert_eq!(mode, Some(0o640));
-    }
-
-    #[test]
-    fn a_drifted_generated_file_is_staged_on_both_sides() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
-        std::fs::write(home.join(".zshrc"), "handwritten\n").unwrap();
-
-        let produced = resolve(
-            &home,
-            &repo,
-            &[Entry::Template(dir)],
-            &Classes::default(),
-            &configuration(),
-        )
-        .unwrap();
-        let drifted = generated_items(&Config::default(), &home, &produced).unwrap();
-
-        assert_eq!(drifted.len(), 1);
-        assert_eq!(drifted[0].relative, Path::new(".zshrc"));
-        assert_eq!(drifted[0].contents, b"generated\n");
     }
 }

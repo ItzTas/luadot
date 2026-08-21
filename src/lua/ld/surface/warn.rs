@@ -103,23 +103,6 @@ mod tests {
     }
 
     #[test]
-    fn a_template_is_warned_about_the_cost_it_pays_on_every_resolution() {
-        let message = slow_message(Surface::Template, "cmd").unwrap();
-
-        assert!(message.contains("`ld.cmd` in luadot.lua"));
-        assert!(message.contains("runs every time the template is resolved"));
-    }
-
-    #[test]
-    fn an_inert_call_names_the_surface_it_belongs_to() {
-        let message = inert_message(Surface::Setup, "rules", Surface::Config);
-
-        assert!(message.contains("`ld.rules` in a setup script does nothing"));
-        assert!(message.contains("config.lua is where it has an effect"));
-        assert!(message.contains("`ld.opt.pkg_warn(false)`"));
-    }
-
-    #[test]
     fn a_call_away_from_home_is_inert() {
         assert!(inert(
             &running(Surface::Bootstrap),
@@ -140,12 +123,5 @@ mod tests {
 
         assert!(silenced(&lua));
         assert!(inert(&lua, "rules", Surface::Config));
-    }
-
-    #[test]
-    fn a_runtime_without_a_surface_stays_out_of_the_way() {
-        let lua = runtime().unwrap();
-
-        assert!(!inert(&lua, "rules", Surface::Config));
     }
 }

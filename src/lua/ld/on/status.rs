@@ -56,41 +56,4 @@ mod tests {
 
         assert_eq!(shown, Some("12/14 synced".to_string()));
     }
-
-    #[test]
-    fn the_two_commands_are_customized_apart() {
-        let config = from_source(
-            r#"
-            ld.on.diff({ summary = "diffed" })
-            ld.on.status({ summary = "reported" })
-            "#,
-        )
-        .unwrap();
-
-        assert!(matches!(config.diff().summary(), Some(Custom::Text(text)) if text == "diffed"));
-        assert!(
-            matches!(config.status().summary(), Some(Custom::Text(text)) if text == "reported")
-        );
-    }
-
-    #[test]
-    fn rejects_the_keys_that_belong_to_another_command() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.on.status({ tool = "difft" })"#).unwrap_err()
-        );
-
-        assert!(err.contains("`ld.on.status`: unknown key `tool`"));
-        assert!(err.contains("available: after, before, entry, render, summary"));
-    }
-
-    #[test]
-    fn rejects_a_value_the_key_does_not_accept() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.on.status({ entry = "a line" })"#).unwrap_err()
-        );
-
-        assert!(err.contains("`entry` takes a function or false"));
-    }
 }

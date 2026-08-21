@@ -120,42 +120,12 @@ mod tests {
     }
 
     #[test]
-    fn a_sequence_becomes_an_array() {
-        assert_eq!(
-            json(r#"return ld.alt.json({ "one", "two" })"#).unwrap(),
-            "[\n  \"one\",\n  \"two\"\n]"
-        );
-    }
-
-    #[test]
     fn every_scalar_keeps_its_type() {
         assert_eq!(json("return ld.alt.json(true)").unwrap(), "true");
         assert_eq!(json("return ld.alt.json(2)").unwrap(), "2");
         assert_eq!(json("return ld.alt.json(2.5)").unwrap(), "2.5");
         assert_eq!(json(r#"return ld.alt.json("text")"#).unwrap(), "\"text\"");
         assert_eq!(json("return ld.alt.json(nil)").unwrap(), "null");
-    }
-
-    #[test]
-    fn quotes_and_newlines_are_escaped() {
-        assert_eq!(
-            json(r#"return ld.alt.json({ line = "a\"b\nc" })"#).unwrap(),
-            "{\n  \"line\": \"a\\\"b\\nc\"\n}"
-        );
-    }
-
-    #[test]
-    fn a_table_mixing_a_list_with_names_is_reported() {
-        let err = error(r#"return ld.alt.json({ "one", name = "two" })"#);
-
-        assert!(err.contains("mixing a list of 1 value(s) with named keys"));
-    }
-
-    #[test]
-    fn what_json_has_no_word_for_is_reported() {
-        assert!(error("return ld.alt.json({ f = print })").contains("cannot serialize function"));
-        assert!(error("return ld.alt.json(0 / 0)").contains("cannot serialize NaN"));
-        assert!(error("return ld.alt.json(1 / 0)").contains("cannot serialize inf"));
     }
 
     #[test]

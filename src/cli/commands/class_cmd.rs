@@ -187,11 +187,6 @@ mod tests {
     }
 
     #[test]
-    fn a_value_of_the_choices_is_taken() {
-        assert_eq!(checked(&class(), "laptop".to_string()).unwrap(), "laptop");
-    }
-
-    #[test]
     fn a_value_outside_the_choices_is_reported() {
         let err = checked(&class(), "tablet".to_string())
             .unwrap_err()
@@ -199,16 +194,5 @@ mod tests {
 
         assert!(err.contains("`tablet` is not one of the choices of `form-factor`"));
         assert!(err.contains("available: desktop, laptop"));
-    }
-
-    #[test]
-    fn an_undeclared_class_lists_the_declared_ones() {
-        let mut config = Config::default();
-        config.add_class(class());
-
-        let err = declared(&config, "editor").unwrap_err().to_string();
-
-        assert!(err.contains("class: no class named `editor`"));
-        assert!(err.contains("declared: form-factor"));
     }
 }

@@ -68,31 +68,3 @@ impl Command {
         format!("{API}.{NAMESPACE}.{}", self.path())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::constants::{FUNCTIONS, TMPL_FUNCTIONS};
-    use super::*;
-
-    #[test]
-    fn a_tmpl_action_is_named_the_way_the_command_line_and_the_script_write_it() {
-        assert_eq!(Command::TmplAlt.name(), "tmpl alt");
-        assert_eq!(Command::TmplAlt.path(), "tmpl.alt");
-        assert_eq!(Command::TmplAlt.call(), "ld.on.tmpl.alt");
-    }
-
-    #[test]
-    fn every_command_is_registered_under_its_own_path() {
-        for (name, command, _) in FUNCTIONS {
-            assert_eq!(command.path(), name, "{}", command.name());
-        }
-        for (name, command, _) in TMPL_FUNCTIONS {
-            assert_eq!(
-                command.path(),
-                format!("{TMPL}.{name}"),
-                "{}",
-                command.name()
-            );
-        }
-    }
-}

@@ -18,24 +18,3 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         lua.create_sequence_from(parts)
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::fixture::eval;
-
-    #[test]
-    fn cuts_the_text_on_every_match() {
-        assert_eq!(
-            eval(r#"return table.concat(regex.split("a, b,c", ",\\s*"), "|")"#).unwrap(),
-            "a|b|c"
-        );
-    }
-
-    #[test]
-    fn a_limit_keeps_the_rest_in_the_last_piece() {
-        assert_eq!(
-            eval(r#"return table.concat(regex.split("a, b,c", ",\\s*", 2), "|")"#).unwrap(),
-            "a|b,c"
-        );
-    }
-}

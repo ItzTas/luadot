@@ -13,12 +13,12 @@ mod setup;
 mod template;
 
 pub use bootstrap::{bootstrap_path, run_bootstrap};
+#[cfg(test)]
+pub use config::from_source;
 pub use config::{
     Around, Call, Class, Config, Custom, Diff, DiffCounts, DiffFile, DiffState, Matcher, Moment,
     Report, Rule, Shared, StatusCounts, StatusFile, Tool, config_path, load_config,
 };
-#[cfg(test)]
-pub use config::{from_classes, from_source};
 pub use exec::run_exec;
 pub use ld::Command;
 #[cfg(feature = "meta")]

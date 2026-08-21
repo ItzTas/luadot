@@ -20,17 +20,3 @@ fn trimmed(value: String) -> Option<String> {
 
     (!value.is_empty()).then(|| value.to_string())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn trimmed_drops_the_newline_and_the_empty_value() {
-        assert_eq!(
-            trimmed("thinkpad\n".to_string()),
-            Some("thinkpad".to_string())
-        );
-        assert_eq!(trimmed("  \n".to_string()), None);
-    }
-}

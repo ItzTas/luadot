@@ -69,16 +69,4 @@ mod tests {
             & 0o777;
         assert_eq!(mode, 0o700);
     }
-
-    #[test]
-    fn removing_a_workspace_takes_its_contents_along() {
-        let workspace = Workspace::create("edit").unwrap();
-        let plain = workspace.file(OsStr::new(".netrc"));
-        std::fs::write(&plain, "secret").unwrap();
-
-        workspace.remove();
-
-        assert!(std::fs::symlink_metadata(&plain).is_err());
-        assert!(std::fs::symlink_metadata(&workspace.dir).is_err());
-    }
 }

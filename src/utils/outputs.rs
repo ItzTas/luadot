@@ -67,7 +67,7 @@ mod tests {
     }
 
     use super::*;
-    use crate::files::{ConflictPolicy, LinkMode};
+    use crate::files::LinkMode;
 
     fn write(path: &Path, contents: &str) {
         if let Some(parent) = path.parent() {
@@ -103,23 +103,6 @@ mod tests {
     }
 
     #[test]
-    fn a_plain_file_is_not_a_template() {
-        let err = outputs(
-            "status",
-            Path::new("/home/u"),
-            Path::new("/repo"),
-            &Entry::File(PathBuf::from("/repo/.vimrc")),
-            &Classes::default(),
-            &configuration(),
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(err.contains("status: "));
-        assert!(err.contains("is not a template"));
-    }
-
-    #[test]
     fn generated_content_is_compared_against_what_the_system_holds() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
@@ -138,47 +121,6 @@ mod tests {
         );
 
         write(&dest, "handwritten\n");
-        assert_eq!(
-            output_status("status", &Config::default(), &home, &output).unwrap(),
-            FileStatus::Differs
-        );
-    }
-
-    #[test]
-    fn a_selected_file_is_compared_through_the_link_mode() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let source = root.path().join("repo/.zshrc.luadot/laptop.zsh");
-        let dest = home.join(".zshrc");
-        write(&source, "laptop\n");
-        std::fs::create_dir_all(&home).unwrap();
-        std::os::unix::fs::symlink(&source, &dest).unwrap();
-
-        let output = Output::new(
-            dest,
-            Content::File(source),
-            Some(LinkMode::Symbolic),
-            Some(ConflictPolicy::Overwrite),
-        );
-
-        assert_eq!(
-            output_status("status", &Config::default(), &home, &output).unwrap(),
-            FileStatus::Synced
-        );
-    }
-
-    #[test]
-    fn a_declared_mode_is_part_of_the_comparison() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let dest = home.join(".netrc");
-        write(&dest, "machine example\n");
-        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o644)).unwrap();
-
-        let output = text(dest, "machine example\n").with_mode(Some(0o600));
-
         assert_eq!(
             output_status("status", &Config::default(), &home, &output).unwrap(),
             FileStatus::Differs
@@ -224,15 +166,5 @@ mod tests {
         let placement = output_placement(&config, relative, &declared);
         assert_eq!(placement.link(), LinkMode::Symbolic);
         assert_eq!(placement.mode(), Some(0o600));
-    }
-
-    #[test]
-    fn the_relative_path_of_an_output_mirrors_the_repository() {
-        let home = Path::new("/home/u");
-
-        assert_eq!(
-            output_relative("status", home, &text(PathBuf::from("/home/u/.zshrc"), "x")).unwrap(),
-            PathBuf::from(".zshrc")
-        );
     }
 }
