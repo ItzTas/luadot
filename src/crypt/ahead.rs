@@ -73,7 +73,8 @@ impl Ahead {
         if self.width == 0 {
             let jobs = self.pending.len();
             let key = self.identity.path(&self.command)?;
-            self.width = width(self.lock, key, jobs);
+            let cores = thread::available_parallelism().map_or(1, usize::from);
+            self.width = width(self.lock, key, jobs, cores);
         }
 
         let taken = self.width.min(self.pending.len());
@@ -89,12 +90,10 @@ impl Ahead {
     }
 }
 
-fn width(lock: Lock, identity: Option<&Path>, jobs: usize) -> usize {
+fn width(lock: Lock, identity: Option<&Path>, jobs: usize, cores: usize) -> usize {
     if jobs < 2 || lock.passphrase() || plugged(identity) {
         return 1;
     }
-
-    let cores = thread::available_parallelism().map_or(1, usize::from);
 
     cores.min(DECRYPT_WIDTH).min(jobs)
 }
@@ -143,10 +142,11 @@ mod tests {
         std::fs::write(&key, "AGE-SECRET-KEY-1TEST\n").unwrap();
         std::fs::write(&plugin, "AGE-PLUGIN-YUBIKEY-1QQQPQ\n").unwrap();
 
-        assert!(width(Lock::Keys, Some(&key), 8) > 1);
-        assert_eq!(width(Lock::Keys, Some(&key), 1), 1);
-        assert_eq!(width(Lock::Passphrase, Some(&key), 8), 1);
-        assert_eq!(width(Lock::Keys, Some(&plugin), 8), 1);
+        assert_eq!(width(Lock::Keys, Some(&key), 8, 4), 4);
+        assert_eq!(width(Lock::Keys, Some(&key), 8, 1), 1);
+        assert_eq!(width(Lock::Keys, Some(&key), 1, 4), 1);
+        assert_eq!(width(Lock::Passphrase, Some(&key), 8, 4), 1);
+        assert_eq!(width(Lock::Keys, Some(&plugin), 8, 4), 1);
     }
 
     #[test]
