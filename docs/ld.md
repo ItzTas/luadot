@@ -175,8 +175,11 @@ Declaring a class in `config.lua` collects it for `bootstrap`, `clone` and
 the machine has no answer yet and writes the answer to the state, so
 `ld.class.get` reads it for the rest of the run.
 
-`ld.path` carries `home` and `config` everywhere, `repo` once a repository is
-set, and `dir`, the directory of the script that is running. Inside `config.lua`
+`ld.path` carries `home`, `config` and `data` everywhere, `repo` once a
+repository is set, and `dir`, the directory of the script that is running.
+`data` is `~/.local/share/luadot` (or `$XDG_DATA_HOME/luadot`), where the
+state, the backups and the default repository live; luadot owns no other
+subdirectory there, so a plugin manager can pick its own. Inside `config.lua`
 itself, `ld.path.repo` is the repository known before the file ran, so it does
 not answer for an `ld.opt.repo_dir` set in that same file; every script that
 runs afterwards gets the resolved one.
@@ -708,7 +711,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.git(args...)` | the arguments of a git command | Runs git inside the repository and returns what it printed. |
 | `ld.argv` | none | `name` and `args` of the command being run. |
 | `ld.sys` | none | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
-| `ld.path` | none | `home`, `config`, `repo` and `dir`, where they exist. |
+| `ld.path` | none | `home`, `config`, `data`, `repo` and `dir`, where they exist. |
 | `ld.rtp.add(dir)` | a directory | Puts `<dir>/lua/` on the module path of this script and of every script the command runs after it, behind the configuration's own `lua/`. |
 | `ld.on.add(options)` | a table of `before` and `after` | Runs a function before and after `add`. |
 | `ld.on.apply(options)` | a table of `before` and `after` | Runs a function before and after `apply`. |

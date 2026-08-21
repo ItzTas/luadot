@@ -78,8 +78,12 @@ mod tests {
 
     fn installed() -> Table {
         let lua = runtime().unwrap();
-        let paths = Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot"))
-            .with_repo(Some(Path::new("/data/repo")));
+        let paths = Paths::new(
+            Path::new("/home/u"),
+            Path::new("/home/u/.config/luadot"),
+            Path::new("/home/u/.local/share/luadot"),
+        )
+        .with_repo(Some(Path::new("/data/repo")));
         install(&lua, Surface::Bootstrap, &paths, &Classes::default()).unwrap();
 
         let ld: Table = lua.globals().get(API).unwrap();

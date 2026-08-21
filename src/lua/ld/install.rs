@@ -109,6 +109,7 @@ mod tests {
         assert(type(ld.sys.has_battery()) == "boolean", "sys.has_battery is missing")
         assert(type(ld.path.home) == "string", "path.home is missing")
         assert(type(ld.path.config) == "string", "path.config is missing")
+        assert(type(ld.path.data) == "string", "path.data is missing")
         for _, name in ipairs({ "test", "match", "find", "gmatch", "gsub", "split", "escape" }) do
           assert(type(ld.regex[name]) == "function", "regex." .. name .. " is missing")
         end
@@ -117,8 +118,12 @@ mod tests {
     "#;
 
     fn paths() -> Paths {
-        Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot"))
-            .with_repo(Some(Path::new("/data/repo")))
+        Paths::new(
+            Path::new("/home/u"),
+            Path::new("/home/u/.config/luadot"),
+            Path::new("/home/u/.local/share/luadot"),
+        )
+        .with_repo(Some(Path::new("/data/repo")))
     }
 
     fn exec(surface: Surface, source: &str) {

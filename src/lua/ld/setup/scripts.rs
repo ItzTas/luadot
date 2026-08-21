@@ -22,14 +22,5 @@ pub fn run(
     classes: &Classes,
     shared: &Shared,
 ) -> mlua::Result<()> {
-    setup::run_one(
-        command,
-        paths.home(),
-        paths.config(),
-        repo,
-        name,
-        classes,
-        shared,
-    )
-    .map_err(chain)
+    setup::run_one(command, paths, repo, name, classes, shared).map_err(chain)
 }

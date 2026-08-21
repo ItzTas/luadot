@@ -27,13 +27,17 @@ pub fn load_template(
     let dest = destination(command, home, repo, dir)?;
     let config = utils::config_dir()
         .with_context(|| format!("{command}: failed to locate the configuration"))?;
+    let data = utils::data_dir()
+        .with_context(|| format!("{command}: failed to locate the data directory"))?;
+    let paths = Paths::new(home, &config, &data)
+        .with_repo(Some(repo))
+        .with_dir(dir);
 
     run(
         command,
         &source,
         &path,
-        repo,
-        &config,
+        &paths,
         Scope::new(dir.to_path_buf(), home.to_path_buf()).with_dest(dest),
         classes,
         shared,
@@ -47,24 +51,21 @@ pub fn from_source(dir: &Path, source: &str) -> Result<Vec<Output>> {
 
 #[cfg(test)]
 pub fn from_classes(dir: &Path, source: &str, classes: &Classes) -> Result<Vec<Output>> {
-    let config = utils::config_dir().context("test: failed to locate the configuration")?;
-
-    from_config(dir, source, &config, classes)
-}
-
-#[cfg(test)]
-fn from_config(dir: &Path, source: &str, config: &Path, classes: &Classes) -> Result<Vec<Output>> {
     let root = dir.parent().unwrap_or(dir);
     let Some(dest) = template_target(dir) else {
         bail!("test: {} is not a template directory", dir.display());
     };
+    let config = utils::config_dir().context("test: failed to locate the configuration")?;
+    let data = utils::data_dir().context("test: failed to locate the data directory")?;
+    let paths = Paths::new(root, &config, &data)
+        .with_repo(Some(root))
+        .with_dir(dir);
 
     run(
         "test",
         source,
         &dir.join(TEMPLATE_FILE),
-        root,
-        config,
+        &paths,
         Scope::new(dir.to_path_buf(), root.to_path_buf()).with_dest(dest),
         classes,
         &std::sync::Arc::new(std::sync::Mutex::new(crate::lua::Config::default())),
@@ -80,31 +81,25 @@ pub(super) fn destination(command: &str, home: &Path, repo: &Path, dir: &Path) -
         .with_context(|| format!("{command}: failed to place {}", dir.display()))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run(
     command: &str,
     source: &str,
     path: &Path,
-    repo: &Path,
-    config: &Path,
+    paths: &Paths,
     scope: Scope,
     classes: &Classes,
     shared: &Shared,
 ) -> Result<Vec<Output>> {
     let dir = scope.dir().to_path_buf();
-    let home = scope.home().to_path_buf();
 
     let lua = runtime().with_context(|| format!("{command}: failed to start the Lua runtime"))?;
-    let paths = Paths::new(&home, config)
-        .with_repo(Some(repo))
-        .with_dir(&dir);
-    install(&lua, Surface::Template, &paths, classes)
+    install(&lua, Surface::Template, paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
     share(&lua, shared);
     extend_module_path(&lua)
         .with_context(|| format!("{command}: failed to reach the registered modules"))?;
     lua.set_app_data(scope);
-    for modules in [dir.as_path(), config].into_iter().rev() {
+    for modules in [dir.as_path(), paths.config()].into_iter().rev() {
         add_module_path(&lua, modules)
             .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
     }
@@ -169,12 +164,19 @@ mod tests {
         let config =
             crate::lua::from_source(&format!(r#"ld.rtp.add("{}")"#, plugin.display())).unwrap();
 
+        let paths = Paths::new(
+            root.path(),
+            &root.path().join(".config/luadot"),
+            &root.path().join(".local/share/luadot"),
+        )
+        .with_repo(Some(root.path()))
+        .with_dir(&dir);
+
         let outputs = run(
             "test",
             r#"return require("greeting")"#,
             &dir.join(TEMPLATE_FILE),
-            root.path(),
-            &root.path().join(".config/luadot"),
+            &paths,
             Scope::new(dir.clone(), root.path().to_path_buf())
                 .with_dest(root.path().join(".zshrc")),
             &Classes::default(),

@@ -70,9 +70,10 @@ fn run(
 ) -> Result<Shared> {
     let home = utils::home_dir().context("config: failed to locate your home directory")?;
     let dirs = utils::config_dir().context("config: failed to locate the configuration")?;
+    let data = utils::data_dir().context("config: failed to locate the data directory")?;
 
     let lua = runtime().context("config: failed to start the Lua runtime")?;
-    let paths = Paths::new(&home, &dirs).with_repo(repo);
+    let paths = Paths::new(&home, &dirs, &data).with_repo(repo);
     install(&lua, Surface::Config, &paths, classes)
         .with_context(|| format!("config: failed to install `{API}`"))?;
 

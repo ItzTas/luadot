@@ -476,6 +476,7 @@ function ld.opt.repo_dir(path) end
 ---@class ld.path
 ---@field home string Your home directory.
 ---@field config string The configuration directory, `~/.config/luadot`.
+---@field data string The data directory, `~/.local/share/luadot`, where the state, the backups and the default repository live. luadot owns no subdirectory a plugin manager might pick there.
 ---@field repo? string The managed repository, once one is set. Inside `config.lua` it is the one known before the file ran, so it does not answer for an `ld.opt.repo_dir` set in that same file.
 ---@field dir? string The directory of the script that is running, the template directory inside a template.
 ld.path = {}

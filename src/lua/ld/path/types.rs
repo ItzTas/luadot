@@ -4,15 +4,17 @@ use std::path::{Path, PathBuf};
 pub struct Paths {
     home: PathBuf,
     config: PathBuf,
+    data: PathBuf,
     repo: Option<PathBuf>,
     dir: Option<PathBuf>,
 }
 
 impl Paths {
-    pub fn new(home: &Path, config: &Path) -> Self {
+    pub fn new(home: &Path, config: &Path, data: &Path) -> Self {
         Self {
             home: home.to_path_buf(),
             config: config.to_path_buf(),
+            data: data.to_path_buf(),
             repo: None,
             dir: None,
         }
@@ -38,6 +40,10 @@ impl Paths {
 
     pub fn config(&self) -> &Path {
         &self.config
+    }
+
+    pub fn data(&self) -> &Path {
+        &self.data
     }
 
     pub fn repo(&self) -> Option<&Path> {

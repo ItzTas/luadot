@@ -88,7 +88,11 @@ mod tests {
         let dir = plugin(root.path(), "links", r#"ld.opt.link("symbolic")"#);
         let config = from_source(&format!(r#"ld.rtp.add("{}")"#, dir.display())).unwrap();
         let shared = Arc::new(Mutex::new(config));
-        let paths = Paths::new(root.path(), &root.path().join(".config/luadot"));
+        let paths = Paths::new(
+            root.path(),
+            &root.path().join(".config/luadot"),
+            &root.path().join(".local/share/luadot"),
+        );
 
         run_source(
             "setup",

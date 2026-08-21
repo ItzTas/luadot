@@ -43,7 +43,12 @@ mod tests {
     }
 
     fn paths(repo: Option<&Path>) -> Paths {
-        Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot")).with_repo(repo)
+        Paths::new(
+            Path::new("/home/u"),
+            Path::new("/home/u/.config/luadot"),
+            Path::new("/home/u/.local/share/luadot"),
+        )
+        .with_repo(repo)
     }
 
     #[test]

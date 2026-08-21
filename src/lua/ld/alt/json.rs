@@ -101,7 +101,11 @@ mod tests {
 
     fn json(source: &str) -> mlua::Result<String> {
         let lua = runtime().unwrap();
-        let paths = Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot"));
+        let paths = Paths::new(
+            Path::new("/home/u"),
+            Path::new("/home/u/.config/luadot"),
+            Path::new("/home/u/.local/share/luadot"),
+        );
         install(&lua, Surface::Standalone, &paths, &Classes::default()).unwrap();
 
         lua.load(source).eval()

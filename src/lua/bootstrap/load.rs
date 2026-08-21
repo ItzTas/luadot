@@ -19,9 +19,10 @@ pub fn run_bootstrap(command: &str, repo: &Path, shared: &Shared) -> Result<()> 
     let config = utils::config_dir()?;
     let path = resolve(&home, &config, repo)
         .with_context(|| format!("{command}: failed to locate the bootstrap file"))?;
+    let paths = Paths::new(&home, &config, &utils::data_dir()?).with_repo(Some(repo));
     let classes = state::load()?.classes().clone();
 
-    run_file(command, &path, &home, &config, repo, &classes, shared)
+    run_file(command, &path, &paths, &classes, shared)
 }
 
 fn resolve(home: &Path, config: &Path, repo: &Path) -> Result<PathBuf> {
@@ -31,18 +32,14 @@ fn resolve(home: &Path, config: &Path, repo: &Path) -> Result<PathBuf> {
 fn run_file(
     command: &str,
     path: &Path,
-    home: &Path,
-    config: &Path,
-    repo: &Path,
+    paths: &Paths,
     classes: &Classes,
     shared: &Shared,
 ) -> Result<()> {
     let modules = path
         .parent()
         .with_context(|| format!("{command}: {} has no parent directory", path.display()))?;
-    let paths = Paths::new(home, config)
-        .with_repo(Some(repo))
-        .with_dir(modules);
+    let paths = paths.clone().with_dir(modules);
 
     run_script(
         command,
@@ -73,7 +70,10 @@ mod tests {
         repo: &Path,
         classes: &Classes,
     ) -> Result<()> {
-        run_file(command, path, home, config, repo, classes, &shared())
+        let paths =
+            Paths::new(home, config, &home.join(".local/share/luadot")).with_repo(Some(repo));
+
+        run_file(command, path, &paths, classes, &shared())
     }
 
     use super::*;
