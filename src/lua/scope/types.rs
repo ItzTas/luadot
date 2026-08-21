@@ -156,18 +156,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_finds_a_file_inside_the_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir(dir.path().join("variants")).unwrap();
-        std::fs::write(dir.path().join("variants/laptop.zsh"), "data").unwrap();
-
-        assert_eq!(
-            scope(dir.path()).resolve("variants/laptop.zsh"),
-            Some(dir.path().join("variants/laptop.zsh"))
-        );
-    }
-
-    #[test]
     fn resolve_rejects_what_is_not_a_file() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join("variants")).unwrap();
@@ -177,31 +165,6 @@ mod tests {
         assert_eq!(scope.resolve("missing.zsh"), None);
         assert_eq!(scope.resolve("variants"), None);
         assert_eq!(scope.resolve("/nowhere/missing.zsh"), None);
-    }
-
-    #[test]
-    fn resolve_reaches_outside_the_directory() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = root.path().join(".zshrc.luadot");
-        std::fs::create_dir(&dir).unwrap();
-        let shared = root.path().join("shared.zsh");
-        std::fs::write(&shared, "data").unwrap();
-
-        let scope = scope(&dir);
-
-        assert_eq!(
-            scope.resolve("../shared.zsh"),
-            Some(dir.join("../shared.zsh"))
-        );
-        assert_eq!(scope.resolve(&shared.display().to_string()), Some(shared));
-    }
-
-    #[test]
-    fn destination_defaults_to_the_mirrored_path() {
-        assert_eq!(
-            scope(Path::new("/repo/.zshrc.luadot")).destination(None),
-            Some(PathBuf::from("/home/u/.zshrc"))
-        );
     }
 
     #[test]

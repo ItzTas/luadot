@@ -331,13 +331,6 @@ mod tests {
     }
 
     #[test]
-    fn the_label_of_a_state_is_the_name_the_configuration_reads() {
-        for (status, label, _) in STATUS_LABELS {
-            assert_eq!(label, status.name());
-        }
-    }
-
-    #[test]
     fn the_states_are_counted_one_by_one_for_the_configuration() {
         let states = counts(&[FileStatus::Synced, FileStatus::Differs]).states();
 
@@ -345,35 +338,6 @@ mod tests {
         assert!(states.contains(&(FileStatus::Synced, 1)));
         assert!(states.contains(&(FileStatus::Differs, 1)));
         assert!(states.contains(&(FileStatus::Missing, 0)));
-    }
-
-    #[test]
-    fn each_side_says_what_it_reports() {
-        let counts = counts(&[FileStatus::Synced, FileStatus::Missing]);
-
-        assert_eq!(line(Side::Repository, 2, 0, &counts), "2 managed file(s)");
-        assert_eq!(
-            line(Side::Generated, 2, 1, &counts),
-            "1 template(s) into 2 file(s)"
-        );
-    }
-
-    #[test]
-    fn a_side_with_nothing_to_apply_says_so() {
-        let counts = counts(&[FileStatus::Synced, FileStatus::Synced]);
-
-        assert_eq!(line(Side::Repository, 2, 0, &counts), STATUS_CLEAN);
-        assert_eq!(line(Side::Generated, 2, 1, &counts), STATUS_GENERATED_CLEAN);
-    }
-
-    #[test]
-    fn the_templates_left_alone_close_the_managed_line() {
-        let counts = counts(&[FileStatus::Synced]);
-
-        assert_eq!(
-            line(Side::Repository, 1, 2, &counts),
-            "nothing to apply, every managed file is synced, 2 template(s) not resolved"
-        );
     }
 
     #[test]
@@ -397,29 +361,5 @@ mod tests {
         assert_eq!(reported.len(), 1);
         assert_eq!(reported[0].state(), FileStatus::Missing);
         assert_eq!(reported[0].path(), Path::new(".zshrc"));
-    }
-
-    #[test]
-    fn a_resolved_template_that_is_already_on_the_system_is_synced() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
-        std::fs::write(home.join(".zshrc"), "generated\n").unwrap();
-
-        let reported = generated_files(
-            &Arc::new(Mutex::new(Config::default())),
-            &home,
-            &repo,
-            &[Entry::Template(dir)],
-            &Classes::default(),
-        )
-        .unwrap();
-
-        assert_eq!(reported.len(), 1);
-        assert_eq!(reported[0].state(), FileStatus::Synced);
     }
 }

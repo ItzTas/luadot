@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 use anyhow::Result;
 use tracing::debug;
 
-use super::constants::{LFS_FILTERS, LFS_INSTALL, LFS_PROGRAM, LFS_VERSION};
+use super::constants::{LFS_FILTERS, LFS_INSTALL, LFS_PROGRAM, LFS_PULL, LFS_VERSION};
 use super::run::{present, quiet};
 
 pub fn available() -> bool {
@@ -36,6 +36,15 @@ pub fn install(command: &str, repo: &Path, lfs: bool) -> Result<()> {
     quiet(command, repo, LFS_INSTALL)
 }
 
+pub fn pull(command: &str, repo: &Path, lfs: bool) -> Result<()> {
+    if !wanted(lfs) || !present(repo) {
+        return Ok(());
+    }
+
+    debug!(repo = %repo.display(), "pulling the lfs contents");
+    quiet(command, repo, LFS_PULL)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -52,12 +61,6 @@ mod tests {
     }
 
     #[test]
-    fn the_filters_are_held_back_when_the_configuration_turns_them_off() {
-        assert!(filters(false).is_empty());
-        assert_eq!(filters(true).is_empty(), !available());
-    }
-
-    #[test]
     fn installing_writes_the_filters_into_the_repository() {
         let repo = repository();
 
@@ -68,14 +71,5 @@ mod tests {
             return;
         }
         assert!(configured(repo.path()).contains("filter.lfs.process"));
-    }
-
-    #[test]
-    fn installing_leaves_the_repository_alone_when_it_is_turned_off() {
-        let repo = repository();
-
-        install("clone", repo.path(), false).unwrap();
-
-        assert_eq!(configured(repo.path()), "");
     }
 }

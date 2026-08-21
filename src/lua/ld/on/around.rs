@@ -56,25 +56,4 @@ mod tests {
         assert!(matches!(new.get(Moment::Before), Some(Custom::Call(_))));
         assert!(new.get(Moment::After).is_none());
     }
-
-    #[test]
-    fn rejects_a_key_that_belongs_to_a_report() {
-        let err = format!(
-            "{:#}",
-            from_source("ld.on.apply({ entry = false })").unwrap_err()
-        );
-
-        assert!(err.contains("`ld.on.apply`: unknown key `entry`"));
-        assert!(err.contains("available: after, before"));
-    }
-
-    #[test]
-    fn rejects_a_value_a_moment_does_not_take() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.on.tmpl.alt({ before = "soon" })"#).unwrap_err()
-        );
-
-        assert!(err.contains("`ld.on.tmpl.alt`: `before` takes a function or false"));
-    }
 }

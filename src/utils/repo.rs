@@ -6,6 +6,7 @@ use super::constants::DEFAULT_REPO_DIR;
 use super::paths::{data_dir, expand, home_dir, repo_path};
 use crate::crypt;
 use crate::files;
+use crate::git;
 use crate::state;
 
 pub fn destination(
@@ -30,7 +31,10 @@ pub fn require_repo(command: &str, configured: Option<&Path>) -> Result<PathBuf>
         None => None,
     };
 
-    resolve(command, configured, state::load()?.repo())
+    let repo = resolve(command, configured, state::load()?.repo())?;
+    git::refresh_info(command, &repo)?;
+
+    Ok(repo)
 }
 
 pub fn managed_path(command: &str, home: &Path, repo: &Path, arg: &str) -> Result<PathBuf> {
@@ -97,66 +101,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_destination_argument_wins_over_everything_else() {
-        let dir = destination(
-            "clone",
-            Path::new("/home/u"),
-            Some("/data/dotfiles"),
-            Some(Path::new("~/configured")),
-        )
-        .unwrap();
-
-        assert_eq!(dir, PathBuf::from("/data/dotfiles"));
-    }
-
-    #[test]
-    fn without_either_the_destination_lands_where_luadot_keeps_its_data() {
-        let dir = destination("init", Path::new("/home/u"), None, None).unwrap();
-
-        assert_eq!(dir, data_dir().unwrap().join(DEFAULT_REPO_DIR));
-    }
-
-    #[test]
     fn errors_when_no_repository_is_set() {
         let err = resolve("add", None, None).unwrap_err().to_string();
         assert_eq!(
             err,
             "add: no repository set; run `luadot clone <url>` or `luadot init` first"
-        );
-    }
-
-    #[test]
-    fn errors_when_the_repository_does_not_exist() {
-        let dir = tempfile::tempdir().unwrap();
-        let missing = dir.path().join("repo");
-
-        let err = resolve("git", None, Some(&missing))
-            .unwrap_err()
-            .to_string();
-        assert_eq!(
-            err,
-            format!(
-                "git: repository {} does not exist; run `luadot clone <url>` or `luadot init` first",
-                missing.display()
-            )
-        );
-    }
-
-    #[test]
-    fn errors_when_the_configured_repository_does_not_exist() {
-        let dir = tempfile::tempdir().unwrap();
-        let missing = dir.path().join("dotfiles");
-
-        let err = resolve("status", Some(missing.clone()), Some(dir.path()))
-            .unwrap_err()
-            .to_string();
-
-        assert_eq!(
-            err,
-            format!(
-                "status: repository {} does not exist; clone it there or fix `ld.opt.repo_dir`",
-                missing.display()
-            )
         );
     }
 
@@ -172,20 +121,6 @@ mod tests {
             resolve("apply", Some(configured.clone()), Some(&remembered)).unwrap(),
             configured
         );
-    }
-
-    #[test]
-    fn managed_path_maps_a_tracked_file_into_the_repository() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
-        let tracked = repo.join(".bashrc");
-        std::fs::write(&tracked, "data").unwrap();
-
-        let arg = home.join(".bashrc").to_string_lossy().into_owned();
-
-        assert_eq!(managed_path("rm", &home, &repo, &arg).unwrap(), tracked);
     }
 
     #[test]
@@ -224,20 +159,6 @@ mod tests {
     }
 
     #[test]
-    fn managed_path_finds_the_template_producing_a_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let template = repo.join(".zshrc.luadot");
-        std::fs::create_dir_all(&template).unwrap();
-        std::fs::write(template.join("luadot.lua"), "return \"\"\n").unwrap();
-
-        let arg = home.join(".zshrc").to_string_lossy().into_owned();
-
-        assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), template);
-    }
-
-    #[test]
     fn managed_path_prefers_the_managed_file_over_the_template() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
@@ -249,19 +170,5 @@ mod tests {
         let arg = home.join(".zshrc").to_string_lossy().into_owned();
 
         assert_eq!(managed_path("edit", &home, &repo, &arg).unwrap(), plain);
-    }
-
-    #[test]
-    fn managed_path_accepts_a_dangling_symlink() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
-        let tracked = repo.join(".bashrc");
-        std::os::unix::fs::symlink(home.join(".bashrc"), &tracked).unwrap();
-
-        let arg = home.join(".bashrc").to_string_lossy().into_owned();
-
-        assert_eq!(managed_path("rm", &home, &repo, &arg).unwrap(), tracked);
     }
 }

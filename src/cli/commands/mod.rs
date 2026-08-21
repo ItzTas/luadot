@@ -48,6 +48,4 @@ pub use rm_cmd::{RmArgs, rm_cmd};
 pub use setup_cmd::{SetupArgs, setup_cmd};
 pub use status_cmd::{StatusArgs, status_cmd};
 pub use sync_cmd::{SyncArgs, sync_cmd};
-#[cfg(test)]
-pub use tmpl_cmd::TmplAction;
 pub use tmpl_cmd::{TmplArgs, tmpl_cmd};

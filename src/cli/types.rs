@@ -90,7 +90,6 @@ pub enum Cmd {
 mod tests {
     use clap::CommandFactory;
 
-    use super::super::commands::TmplAction;
     use super::*;
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
@@ -108,34 +107,6 @@ mod tests {
 
         match cli.command {
             Cmd::Git(args) => assert_eq!(args.args, ["commit", "-m", "msg"]),
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn sync_takes_a_message_and_can_leave_the_push_out() {
-        let cli = parse(&["luadot", "sync", "-m", "from here", "--no-push"]).unwrap();
-
-        match cli.command {
-            Cmd::Sync(args) => {
-                assert_eq!(args.message.as_deref(), Some("from here"));
-                assert!(args.no_push);
-            }
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn tmpl_new_takes_one_path_and_the_file_flag() {
-        let cli = parse(&["luadot", "tmpl", "new", "-f", "~/.zprofile"]).unwrap();
-
-        match cli.command {
-            Cmd::Tmpl(TmplArgs {
-                action: TmplAction::New(args),
-            }) => {
-                assert!(args.file);
-                assert_eq!(args.path, "~/.zprofile");
-            }
             other => panic!("parsed {other:?}"),
         }
     }

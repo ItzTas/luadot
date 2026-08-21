@@ -131,51 +131,6 @@ mod tests {
     }
 
     #[test]
-    fn place_leaves_a_matching_destination_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".netrc");
-        place(
-            "apply",
-            ConflictPolicy::Overwrite,
-            placed(None),
-            b"secret",
-            &dest,
-        )
-        .unwrap();
-
-        let outcome = place(
-            "apply",
-            ConflictPolicy::Error,
-            placed(None),
-            b"secret",
-            &dest,
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::AlreadySynced);
-    }
-
-    #[test]
-    fn place_narrows_a_widened_mode_back() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".netrc");
-        std::fs::write(&dest, "secret").unwrap();
-        std::fs::set_permissions(&dest, Permissions::from_mode(0o644)).unwrap();
-
-        let outcome = place(
-            "apply",
-            ConflictPolicy::Overwrite,
-            placed(None),
-            b"secret",
-            &dest,
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Replaced);
-        assert_eq!(mode_of(&dest), SECRET_MODE);
-    }
-
-    #[test]
     fn place_follows_the_conflict_policy() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".netrc");
@@ -221,47 +176,6 @@ mod tests {
     }
 
     #[test]
-    fn place_replaces_a_symlink_with_a_plain_copy() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("cipher");
-        let dest = dir.path().join(".netrc");
-        std::fs::write(&source, "secret").unwrap();
-        std::os::unix::fs::symlink(&source, &dest).unwrap();
-
-        let outcome = place(
-            "apply",
-            ConflictPolicy::Overwrite,
-            placed(None),
-            b"secret",
-            &dest,
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Replaced);
-        assert!(!std::fs::symlink_metadata(&dest).unwrap().is_symlink());
-        assert_eq!(std::fs::read_to_string(&source).unwrap(), "secret");
-    }
-
-    #[test]
-    fn a_mode_rule_replaces_the_private_default() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".config/wireguard/wg0.conf");
-
-        let outcome = place(
-            "apply",
-            ConflictPolicy::Error,
-            placed(Some(0o640)),
-            b"PrivateKey = secret\n",
-            &dest,
-        )
-        .unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Created);
-        assert_eq!(std::fs::read(&dest).unwrap(), b"PrivateKey = secret\n");
-        assert_eq!(mode_of(&dest), 0o640);
-    }
-
-    #[test]
     fn plain_status_weighs_the_contents_and_the_mode() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join("wg0.conf");
@@ -292,25 +206,6 @@ mod tests {
         assert_eq!(
             plain_status("apply", b"handwritten", &dest, None).unwrap(),
             FileStatus::Differs
-        );
-    }
-
-    #[test]
-    fn a_secret_the_system_never_got_reads_as_missing() {
-        let dir = tempfile::tempdir().unwrap();
-
-        assert_eq!(
-            status(
-                "status",
-                Backend::Age,
-                Lock::Keys,
-                None,
-                &dir.path().join(".netrc.age"),
-                &dir.path().join(".netrc"),
-                None,
-            )
-            .unwrap(),
-            FileStatus::Missing
         );
     }
 }

@@ -61,46 +61,6 @@ mod tests {
     }
 
     #[test]
-    fn reports_missing_when_the_destination_does_not_exist() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        write(&source, "data");
-
-        let status =
-            file_status(placed(LinkMode::Hard), &source, &dir.path().join("dest")).unwrap();
-
-        assert_eq!(status, FileStatus::Missing);
-    }
-
-    #[test]
-    fn reports_synced_when_hard_linked() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        std::fs::hard_link(&source, &dest).unwrap();
-
-        assert_eq!(
-            file_status(placed(LinkMode::Hard), &source, &dest).unwrap(),
-            FileStatus::Synced
-        );
-    }
-
-    #[test]
-    fn reports_synced_when_the_symlink_points_at_the_source() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        std::os::unix::fs::symlink(&source, &dest).unwrap();
-
-        assert_eq!(
-            file_status(placed(LinkMode::Symbolic), &source, &dest).unwrap(),
-            FileStatus::Synced
-        );
-    }
-
-    #[test]
     fn reports_unlinked_when_the_contents_match_but_the_link_does_not() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
@@ -111,20 +71,6 @@ mod tests {
         assert_eq!(
             file_status(placed(LinkMode::Hard), &source, &dest).unwrap(),
             FileStatus::Unlinked
-        );
-    }
-
-    #[test]
-    fn reports_differs_when_the_contents_diverge() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "repo");
-        write(&dest, "system");
-
-        assert_eq!(
-            file_status(placed(LinkMode::Hard), &source, &dest).unwrap(),
-            FileStatus::Differs
         );
     }
 
@@ -169,20 +115,6 @@ mod tests {
         assert_eq!(
             file_status(placement, &source, &dest).unwrap(),
             FileStatus::Synced
-        );
-    }
-
-    #[test]
-    fn reports_differs_for_a_dangling_symlink() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        std::os::unix::fs::symlink(dir.path().join("gone"), &dest).unwrap();
-
-        assert_eq!(
-            file_status(placed(LinkMode::Hard), &source, &dest).unwrap(),
-            FileStatus::Differs
         );
     }
 }

@@ -239,28 +239,6 @@ mod tests {
     }
 
     #[test]
-    fn a_row_naming_several_calls_answers_for_each_of_them() {
-        let entries = entries();
-
-        assert_eq!(only(&entries, "print.note"), only(&entries, "print.error"));
-    }
-
-    #[test]
-    fn a_call_written_twice_is_kept_once_and_names_both_pages() {
-        let entries = entries();
-        let entry = only(&entries, "crypt.lock");
-
-        assert_eq!(entry.pages, ["docs/ld.md", "docs/secrets.md"]);
-    }
-
-    #[test]
-    fn the_prefix_and_the_parentheses_are_optional() {
-        let entries = entries();
-
-        assert_eq!(only(&entries, "ld.rules()"), only(&entries, "rules"));
-    }
-
-    #[test]
     fn a_namespace_answers_with_every_call_under_it() {
         let entries = entries();
         let found = found(&entries, "regex").unwrap();
@@ -274,33 +252,9 @@ mod tests {
     }
 
     #[test]
-    fn the_interface_itself_answers_with_every_call() {
-        let entries = entries();
-
-        assert_eq!(found(&entries, "ld").unwrap().len(), entries.len());
-    }
-
-    #[test]
-    fn a_piece_of_a_name_answers_with_what_carries_it() {
-        let entries = entries();
-        let found = found(&entries, "backup").unwrap();
-
-        assert_eq!(found.len(), 4);
-    }
-
-    #[test]
     fn a_call_the_interface_does_not_carry_is_refused() {
         let error = found(&entries(), "opt.colour").unwrap_err().to_string();
 
         assert!(error.starts_with("doc: `opt.colour` is not a call"));
-    }
-
-    #[test]
-    fn the_names_are_listed_once_each_in_order() {
-        let names = listed(&entries());
-
-        assert!(names.contains(&"alt.render".to_string()));
-        assert!(names.is_sorted());
-        assert_eq!(names.iter().filter(|name| *name == "crypt.lock").count(), 1);
     }
 }

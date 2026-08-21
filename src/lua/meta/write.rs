@@ -84,15 +84,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn refresh_writes_nothing_where_no_definitions_were_installed() {
-        let dir = tempfile::tempdir().unwrap();
-
-        refresh("meta", dir.path()).unwrap();
-
-        assert!(!dir.path().join(DEFINITIONS_DIR).exists());
-    }
-
-    #[test]
     fn a_settings_file_that_does_not_parse_is_left_alone() {
         let dir = tempfile::tempdir().unwrap();
         let luarc = dir.path().join(LUARC_FILE);

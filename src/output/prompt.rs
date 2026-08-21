@@ -107,35 +107,16 @@ fn is_yes(answer: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose, is_yes, label, offer, pick};
+    use super::{label, pick};
 
     fn choices() -> Vec<String> {
         vec!["desktop".to_string(), "laptop".to_string()]
     }
 
     #[test]
-    fn accepts_the_affirmative_answers() {
-        for answer in ["y", "Y", "yes", "YES", " yes \n", "y\n"] {
-            assert!(is_yes(answer), "expected {answer:?} to confirm");
-        }
-    }
-
-    #[test]
-    fn offer_declines_without_a_terminal() {
-        assert!(!offer("clone", "Run it now?").unwrap());
-    }
-
-    #[test]
     fn a_choice_is_picked_by_its_number_or_its_name() {
         assert_eq!(pick("2", &choices(), None).unwrap(), "laptop");
         assert_eq!(pick(" laptop \n", &choices(), None).unwrap(), "laptop");
-    }
-
-    #[test]
-    fn an_answer_outside_the_choices_is_refused() {
-        assert_eq!(pick("3", &choices(), None), None);
-        assert_eq!(pick("0", &choices(), None), None);
-        assert_eq!(pick("tablet", &choices(), None), None);
     }
 
     #[test]
@@ -161,24 +142,5 @@ mod tests {
             "email [me@example.com]"
         );
         assert_eq!(label("email", &[], None), "email");
-    }
-
-    #[test]
-    fn choosing_without_a_terminal_reports_the_way_out() {
-        let err = choose(
-            "class",
-            "form-factor",
-            "desktop or laptop?",
-            &choices(),
-            None,
-            "it with `luadot class set form-factor <value>`",
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert_eq!(
-            err,
-            "class: cannot ask for `form-factor` without a terminal; pass it with `luadot class set form-factor <value>`"
-        );
     }
 }

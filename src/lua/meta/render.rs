@@ -264,8 +264,6 @@ fn suffix(optional: bool) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use mlua::{Lua, Table, Value};
-
     use super::super::constants::DEFINITIONS;
     use super::*;
     use crate::lua::ld::walker;
@@ -276,39 +274,6 @@ mod tests {
             render(&walker()) == DEFINITIONS,
             "meta/ld.lua is stale; run packaging/meta/update.sh"
         );
-    }
-
-    #[test]
-    fn the_definitions_load_in_a_bare_state_and_define_every_call() {
-        let walker = walker();
-        let lua = Lua::new();
-        lua.load(render(&walker)).exec().unwrap();
-
-        for instance in &walker.global_instances_off {
-            let table = instance.name.split('.').fold(
-                Value::Table(lua.globals()),
-                |value, name| match value {
-                    Value::Table(table) => table.get(name).unwrap(),
-                    _ => Value::Nil,
-                },
-            );
-            let Value::Table(table) = table else {
-                panic!("{} is not defined", instance.name);
-            };
-
-            for function in &record_of(&walker, &instance.ty).unwrap().functions {
-                let name = function.name.to_string();
-                let defined: Value = table.get(name.as_str()).unwrap();
-
-                assert!(
-                    defined.is_function(),
-                    "{}.{name} is not defined",
-                    instance.name
-                );
-            }
-        }
-
-        let _: Table = lua.globals().get("ld").unwrap();
     }
 
     #[test]

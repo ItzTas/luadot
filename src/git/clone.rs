@@ -8,7 +8,7 @@ use tracing::debug;
 
 use super::constants::{CHECKOUT_TASK, FETCH_TASK};
 use super::empty::require_empty;
-use super::lfs;
+use super::{info, lfs};
 use crate::output::Progress;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +56,9 @@ pub fn clone(dir: &Path, url: &str, lfs: bool) -> Result<Cloned> {
     };
 
     lfs::install("clone", dir, lfs)?;
+    if info::refresh("clone", dir)? {
+        lfs::pull("clone", dir, lfs)?;
+    }
 
     debug!(dir = %dir.display(), ?cloned, "cloned");
     Ok(cloned)
@@ -70,7 +73,6 @@ fn options(lfs: bool) -> gix::open::Options {
 
 #[cfg(test)]
 mod tests {
-    use std::process::Command;
 
     use super::*;
     use crate::git::fixture::repository;
@@ -79,11 +81,14 @@ mod tests {
 
     fn origin() -> tempfile::TempDir {
         let repo = repository();
+        let rules = super::super::rules::dir("test", repo.path()).unwrap();
+        std::fs::create_dir_all(&rules).unwrap();
         std::fs::write(
-            repo.path().join(".gitattributes"),
+            rules.join(super::super::constants::RULES_ATTRIBUTES),
             "*.bin filter=lfs diff=lfs merge=lfs -text\n",
         )
         .unwrap();
+        assert!(info::refresh("test", repo.path()).unwrap());
         std::fs::write(repo.path().join("big.bin"), CONTENTS).unwrap();
 
         for args in [
@@ -91,19 +96,14 @@ mod tests {
             vec!["add", "-A"],
             vec!["commit", "--quiet", "-m", "init"],
         ] {
-            let status = Command::new("git")
-                .current_dir(repo.path())
-                .args(args)
-                .status()
-                .unwrap();
-            assert!(status.success());
+            super::super::run::quiet("test", repo.path(), args).unwrap();
         }
 
         repo
     }
 
     #[test]
-    fn cloning_smudges_a_file_the_attributes_send_through_lfs() {
+    fn cloning_pulls_a_file_the_attributes_of_the_repository_send_through_lfs() {
         if !lfs::available() {
             return;
         }
@@ -117,6 +117,11 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(into.join("big.bin")).unwrap(),
             CONTENTS
+        );
+        assert!(
+            std::fs::read_to_string(into.join(".git/info/attributes"))
+                .unwrap()
+                .contains("*.bin filter=lfs")
         );
         assert!(
             std::fs::read_to_string(into.join(".git/config"))

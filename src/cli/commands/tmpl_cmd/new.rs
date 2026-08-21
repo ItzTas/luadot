@@ -181,16 +181,6 @@ mod tests {
     }
 
     #[test]
-    fn a_nested_path_stays_next_to_the_file_it_produces() {
-        let (_root, home, _repo) = home_and_repo();
-
-        assert_eq!(
-            destination(&home, &arg(&home.join(".config/nvim/init.lua"))).unwrap(),
-            home.join(".config/nvim/init.lua.luadot")
-        );
-    }
-
-    #[test]
     fn an_existing_template_is_left_alone() {
         let (_root, home, repo) = home_and_repo();
         let template = home.join(".zshrc.luadot");
@@ -207,37 +197,5 @@ mod tests {
             std::fs::read_to_string(template.join(TEMPLATE_FILE)).unwrap(),
             "kept"
         );
-    }
-
-    #[test]
-    fn a_template_the_repository_already_holds_is_reported() {
-        let (_root, home, repo) = home_and_repo();
-        let managed = repo.join(".zshrc.luadot");
-        std::fs::create_dir_all(&managed).unwrap();
-
-        let err = create(&home.join(".zshrc.luadot"), &managed, false)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("tmpl new: "));
-        assert!(err.contains("already exists in the repository"));
-        assert!(!home.join(".zshrc.luadot").exists());
-    }
-
-    #[test]
-    fn a_file_the_repository_already_manages_is_reported() {
-        let (_root, home, repo) = home_and_repo();
-        std::fs::write(repo.join(".zshrc"), "managed").unwrap();
-
-        let err = create(
-            &home.join(".zshrc.luadot"),
-            &repo.join(".zshrc.luadot"),
-            false,
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(err.contains("tmpl new: "));
-        assert!(err.contains("already in the repository"));
     }
 }

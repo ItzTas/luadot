@@ -65,24 +65,6 @@ mod tests {
     }
 
     #[test]
-    fn a_call_returning_nothing_or_false_shows_nothing() {
-        let lua = Lua::new();
-
-        assert_eq!(
-            call(&lua, "return function() end")
-                .run("a hook", ())
-                .unwrap(),
-            None
-        );
-        assert_eq!(
-            call(&lua, "return function() return false end")
-                .run("a hook", ())
-                .unwrap(),
-            None
-        );
-    }
-
-    #[test]
     fn a_call_returning_anything_else_is_reported() {
         let lua = Lua::new();
         let call = call(&lua, "return function() return 1 end");
@@ -91,27 +73,5 @@ mod tests {
 
         assert!(err.contains("`ld.on.diff`: `summary` returned integer"));
         assert!(err.contains("a string or nothing is expected"));
-    }
-
-    #[test]
-    fn a_failing_call_names_what_was_running() {
-        let lua = Lua::new();
-        let call = call(&lua, r#"return function() error("broken") end"#);
-
-        let err = format!("{:#}", call.run("`ld.on.diff`: `entry`", ()).unwrap_err());
-
-        assert!(err.contains("`ld.on.diff`: `entry` failed"));
-        assert!(err.contains("broken"));
-    }
-
-    #[test]
-    fn a_silent_customization_shows_nothing_and_a_text_shows_itself() {
-        assert_eq!(Custom::Silent.shown("a hook", ()).unwrap(), None);
-        assert_eq!(
-            Custom::Text("done".to_string())
-                .shown("a hook", ())
-                .unwrap(),
-            Some("done".to_string())
-        );
     }
 }

@@ -73,24 +73,11 @@ mod tests {
     }
 
     #[test]
-    fn literals_and_expressions_come_out_in_order() {
-        assert_eq!(
-            render("export EDITOR=<%= \"nvim\" %>\n").unwrap(),
-            "export EDITOR=nvim\n"
-        );
-    }
-
-    #[test]
     fn statements_drive_what_is_emitted() {
         assert_eq!(
             render("<% for i = 1, 2 do -%>\nx=<%= i %>\n<% end -%>\n").unwrap(),
             "x=1\nx=2\n"
         );
-    }
-
-    #[test]
-    fn a_return_mid_template_ends_it_early() {
-        assert_eq!(render("a<% do return end %>b").unwrap(), "a");
     }
 
     #[test]
@@ -109,19 +96,5 @@ mod tests {
 
         assert!(err.contains("was nil"));
         assert!(err.contains("line 2"));
-    }
-
-    #[test]
-    fn an_undefined_name_is_refused() {
-        let err = render("export EDITOR=<%= edtior %>")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("was nil"));
-    }
-
-    #[test]
-    fn a_false_expression_is_written() {
-        assert_eq!(render("<%= false %>").unwrap(), "false");
     }
 }

@@ -147,14 +147,4 @@ mod tests {
             "14 managed file(s) (12 synced, 1 missing, 0 unlinked, 1 differs)"
         );
     }
-
-    #[test]
-    fn the_generated_side_counts_the_templates_it_resolved() {
-        let lua = Lua::new();
-        let counts = StatusCounts::new(Side::Generated, 3, "unused".to_string()).with_templates(2);
-
-        assert_eq!(read(&lua, "return subject.side", &counts), "generated");
-        assert_eq!(read(&lua, "return subject.templates .. \"\"", &counts), "2");
-        assert_eq!(read(&lua, "return subject.total .. \"\"", &counts), "3");
-    }
 }

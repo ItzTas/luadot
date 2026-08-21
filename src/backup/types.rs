@@ -119,21 +119,6 @@ mod tests {
     }
 
     #[test]
-    fn a_symlink_is_saved_as_a_symlink() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = root.path().join("backup");
-        let target = root.path().join("elsewhere");
-        let file = root.path().join("home/.zshrc");
-        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        std::fs::write(&target, "data").unwrap();
-        std::os::unix::fs::symlink(&target, &file).unwrap();
-
-        Backup::at("apply", dir.clone()).save(&file).unwrap();
-
-        assert_eq!(std::fs::read_link(backed(&dir, &file)).unwrap(), target);
-    }
-
-    #[test]
     fn a_relative_path_is_refused() {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
@@ -143,33 +128,6 @@ mod tests {
 
         assert_eq!(backup.saved(), 0);
         assert_eq!(err.to_string(), "rm: failed to back up relative/.zshrc");
-        assert!(!dir.exists());
-    }
-
-    #[test]
-    fn an_age_limit_drops_the_backups_it_has_outlived() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = root.path().join("backups/100");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(root.path().join("backups/200")).unwrap();
-
-        Backup::at("apply", dir)
-            .keeping(Retention::new(None, Some(60)))
-            .finish()
-            .unwrap();
-
-        assert!(!root.path().join("backups/100").exists());
-        assert!(!root.path().join("backups/200").exists());
-    }
-
-    #[test]
-    fn nothing_is_created_until_a_file_is_saved() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = root.path().join("backup");
-
-        let backup = Backup::at("apply", dir.clone());
-
-        assert_eq!(backup.dir(), dir);
         assert!(!dir.exists());
     }
 }

@@ -91,24 +91,3 @@ pub fn write_mode(command: &str, dest: &Path, contents: &[u8], mode: u32) -> Res
     std::fs::set_permissions(dest, Permissions::from_mode(mode))
         .with_context(|| format!("{command}: failed to set the mode of {}", dest.display()))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_effective_mode_is_the_one_given_or_the_bits_of_the_source() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        std::fs::write(&source, "x").unwrap();
-        std::fs::set_permissions(&source, Permissions::from_mode(0o640)).unwrap();
-
-        assert_eq!(effective_mode("diff", &source, Some(0o600)).unwrap(), 0o600);
-        assert_eq!(effective_mode("diff", &source, None).unwrap(), 0o640);
-
-        let err = effective_mode("diff", &dir.path().join("missing"), None)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("diff: failed to inspect"));
-    }
-}

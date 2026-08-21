@@ -94,14 +94,15 @@ directory: `.config/nvim/init.lua` is the pattern for
 
 - `*` matches within a single path segment, `**` crosses segments.
 - A pattern naming a directory covers everything under it.
-- The repository's `.git` directory and its own top-level files
-  (`.gitignore`, `.gitattributes`, `.gitmodules`, `.luarc.json`) are always
-  ignored.
+- The repository's `.git` directory is always ignored; everything else at the
+  top level, its `.gitignore` included, is a dotfile. See
+  [the repository](repository.md#the-repositorys-own-files).
 
 ### Git LFS
 
 `lfs = true` stores the matching files in Git LFS. luadot writes the patterns
-into the repository's `.gitattributes`, between two markers:
+into the repository's `.local/share/luadot/git/attributes`, between two
+markers:
 
 ```
 # luadot:lfs
@@ -110,17 +111,21 @@ Videos/** filter=lfs diff=lfs merge=lfs -text
 ```
 
 Lines outside the markers stay as they are, and dropping the rules takes the
-block back out. `add` writes that file, stages it, and runs `git lfs install
---local` on the repository; `init` and `clone` install the filters too, so a
-clone brings the contents down instead of the pointers.
+block back out. `add` writes that file, stages it, copies it into
+`.git/info/attributes` and runs `git lfs install --local` on the repository;
+`clone` installs the filters, copies the attributes and runs `git lfs pull`
+once the checkout is done, so a fresh clone ends with the contents instead of
+the pointers.
+[The repository](repository.md#the-repositorys-own-files) says why the file is
+not a `.gitattributes`.
 
 Each pattern becomes two lines, the pattern itself and `<pattern>/**`, because a
 rule naming a directory covers everything under it. A pattern with no `/` is
-anchored at the repository root, since `.gitattributes` would otherwise match it
-at any depth.
+anchored at the repository root, since an attributes file would otherwise match
+it at any depth.
 
 A later rule with `lfs = false` unsets the attributes for what it matches. The
-key needs `match`, since `.gitattributes` has no regular expressions, and no
+key needs `match`, since git attributes have no regular expressions, and no
 rule sets `encrypt` and `lfs` at once. `ld.opt.lfs(false)` holds the whole thing
 back, and without `git-lfs` on your PATH `add` says so and stores the files as
 they are.
@@ -639,19 +644,21 @@ further than that run.
 
 `luadot init` and `luadot clone` write `~/.local/share/luadot/meta/ld.lua`,
 lua-language-server definitions of every call on this page, and a `.luarc.json`
-that loads them from there into `~/.config/luadot/` and into the repository.
-Completion and hover text then work in `config.lua`, `bootstrap.lua`, the setup
-scripts and every `luadot.lua`, whichever of the two the editor has open. When
-writing them fails, those two commands warn and carry on; `luadot meta install`
-does the same work on its own:
+in `~/.config/luadot/` that loads them from there. Completion and hover text
+then work in `config.lua`, `bootstrap.lua` and the setup scripts; a template
+gets its own `.luarc.json` from `tmpl new`, so its `luadot.lua` completes from
+either path. The repository gets none: it mirrors your home directory, and a
+`.luarc.json` at its top would land in `~`. When writing them fails, those two
+commands warn and carry on; `luadot meta install` does the same work on its
+own:
 
 ```
 luadot meta install
 luadot meta install ~/scripts
 ```
 
-A directory of your own takes the settings instead of those two; the
-definitions stay where they are. An existing `.luarc.json`
+A directory of your own takes the settings instead of the configuration
+directory; the definitions stay where they are. An existing `.luarc.json`
 keeps its keys: `workspace.library` and `runtime.path` gain the entries they
 lack, `runtime.version` becomes `Lua 5.4`. One that does not parse is left
 alone, and the settings are printed for you to merge by hand. The definitions
@@ -679,7 +686,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
 | `ld.opt.autocommit(enabled)` | `true`, `false` | Whether `add` and `rm` commit what they staged. Defaults to `false`. |
 | `ld.opt.autopush(enabled)` | `true`, `false` | Whether that commit is pushed too, committing first. Defaults to `false`. |
-| `ld.opt.lfs(enabled)` | `true`, `false` | Whether luadot installs the Git LFS filters and writes the `.gitattributes` the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH. |
+| `ld.opt.lfs(enabled)` | `true`, `false` | Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 | `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |

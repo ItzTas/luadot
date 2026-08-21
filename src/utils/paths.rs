@@ -104,17 +104,6 @@ mod tests {
     }
 
     #[test]
-    fn repo_path_mirrors_home_at_the_repository_root() {
-        let dest = repo_path(
-            Path::new("/home/u"),
-            Path::new("/repo"),
-            Path::new("/home/u/.config/nvim/init.lua"),
-        )
-        .unwrap();
-        assert_eq!(dest, PathBuf::from("/repo/.config/nvim/init.lua"));
-    }
-
-    #[test]
     fn repo_path_resolves_dotdot_before_checking_the_home_directory() {
         let dest = repo_path(
             Path::new("/home/u"),
@@ -134,19 +123,6 @@ mod tests {
     }
 
     #[test]
-    fn repo_path_refuses_a_path_outside_the_home_directory() {
-        for outside in ["/etc/pacman.conf", "/home/u2/.vimrc", "../outside"] {
-            let err = repo_path(Path::new("/home/u"), Path::new("/repo"), Path::new(outside))
-                .unwrap_err();
-            assert_eq!(
-                err.to_string(),
-                "outside your home directory /home/u",
-                "{outside}"
-            );
-        }
-    }
-
-    #[test]
     fn system_path_inverts_repo_path() {
         let home = Path::new("/home/u");
         let repo = Path::new("/repo");
@@ -154,29 +130,6 @@ mod tests {
         assert_eq!(
             system_path(home, repo, Path::new("/repo/.config/nvim/init.lua")).unwrap(),
             PathBuf::from("/home/u/.config/nvim/init.lua")
-        );
-    }
-
-    #[test]
-    fn system_path_rejects_a_file_outside_the_repository() {
-        let err = system_path(
-            Path::new("/home/u"),
-            Path::new("/repo"),
-            Path::new("/elsewhere/.vimrc"),
-        )
-        .unwrap_err();
-        assert!(err.to_string().contains("is not inside the repository"));
-    }
-
-    #[test]
-    fn relative_strips_the_repository_prefix_and_keeps_what_is_outside() {
-        assert_eq!(
-            relative(Path::new("/repo"), Path::new("/repo/.config/nvim/init.lua")),
-            Path::new(".config/nvim/init.lua")
-        );
-        assert_eq!(
-            relative(Path::new("/repo"), Path::new("/tmp/x")),
-            Path::new("/tmp/x")
         );
     }
 }

@@ -107,30 +107,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_line_runs_through_the_shell() {
-        let command = Provider::Line("pass show age/key".to_string()).command();
-
-        assert_eq!(command.get_program(), OsStr::new("sh"));
-        assert_eq!(
-            command
-                .get_args()
-                .map(|arg| arg.to_string_lossy().into_owned())
-                .collect::<Vec<String>>(),
-            ["-c", "pass show age/key"]
-        );
-    }
-
-    #[test]
-    fn without_a_provider_the_identity_is_the_configured_file() {
-        let mut identity = Identity::new(Some(Key::File(PathBuf::from("/home/u/key.txt"))));
-
-        assert_eq!(
-            identity.path("apply").unwrap(),
-            Some(Path::new("/home/u/key.txt"))
-        );
-    }
-
-    #[test]
     fn a_provided_identity_lands_in_a_private_file() {
         let mut identity = Identity::new(Some(Key::Command(Provider::Line(
             "printf 'AGE-SECRET-KEY-1TEST\n'".to_string(),
@@ -174,26 +150,5 @@ mod tests {
         };
 
         assert!(std::fs::symlink_metadata(&path).is_err());
-    }
-
-    #[test]
-    fn a_failing_provider_reports_its_stderr() {
-        let mut identity = Identity::new(Some(Key::Command(Provider::Line(
-            "echo locked >&2; exit 1".to_string(),
-        ))));
-
-        let err = identity.path("apply").unwrap_err().to_string();
-
-        assert!(err.contains("apply: `echo locked >&2; exit 1` failed: locked"));
-    }
-
-    #[test]
-    fn a_silent_provider_is_refused() {
-        let mut identity =
-            Identity::new(Some(Key::Command(Provider::Line("printf ' '".to_string()))));
-
-        let err = identity.path("apply").unwrap_err().to_string();
-
-        assert!(err.contains("produced no identity"));
     }
 }

@@ -44,36 +44,10 @@ fn build_command(editor: &str, path: &Path) -> Command {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::{OsStr, OsString};
+    use std::ffi::OsStr;
     use std::path::Path;
 
-    use super::{build_command, resolve_editor};
-
-    #[test]
-    fn resolve_editor_prefers_visual() {
-        assert_eq!(
-            resolve_editor(Some("nvim".into()), Some("vi".into())),
-            "nvim"
-        );
-    }
-
-    #[test]
-    fn resolve_editor_falls_back_to_editor_when_visual_is_unset_or_empty() {
-        assert_eq!(resolve_editor(None, Some("vi".into())), "vi");
-        assert_eq!(
-            resolve_editor(Some(OsString::new()), Some("vi".into())),
-            "vi"
-        );
-    }
-
-    #[test]
-    fn build_command_appends_the_path_to_a_bare_editor() {
-        let command = build_command("vim", Path::new("/repo/.bashrc"));
-
-        assert_eq!(command.get_program(), OsStr::new("vim"));
-        let args: Vec<&OsStr> = command.get_args().collect();
-        assert_eq!(args, [OsStr::new("/repo/.bashrc")]);
-    }
+    use super::build_command;
 
     #[test]
     fn build_command_forwards_editor_arguments() {

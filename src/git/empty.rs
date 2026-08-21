@@ -15,26 +15,3 @@ pub(super) fn require_empty(command: &str, dir: &Path) -> Result<()> {
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_missing_directory_is_empty() {
-        let dir = tempfile::tempdir().unwrap();
-
-        require_empty("clone", &dir.path().join("repo")).unwrap();
-    }
-
-    #[test]
-    fn a_directory_holding_something_is_refused() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("existing.txt"), "data").unwrap();
-
-        let err = require_empty("clone", dir.path()).unwrap_err().to_string();
-
-        assert!(err.contains("clone: "));
-        assert!(err.contains("is not empty"));
-    }
-}

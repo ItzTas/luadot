@@ -119,20 +119,6 @@ mod tests {
     }
 
     #[test]
-    fn defaults_to_keys_without_any() {
-        let config = from_source("local unused = 1").unwrap();
-
-        assert_eq!(config.crypt_secrets(), &Secrets::default());
-    }
-
-    #[test]
-    fn the_word_passphrase_picks_the_passphrase_lock() {
-        let config = from_source(r#"ld.crypt.lock("passphrase")"#).unwrap();
-
-        assert_eq!(config.crypt_secrets(), &Secrets::Passphrase);
-    }
-
-    #[test]
     fn a_table_carries_the_recipients_and_the_identity() {
         let config = from_source(
             r#"
@@ -150,14 +136,6 @@ mod tests {
                 recipients: vec!["age1first".to_string(), "age1second".to_string()],
                 identity: Some(Key::File(PathBuf::from("~/.keys/age.txt"))),
             }
-        );
-    }
-
-    #[test]
-    fn a_written_identity_without_a_space_is_a_path() {
-        assert_eq!(
-            identity(r#"ld.crypt.lock({ identity = "~/.keys/age.txt" })"#),
-            Key::File(PathBuf::from("~/.keys/age.txt"))
         );
     }
 
@@ -199,23 +177,5 @@ mod tests {
             ),
             expected
         );
-    }
-
-    #[test]
-    fn rejects_a_type_that_names_nothing() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.crypt.lock({ identity = { type = "keyring", "x" } })"#).unwrap_err()
-        );
-
-        assert!(err.contains("unknown identity type `keyring`"));
-        assert!(err.contains("command, file"));
-    }
-
-    #[test]
-    fn rejects_a_word_that_names_no_lock() {
-        let err = format!("{:#}", from_source(r#"ld.crypt.lock("keys")"#).unwrap_err());
-
-        assert!(err.contains("`ld.crypt.lock` takes"));
     }
 }

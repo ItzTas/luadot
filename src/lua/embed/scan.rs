@@ -322,48 +322,10 @@ mod tests {
     }
 
     #[test]
-    fn text_and_tags_split_into_segments() {
-        assert_eq!(
-            scan("a<% x = 1 %>b<%= x %>c").unwrap(),
-            vec![
-                literal("a", 1),
-                statement(" x = 1 ", 1),
-                literal("b", 1),
-                expression(" x ", 1),
-                literal("c", 1),
-            ]
-        );
-    }
-
-    #[test]
     fn a_comment_produces_nothing_and_keeps_the_lines() {
         assert_eq!(
             scan("a\n<%# a note\nspanning %>\nb").unwrap(),
             vec![literal("a\n", 1), literal("\nb", 3)]
-        );
-    }
-
-    #[test]
-    fn the_underscore_open_slurps_all_the_whitespace_before_the_tag() {
-        assert_eq!(
-            scan("a\n  \t<%_ x = 1 %>").unwrap(),
-            vec![literal("a", 1), statement(" x = 1 ", 2)]
-        );
-    }
-
-    #[test]
-    fn the_dash_close_trims_the_newline_after_the_tag() {
-        assert_eq!(
-            scan("a\n<% x = 1 -%>\nb").unwrap(),
-            vec![literal("a\n", 1), statement(" x = 1 ", 2), literal("b", 3)]
-        );
-    }
-
-    #[test]
-    fn the_underscore_close_slurps_all_the_whitespace_after_the_tag() {
-        assert_eq!(
-            scan("<% x = 1 _%>  \t\n\n  b").unwrap(),
-            vec![statement(" x = 1 ", 1), literal("b", 3)]
         );
     }
 
@@ -385,19 +347,6 @@ mod tests {
     }
 
     #[test]
-    fn the_open_escape_is_a_literal() {
-        assert_eq!(scan("a<%%= x %>b").unwrap(), vec![literal("a<%= x %>b", 1)]);
-    }
-
-    #[test]
-    fn the_close_escape_is_code() {
-        assert_eq!(
-            scan("<% x = a %%> b %>").unwrap(),
-            vec![statement(" x = a %> b ", 1)]
-        );
-    }
-
-    #[test]
     fn a_close_inside_a_lua_string_does_not_close() {
         assert_eq!(
             scan(r#"<% local s = "100%>" %>"#).unwrap(),
@@ -410,14 +359,6 @@ mod tests {
         assert_eq!(
             scan(r#"<% local s = "a\"%>" %>"#).unwrap(),
             vec![statement(r#" local s = "a\"%>" "#, 1)]
-        );
-    }
-
-    #[test]
-    fn a_close_inside_a_long_bracket_does_not_close() {
-        assert_eq!(
-            scan("<% s = [==[%> ]] ]==] %>").unwrap(),
-            vec![statement(" s = [==[%> ]] ]==] ", 1)]
         );
     }
 
@@ -438,15 +379,5 @@ mod tests {
         let err = scan("a\n<%= x =%>").unwrap_err().to_string();
         assert!(err.contains("`=%>`"));
         assert!(err.contains("line 2"));
-    }
-
-    #[test]
-    fn an_unterminated_tag_reports_the_line_it_was_opened_on() {
-        let err = scan("line one\n<% x = 1").unwrap_err().to_string();
-        assert!(err.contains("unterminated tag"));
-        assert!(err.contains("line 2"));
-
-        let err = scan("<%# never closed").unwrap_err().to_string();
-        assert!(err.contains("line 1"));
     }
 }

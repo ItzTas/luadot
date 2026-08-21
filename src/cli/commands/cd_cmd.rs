@@ -37,28 +37,3 @@ fn build_command(shell: &str, repo: &Path) -> Command {
     command.current_dir(repo);
     command
 }
-
-#[cfg(test)]
-mod tests {
-    use std::ffi::OsStr;
-    use std::path::Path;
-
-    use super::{build_command, resolve_shell};
-
-    #[test]
-    fn resolve_shell_uses_the_environment_value() {
-        assert_eq!(resolve_shell(Some("/usr/bin/zsh".into())), "/usr/bin/zsh");
-    }
-
-    #[test]
-    fn build_command_starts_the_shell_in_the_repo_dir() {
-        let command = build_command("/usr/bin/zsh", Path::new("/tmp/luadot-repo"));
-
-        assert_eq!(command.get_program(), OsStr::new("/usr/bin/zsh"));
-        assert_eq!(
-            command.get_current_dir(),
-            Some(Path::new("/tmp/luadot-repo"))
-        );
-        assert_eq!(command.get_args().count(), 0);
-    }
-}

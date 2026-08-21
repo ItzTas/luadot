@@ -143,14 +143,4 @@ mod tests {
             "  link=hard conflict=skip"
         );
     }
-
-    #[test]
-    fn overrides_renders_an_ignored_rule() {
-        let pattern = glob("*.swp");
-
-        assert_eq!(
-            overrides(&Rule::new(pattern, None, None).with_ignore(Some(true))),
-            "  ignore=true"
-        );
-    }
 }

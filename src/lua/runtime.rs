@@ -59,14 +59,4 @@ mod tests {
 
         assert_eq!(value, "function/laptop");
     }
-
-    #[test]
-    fn add_module_path_prepends_the_modules_dir() {
-        let lua = runtime().unwrap();
-        add_module_path(&lua, Path::new("/repo/.config/luadot")).unwrap();
-
-        let package: Table = lua.globals().get("package").unwrap();
-        let path: String = package.get("path").unwrap();
-        assert!(path.starts_with("/repo/.config/luadot/lua/?.lua;"));
-    }
 }

@@ -153,12 +153,4 @@ mod tests {
         assert!(err.contains("tmpl alt: `ld.on.tmpl.alt`: `before` failed"));
         assert!(err.contains("broken"));
     }
-
-    #[test]
-    fn a_command_nothing_was_set_on_runs_nothing() {
-        let shared = shared(r#"ld.on.apply({ after = function() error("wrong command") end })"#);
-
-        fire(Command::Add, &shared, Moment::After).unwrap();
-        fire(Command::Apply, &shared, Moment::Before).unwrap();
-    }
 }

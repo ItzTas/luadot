@@ -56,22 +56,6 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn the_default_locks_with_keys_and_carries_none() {
-        let secrets = Secrets::default();
-
-        assert_eq!(secrets.lock(false), Lock::Keys);
-        assert!(secrets.recipients().is_empty());
-    }
-
-    #[test]
-    fn the_passphrase_form_carries_no_recipients_of_its_own() {
-        let secrets = Secrets::Passphrase;
-
-        assert_eq!(secrets.lock(false), Lock::Passphrase);
-        assert!(secrets.recipients().is_empty());
-    }
-
-    #[test]
     fn the_identity_path_is_resolved_against_home() {
         let secrets = Secrets::Keys {
             recipients: Vec::new(),

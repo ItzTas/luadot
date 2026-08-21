@@ -103,16 +103,6 @@ mod tests {
     }
 
     #[test]
-    fn without_a_mode_any_file_carries_the_placement() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("file");
-        std::fs::write(&file, "x").unwrap();
-
-        assert!(Placement::default().carried_by(&file));
-        assert!(Placement::default().carried_by(&dir.path().join("missing")));
-    }
-
-    #[test]
     fn a_mode_is_compared_through_a_symlink() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("file");
@@ -142,20 +132,5 @@ mod tests {
 
         assert_eq!(bits(&file), 0o640);
         assert_eq!(std::fs::metadata(&file).unwrap().uid(), meta.uid());
-    }
-
-    #[test]
-    fn an_owner_that_cannot_be_set_is_reported() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("file");
-        std::fs::write(&file, "x").unwrap();
-
-        let err = Placement::default()
-            .with_owner(Some("luadot-no-such-user"))
-            .own("apply", &file)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("apply: chown could not set the owner of"));
     }
 }

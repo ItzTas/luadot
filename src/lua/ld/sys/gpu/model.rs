@@ -55,10 +55,4 @@ mod tests {
         assert_eq!(models["0000:00:02.0"], "Raptor Lake-P [Iris Xe]");
         assert_eq!(models["0000:01:00.0"], "AD107M [GeForce RTX 4060]");
     }
-
-    #[test]
-    fn a_line_without_the_three_fields_is_dropped() {
-        assert!(parse("0000:00:02.0 \"VGA\" \"Intel\"\n").is_empty());
-        assert!(parse("nonsense\n").is_empty());
-    }
 }

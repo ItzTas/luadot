@@ -143,7 +143,7 @@ pub const SIGNATURES: [Signature; 12] = [
         name: LFS,
         params: &[ENABLED],
         returns: &[],
-        doc: "Whether luadot installs the Git LFS filters and writes the `.gitattributes` the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.",
+        doc: "Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.",
     },
     Signature {
         name: LINK,

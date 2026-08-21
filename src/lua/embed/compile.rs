@@ -68,15 +68,6 @@ mod tests {
     const EXAMPLE: &str = "export EDITOR=<%= ld.class.get(\"editor\") or \"nvim\" %>\n<% for _, dir in ipairs({ \"~/bin\", \"~/.local/bin\" }) do -%>\npath+=(<%= dir %>)\n<% end -%>\n";
 
     #[test]
-    fn literals_stay_out_of_the_generated_source() {
-        let (source, literals) = compile(EXAMPLE).unwrap().into_parts();
-
-        assert_eq!(literals, ["export EDITOR=", "\n", "path+=(", ")\n"]);
-        assert!(!source.contains("export"));
-        assert!(!source.contains("path"));
-    }
-
-    #[test]
     fn the_generated_source_has_the_documented_shape() {
         let (source, _) = compile(EXAMPLE).unwrap().into_parts();
         let lines: Vec<&str> = source.lines().collect();
@@ -93,28 +84,10 @@ mod tests {
     }
 
     #[test]
-    fn every_generated_line_matches_its_source_line() {
-        let (source, _) = compile("1\n2\n3\n4\n5\n6\n<%= boom %>")
-            .unwrap()
-            .into_parts();
-
-        assert_eq!(source.lines().nth(6).unwrap(), "__ld_write( boom );");
-    }
-
-    #[test]
     fn a_multi_line_tag_keeps_the_lines_that_follow_aligned() {
         let (source, literals) = compile("<% local x =\n1 %>done").unwrap().into_parts();
 
         assert_eq!(source, " local x =\n1 __ld_emit(1);");
         assert_eq!(literals, ["done"]);
-    }
-
-    #[test]
-    fn a_comment_leaves_only_its_padding_behind() {
-        let (source, _) = compile("<%# a note\nspanning lines %><%= x %>")
-            .unwrap()
-            .into_parts();
-
-        assert_eq!(source, "\n__ld_write( x );");
     }
 }

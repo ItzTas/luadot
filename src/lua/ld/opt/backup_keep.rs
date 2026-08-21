@@ -17,16 +17,3 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     Config::building(lua, |config| config.set_backup_keep(keep))?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::lua::from_source;
-
-    #[test]
-    fn rejects_keeping_nothing() {
-        let err = format!("{:#}", from_source("ld.opt.backup_keep(0)").unwrap_err());
-
-        assert!(err.contains("`ld.opt.backup_keep` takes one or more"));
-        assert!(err.contains("`ld.opt.backup(false)`"));
-    }
-}

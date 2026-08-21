@@ -115,7 +115,7 @@ pub const RULE_FIELDS: [Field; 12] = [
     Field {
         name: LFS,
         kind: Kind::Optional(&Kind::Boolean),
-        doc: "Whether the matching files are stored in Git LFS. Needs `match`, since `.gitattributes` has no regular expressions, and does not go with `encrypt`. luadot writes the patterns into the repository's `.gitattributes`, between the `# luadot:lfs` markers.",
+        doc: "Whether the matching files are stored in Git LFS. Needs `match`, since git attributes have no regular expressions, and does not go with `encrypt`. luadot writes the patterns into the repository's `.local/share/luadot/git/attributes`, between the `# luadot:lfs` markers, and copies that file into `.git/info/attributes`.",
     },
     Field {
         name: AUTOCOMMIT,

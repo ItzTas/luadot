@@ -40,7 +40,23 @@ pub const LFS_VERSION: &str = "version";
 
 pub const LFS_INSTALL: [&str; 3] = ["lfs", "install", "--local"];
 
-pub const ATTRIBUTES_FILE: &str = ".gitattributes";
+pub const LFS_PULL: [&str; 2] = ["lfs", "pull"];
+
+pub const RULES_DIR: &str = "git";
+
+pub const RULES_IGNORE: &str = "ignore";
+
+pub const RULES_ATTRIBUTES: &str = "attributes";
+
+pub const INFO_DIR: &str = "info";
+
+pub const INFO_EXCLUDE: &str = "exclude";
+
+pub const INFO_ATTRIBUTES: &str = "attributes";
+
+pub const INFO_START: &str = "# luadot";
+
+pub const INFO_END: &str = "# /luadot";
 
 pub const MARKER_START: &str = "# luadot:lfs";
 

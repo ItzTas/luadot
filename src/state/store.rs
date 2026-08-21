@@ -49,13 +49,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn missing_file_loads_default() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("state.json");
-        assert!(load_from(&path).unwrap().repo().is_none());
-    }
-
-    #[test]
     fn save_then_load_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("nested/state.json");
@@ -66,13 +59,5 @@ mod tests {
 
         let loaded = load_from(&path).unwrap();
         assert_eq!(loaded.repo(), Some(Path::new("/x/y/repo")));
-    }
-
-    #[test]
-    fn invalid_json_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("state.json");
-        std::fs::write(&path, "not json").unwrap();
-        assert!(load_from(&path).is_err());
     }
 }

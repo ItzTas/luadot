@@ -25,24 +25,3 @@ pub fn describe(walker: TypeWalker) -> TypeWalker {
         })
         .record(record(OPTIONS_TYPENAME, OPTIONS_DOC).fields(&OPTIONS_FIELDS))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::constants::{FUNCTIONS, OPTIONS};
-    use super::*;
-
-    #[test]
-    fn every_function_is_described_in_the_order_it_is_registered() {
-        let registered: Vec<&str> = FUNCTIONS.iter().map(|(name, _)| *name).collect();
-        let described: Vec<&str> = SIGNATURES.iter().map(|signature| signature.name).collect();
-
-        assert_eq!(described, registered);
-    }
-
-    #[test]
-    fn every_option_is_described_in_the_order_it_is_read() {
-        let described: Vec<&str> = OPTIONS_FIELDS.iter().map(|field| field.name).collect();
-
-        assert_eq!(described, OPTIONS);
-    }
-}

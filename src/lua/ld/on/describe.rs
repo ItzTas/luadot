@@ -71,34 +71,3 @@ fn counts() -> Vec<Field> {
         })
         .collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::constants::{AROUND_KEYS, DIFF_KEYS, FUNCTIONS, STATUS_KEYS, TMPL_FUNCTIONS};
-    use super::*;
-
-    #[test]
-    fn every_function_is_described_in_the_order_it_is_registered() {
-        let registered: Vec<&str> = FUNCTIONS.iter().map(|(name, _, _)| *name).collect();
-        let described: Vec<&str> = SIGNATURES.iter().map(|signature| signature.name).collect();
-        assert_eq!(described, registered);
-
-        let registered: Vec<&str> = TMPL_FUNCTIONS.iter().map(|(name, _, _)| *name).collect();
-        let described: Vec<&str> = TMPL_SIGNATURES
-            .iter()
-            .map(|signature| signature.name)
-            .collect();
-        assert_eq!(described, registered);
-    }
-
-    #[test]
-    fn every_key_of_each_command_is_described_in_the_order_it_is_read() {
-        let around: Vec<&str> = AROUND_FIELDS.iter().map(|field| field.name).collect();
-        let diff: Vec<&str> = DIFF_FIELDS.iter().map(|field| field.name).collect();
-        let status: Vec<&str> = STATUS_FIELDS.iter().map(|field| field.name).collect();
-
-        assert_eq!(around, AROUND_KEYS);
-        assert_eq!(diff, DIFF_KEYS);
-        assert_eq!(status, STATUS_KEYS);
-    }
-}

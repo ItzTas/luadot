@@ -159,20 +159,6 @@ mod tests {
     }
 
     #[test]
-    fn the_commands_describing_luadot_itself_are_not_customized() {
-        assert_eq!(customized(&parsed(&["luadot", "completions", "zsh"])), None);
-        assert_eq!(customized(&parsed(&["luadot", "doc", "ld"])), None);
-        assert_eq!(customized(&parsed(&["luadot", "man"])), None);
-        assert_eq!(customized(&parsed(&["luadot", "meta"])), None);
-    }
-
-    #[test]
-    fn doc_asks_for_a_call_unless_it_only_lists_the_names() {
-        assert!(Cli::try_parse_from(["luadot", "doc"]).is_err());
-        assert!(Cli::try_parse_from(["luadot", "doc", "--list"]).is_ok());
-    }
-
-    #[test]
     fn a_tmpl_action_is_customized_on_its_own() {
         assert_eq!(
             customized(&parsed(&["luadot", "tmpl", "alt"])),

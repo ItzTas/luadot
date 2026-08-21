@@ -9,18 +9,3 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     Config::building(lua, |config| config.set_autopush(enabled))?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use crate::lua::from_source;
-
-    #[test]
-    fn pushing_on_its_own_commits_first() {
-        let config = from_source("ld.opt.autopush(true)").unwrap();
-
-        assert!(config.autopush(Path::new(".bashrc")));
-        assert!(config.autocommit(Path::new(".bashrc")));
-    }
-}

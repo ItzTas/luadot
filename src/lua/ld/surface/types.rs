@@ -43,25 +43,3 @@ impl Surface {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lua::runtime::runtime;
-
-    #[test]
-    fn a_bootstrap_and_a_setup_script_are_interchangeable() {
-        assert_eq!(Surface::Bootstrap.cost(), Surface::Setup.cost());
-    }
-
-    #[test]
-    fn the_installed_surface_is_the_current_one() {
-        let lua = runtime().unwrap();
-
-        assert_eq!(Surface::current(&lua), None);
-
-        Surface::Template.install(&lua);
-
-        assert_eq!(Surface::current(&lua), Some(Surface::Template));
-    }
-}

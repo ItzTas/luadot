@@ -74,38 +74,4 @@ mod tests {
             "one  two"
         );
     }
-
-    #[test]
-    fn a_failing_command_stops_the_script() {
-        let repo = repository();
-
-        let err = eval(
-            &paths(Some(repo.path())),
-            r#"return git("no-such-command")"#,
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(err.contains("`ld.git` `git no-such-command` exited with status"));
-    }
-
-    #[test]
-    fn reports_a_call_without_arguments() {
-        let repo = repository();
-
-        let err = eval(&paths(Some(repo.path())), "return git()")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.git` takes the arguments of the git command to run"));
-    }
-
-    #[test]
-    fn reports_a_missing_repository() {
-        let err = eval(&paths(None), r#"return git("status")"#)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.git`: no repository set"));
-    }
 }

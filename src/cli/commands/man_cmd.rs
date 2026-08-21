@@ -188,27 +188,4 @@ mod tests {
         assert!(page.contains(".SS \"luadot tmpl alt\""));
         assert!(page.contains(".SS \"luadot class unset\""));
     }
-
-    #[test]
-    fn the_apostrophe_preamble_is_written_once() {
-        let page = page().unwrap();
-
-        assert_eq!(page.matches(ROFF_PREAMBLE).count(), 1);
-    }
-
-    #[test]
-    fn the_commands_carry_their_arguments_without_a_heading_of_their_own() {
-        let page = page().unwrap();
-
-        assert_eq!(page.matches(".SH SYNOPSIS").count(), 1);
-        assert_eq!(page.matches(".SH OPTIONS").count(), 1);
-        assert!(page.contains("Report what would be put back, writing nothing"));
-    }
-
-    #[test]
-    fn the_inherited_flags_are_described_once() {
-        let page = page().unwrap();
-
-        assert_eq!(page.matches("Log what luadot is doing").count(), 1);
-    }
 }

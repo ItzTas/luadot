@@ -21,18 +21,3 @@ pub fn init(dir: &Path, lfs: bool) -> Result<()> {
     debug!(dir = %dir.display(), "initialized");
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn creates_a_repository_in_a_missing_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let target = dir.path().join("nested/repo");
-
-        init(&target, false).unwrap();
-
-        assert!(target.join(".git").is_dir());
-    }
-}

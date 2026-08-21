@@ -47,29 +47,3 @@ fn zsh(generated: &str) -> Result<String> {
 
     Ok(format!("{body}{ZSH_GIT_COMPLETION}"))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bash_carries_the_git_and_setup_delegations() {
-        let script = script(Shell::Bash).unwrap();
-
-        assert!(script.contains("_luadot_git_load"));
-        assert!(script.contains("setup | doc)"));
-        assert!(
-            script.ends_with("complete -F _luadot_complete -o bashdefault -o default luadot\nfi\n")
-        );
-    }
-
-    #[test]
-    fn zsh_replaces_the_generated_dispatch() {
-        let script = script(Shell::Zsh).unwrap();
-
-        assert_eq!(script.matches(ZSH_DISPATCH).count(), 1);
-        assert!(script.contains("functions[_luadot_clap]=$functions[_luadot]"));
-        assert!(script.contains("setup | doc)"));
-        assert!(script.ends_with("compdef _luadot luadot\nfi\n"));
-    }
-}

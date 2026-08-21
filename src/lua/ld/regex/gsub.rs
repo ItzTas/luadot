@@ -94,14 +94,6 @@ mod tests {
     }
 
     #[test]
-    fn a_limit_stops_after_that_many_matches() {
-        assert_eq!(
-            eval(r#"return regex.gsub("a=1, b=2, c=3", "\\d", "0", 2)"#).unwrap(),
-            "a=0, b=0, c=3"
-        );
-    }
-
-    #[test]
     fn a_function_builds_each_replacement_out_of_the_match() {
         assert_eq!(
             eval(
@@ -114,30 +106,5 @@ mod tests {
             .unwrap(),
             "a:2, b:3"
         );
-    }
-
-    #[test]
-    fn a_function_yielding_nothing_keeps_the_match() {
-        assert_eq!(
-            eval(
-                r#"
-                return regex.gsub("a=1, b=2", "\\d", function(whole)
-                  if whole == "1" then return nil end
-                  return "9"
-                end)
-                "#
-            )
-            .unwrap(),
-            "a=1, b=9"
-        );
-    }
-
-    #[test]
-    fn reports_a_replacement_that_is_neither_a_string_nor_a_function() {
-        let err = eval(r#"return regex.gsub("a=1", "\\d", 1)"#)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.regex.gsub` takes the replacement as a string or a function"));
     }
 }

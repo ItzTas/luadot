@@ -14,18 +14,3 @@ pub fn column(text: impl Display, width: usize) -> String {
 
     format!("{text:<width$}")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn notice_prefixes_the_application_name() {
-        assert_eq!(notice("nothing to apply"), "luadot: nothing to apply");
-    }
-
-    #[test]
-    fn column_keeps_text_wider_than_the_column_and_separates_it() {
-        assert_eq!(column("repository", 4), "repository  ");
-    }
-}

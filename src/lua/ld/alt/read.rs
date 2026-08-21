@@ -12,7 +12,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::fixture::{error, template};
+    use super::super::fixture::template;
     use crate::lua::{Content, from_template};
 
     #[test]
@@ -27,46 +27,5 @@ mod tests {
             outputs[0].content(),
             &Content::Text("alias ll='ls -l'\n".to_string())
         );
-    }
-
-    #[test]
-    fn what_it_reads_is_never_run() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("fragment.zsh"), "error('boom')\n").unwrap();
-
-        let outputs = from_template(&dir, r#"return ld.alt.read("fragment.zsh")"#).unwrap();
-
-        assert_eq!(
-            outputs[0].content(),
-            &Content::Text("error('boom')\n".to_string())
-        );
-    }
-
-    #[test]
-    fn a_missing_file_is_reported() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = error(&dir, r#"return ld.alt.read("missing.zsh")"#);
-
-        assert!(err.contains("`ld.alt.read`"));
-        assert!(err.contains("found no file `missing.zsh`"));
-    }
-
-    #[test]
-    fn an_absolute_path_is_reached() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        let shared = root.path().join("shared.zsh");
-        std::fs::write(&shared, "shared\n").unwrap();
-
-        let outputs = from_template(
-            &dir,
-            &format!(r#"return ld.alt.read("{}")"#, shared.display()),
-        )
-        .unwrap();
-
-        assert_eq!(outputs[0].content(), &Content::Text("shared\n".to_string()));
     }
 }

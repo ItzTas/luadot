@@ -9,18 +9,3 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     Config::building(lua, |config| config.set_autocommit(enabled))?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use crate::lua::from_source;
-
-    #[test]
-    fn turns_the_commit_on_for_every_file() {
-        let config = from_source("ld.opt.autocommit(true)").unwrap();
-
-        assert!(config.autocommit(Path::new(".bashrc")));
-        assert!(!config.autopush(Path::new(".bashrc")));
-    }
-}

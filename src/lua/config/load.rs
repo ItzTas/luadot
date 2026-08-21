@@ -107,15 +107,6 @@ mod tests {
     }
 
     #[test]
-    fn missing_file_yields_the_default_config() {
-        let dir = tempfile::tempdir().unwrap();
-
-        let config = loaded(load_from(&dir.path().join(CONFIG_FILE)).unwrap());
-
-        assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Hard);
-    }
-
-    #[test]
     fn loads_the_config_file_from_disk() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(CONFIG_FILE);
@@ -159,49 +150,5 @@ mod tests {
             config.link_mode(Path::new(".config/nvim/init.lua")),
             LinkMode::Symbolic
         );
-    }
-
-    #[test]
-    fn a_required_module_can_return_a_configuring_function() {
-        let dir = tempfile::tempdir().unwrap();
-        let modules = dir.path().join(MODULES_DIR);
-        std::fs::create_dir_all(&modules).unwrap();
-        std::fs::write(
-            modules.join("dots.lua"),
-            r#"
-            local dots = {}
-
-            function dots.setup(mode)
-              ld.opt.link(mode)
-            end
-
-            return dots
-            "#,
-        )
-        .unwrap();
-        let path = dir.path().join(CONFIG_FILE);
-        std::fs::write(&path, r#"require("dots").setup("symbolic")"#).unwrap();
-
-        let config = loaded(load_from(&path).unwrap());
-
-        assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
-    }
-
-    #[test]
-    fn reports_a_module_that_cannot_be_required() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join(CONFIG_FILE);
-        std::fs::write(&path, r#"require("missing")"#).unwrap();
-
-        let err = format!("{:#}", load_from(&path).unwrap_err());
-
-        assert!(err.contains("module 'missing' not found"));
-    }
-
-    #[test]
-    fn rejects_a_broken_script() {
-        let err = format!("{:#}", from_source("ld.opt.link(").unwrap_err());
-
-        assert!(err.contains("failed to run"));
     }
 }

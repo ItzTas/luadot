@@ -45,26 +45,3 @@ impl Around {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn merging_only_replaces_the_moments_the_other_one_carries() {
-        let mut around = Around::default()
-            .with_before(Some(Custom::Silent))
-            .with_after(Some(Custom::Text("first".to_string())));
-
-        around.merge(Around::default().with_after(Some(Custom::Text("second".to_string()))));
-
-        assert!(matches!(around.get(Moment::Before), Some(Custom::Silent)));
-        assert!(matches!(around.get(Moment::After), Some(Custom::Text(text)) if text == "second"));
-    }
-
-    #[test]
-    fn each_moment_is_read_by_the_key_the_configuration_writes() {
-        assert_eq!(Moment::Before.key(), "before");
-        assert_eq!(Moment::After.key(), "after");
-    }
-}

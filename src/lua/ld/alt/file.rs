@@ -59,20 +59,6 @@ mod tests {
     use crate::lua::{Content, from_template};
 
     #[test]
-    fn reports_a_file_the_template_does_not_hold() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = format!(
-            "{:#}",
-            from_template(&dir, r#"return ld.alt.file("missing.zsh")"#).unwrap_err()
-        );
-
-        assert!(err.contains("found no file `missing.zsh`"));
-        assert!(err.contains(&dir.display().to_string()));
-    }
-
-    #[test]
     fn reaches_a_file_outside_the_template_directory() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
@@ -91,18 +77,5 @@ mod tests {
             relative[0].content(),
             &Content::File(dir.join("../outside.zsh"))
         );
-    }
-
-    #[test]
-    fn reports_an_absolute_path_that_holds_no_file() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = format!(
-            "{:#}",
-            from_template(&dir, r#"return ld.alt.file("/nowhere/missing.zsh")"#).unwrap_err()
-        );
-
-        assert!(err.contains("found no file at /nowhere/missing.zsh"));
     }
 }

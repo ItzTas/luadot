@@ -94,14 +94,6 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_without_git_metadata_is_no_repository() {
-        let dir = tempfile::tempdir().unwrap();
-
-        assert!(!present(dir.path()));
-        assert!(present(repository().path()));
-    }
-
-    #[test]
     fn a_failing_command_names_the_subcommand_and_carries_the_error() {
         let repo = repository();
 

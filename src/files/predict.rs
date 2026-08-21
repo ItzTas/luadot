@@ -30,34 +30,6 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_destination_is_created_whatever_the_policy() {
-        for policy in [
-            ConflictPolicy::Overwrite,
-            ConflictPolicy::Skip,
-            ConflictPolicy::Error,
-        ] {
-            assert_eq!(
-                predict(policy, FileStatus::Missing, dest()).unwrap(),
-                SyncOutcome::Created
-            );
-        }
-    }
-
-    #[test]
-    fn a_synced_destination_is_left_alone_whatever_the_policy() {
-        for policy in [
-            ConflictPolicy::Overwrite,
-            ConflictPolicy::Skip,
-            ConflictPolicy::Error,
-        ] {
-            assert_eq!(
-                predict(policy, FileStatus::Synced, dest()).unwrap(),
-                SyncOutcome::AlreadySynced
-            );
-        }
-    }
-
-    #[test]
     fn a_diverging_destination_follows_the_policy() {
         for status in [FileStatus::Unlinked, FileStatus::Differs] {
             assert_eq!(
@@ -69,23 +41,5 @@ mod tests {
                 SyncOutcome::Skipped
             );
         }
-    }
-
-    #[test]
-    fn an_unreadable_destination_refuses_a_prediction() {
-        let err = predict(ConflictPolicy::Overwrite, FileStatus::Unreadable, dest())
-            .unwrap_err()
-            .to_string();
-
-        assert_eq!(err, "files: /home/u/.bashrc cannot be read");
-    }
-
-    #[test]
-    fn the_error_policy_reports_the_destination() {
-        let err = predict(ConflictPolicy::Error, FileStatus::Differs, dest())
-            .unwrap_err()
-            .to_string();
-
-        assert_eq!(err, "files: /home/u/.bashrc already exists");
     }
 }

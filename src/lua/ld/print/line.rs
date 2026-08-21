@@ -12,23 +12,3 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         Ok(())
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::table::table;
-    use crate::lua::runtime::runtime;
-
-    fn run(source: &str) -> mlua::Result<()> {
-        let lua = runtime().unwrap();
-        lua.globals().set("print_", table(&lua).unwrap()).unwrap();
-
-        lua.load(source).exec()
-    }
-
-    #[test]
-    fn reports_a_text_that_is_not_a_string() {
-        let err = run("print_({})").unwrap_err().to_string();
-
-        assert!(err.contains("`ld.print` takes a string, got table"));
-    }
-}

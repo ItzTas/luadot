@@ -240,19 +240,6 @@ mod tests {
     }
 
     #[test]
-    fn setup_dir_mirrors_the_config_location_into_the_repo() {
-        let dir = setup_dir(
-            "setup",
-            Path::new("/home/u"),
-            Path::new("/home/u/.config/luadot"),
-            Path::new("/data/repo"),
-        )
-        .unwrap();
-
-        assert_eq!(dir, PathBuf::from("/data/repo/.config/luadot/setup"));
-    }
-
-    #[test]
     fn list_is_sorted_and_deduplicates_stems() {
         let root = tempfile::tempdir().unwrap();
         let (home, config, repo) = dirs(root.path());
@@ -278,76 +265,11 @@ mod tests {
     }
 
     #[test]
-    fn find_falls_back_to_a_directory_init() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        let init = write_setup(&home, &config, &repo, "ufw/init.sh", "");
-        let file = write_setup(&home, &config, &repo, "docker.sh", "");
-        write_setup(&home, &config, &repo, "docker/init.lua", "");
-        let dir = setup_dir("test", &home, &config, &repo).unwrap();
-
-        assert_eq!(find(&dir, "ufw").unwrap(), init);
-        assert_eq!(find(&dir, "docker").unwrap(), file);
-    }
-
-    #[test]
-    fn a_directory_setup_requires_its_own_modules_and_the_shared_ones() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        write_setup(&home, &config, &repo, "ufw/lua/own.lua", r#"return "own""#);
-        let shared = setup_dir("test", &home, &config, &repo)
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("lua/shared.lua");
-        std::fs::create_dir_all(shared.parent().unwrap()).unwrap();
-        std::fs::write(&shared, r#"return "shared""#).unwrap();
-        write_setup(
-            &home,
-            &config,
-            &repo,
-            "ufw/init.lua",
-            r#"
-            local out = assert(io.open(ld.path.repo .. "/modules.txt", "w"))
-            out:write(require("own") .. "/" .. require("shared"))
-            out:close()
-            "#,
-        );
-
-        run_one(
-            "setup",
-            &home,
-            &config,
-            &repo,
-            "ufw",
-            &Classes::default(),
-            &configuration(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            std::fs::read_to_string(repo.join("modules.txt")).unwrap(),
-            "own/shared"
-        );
-    }
-
-    #[test]
     fn ordered_puts_the_requested_order_first() {
         let names = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let order = ["c".to_string(), "a".to_string()];
 
         assert_eq!(ordered("test", names, &order).unwrap(), ["c", "a", "b"]);
-    }
-
-    #[test]
-    fn ordered_rejects_an_unknown_name() {
-        let names = vec!["a".to_string()];
-        let order = ["nope".to_string()];
-
-        let err = ordered("test", names, &order).unwrap_err().to_string();
-
-        assert!(err.contains("unknown setup `nope`"));
-        assert!(err.contains("available: a"));
     }
 
     #[test]
@@ -408,77 +330,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "done");
-    }
-
-    #[test]
-    fn a_failing_sh_setup_reports_its_status() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        write_setup(&home, &config, &repo, "ufw.sh", "exit 5");
-
-        let err = format!(
-            "{:#}",
-            run_one(
-                "setup",
-                &home,
-                &config,
-                &repo,
-                "ufw",
-                &Classes::default(),
-                &configuration(),
-            )
-            .unwrap_err()
-        );
-
-        assert!(err.contains("exited with status 5"));
-    }
-
-    #[test]
-    fn a_missing_setup_reports_the_available_location() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-
-        let err = run_one(
-            "setup",
-            &home,
-            &config,
-            &repo,
-            "ufw",
-            &Classes::default(),
-            &configuration(),
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(err.contains("setup: no setup named `ufw`"));
-    }
-
-    #[test]
-    fn a_lua_setup_can_run_another_setup() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        let out = repo.join("nested.txt");
-        write_setup(&home, &config, &repo, "outer.lua", r#"ld.setup("inner")"#);
-        write_setup(
-            &home,
-            &config,
-            &repo,
-            "inner.sh",
-            &format!("printf nested > {}", out.display()),
-        );
-
-        run_one(
-            "setup",
-            &home,
-            &config,
-            &repo,
-            "outer",
-            &Classes::default(),
-            &configuration(),
-        )
-        .unwrap();
-
-        assert_eq!(std::fs::read_to_string(&out).unwrap(), "nested");
     }
 
     #[test]

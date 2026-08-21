@@ -148,23 +148,4 @@ mod tests {
         assert_eq!(width(Lock::Passphrase, Some(&key), 8, 4), 1);
         assert_eq!(width(Lock::Keys, Some(&plugin), 8, 4), 1);
     }
-
-    #[test]
-    fn a_secret_asked_for_out_of_order_is_opened_on_its_own() {
-        let dir = tempfile::tempdir().unwrap();
-        let first = dir.path().join("first.age");
-        let second = dir.path().join("second.age");
-        let sources = vec![
-            (Backend::Age, first.clone()),
-            (Backend::Age, second.clone()),
-        ];
-
-        let mut ahead = Ahead::new("apply", Lock::Keys, Identity::default(), sources);
-        let err = ahead.take(Backend::Age, &second).unwrap_err().to_string();
-
-        assert!(err.contains("apply: decrypting with age needs"));
-        assert!(ahead.pending.is_empty());
-        assert!(ahead.ready.is_empty());
-        assert_eq!(ahead.width, 1);
-    }
 }

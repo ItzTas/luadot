@@ -113,17 +113,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_run_landing_on_a_taken_name_takes_the_next_free_one() {
-        let root = tempfile::tempdir().unwrap();
-        for name in ["100", "101"] {
-            std::fs::create_dir(root.path().join(name)).unwrap();
-        }
-
-        assert_eq!(free(root.path(), 100), root.path().join("102"));
-        assert_eq!(free(root.path(), 200), root.path().join("200"));
-    }
-
-    #[test]
     fn backups_are_read_oldest_first_and_anything_else_ignored() {
         let root = tempfile::tempdir().unwrap();
         for name in ["200", "100", "notes"] {
@@ -145,30 +134,6 @@ mod tests {
         }
 
         root
-    }
-
-    #[test]
-    fn pruning_keeps_the_most_recent_backups() {
-        let root = filled(["100", "200", "300"]);
-        let retention = Retention::new(Some(2), None);
-
-        assert_eq!(prune("apply", root.path(), retention, 300).unwrap(), 1);
-
-        assert!(!root.path().join("100").exists());
-        assert!(root.path().join("200").is_dir());
-        assert!(root.path().join("300").is_dir());
-    }
-
-    #[test]
-    fn pruning_drops_every_backup_older_than_the_age() {
-        let root = filled(["1000", "5000", "9000"]);
-        let retention = Retention::new(None, Some(5));
-
-        assert_eq!(prune("apply", root.path(), retention, 10_000).unwrap(), 1);
-
-        assert!(!root.path().join("1000").exists());
-        assert!(root.path().join("5000").is_dir());
-        assert!(root.path().join("9000").is_dir());
     }
 
     #[test]

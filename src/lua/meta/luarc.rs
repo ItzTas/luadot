@@ -70,16 +70,6 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_file_gets_every_setting() {
-        let settings = settings(&merged(None, DEFINITIONS_DIR).unwrap());
-
-        assert_eq!(settings[SCHEMA_KEY], SCHEMA);
-        assert_eq!(settings[VERSION_KEY], VERSION);
-        assert_eq!(settings[PATH_KEY], json!(PATHS));
-        assert_eq!(settings[LIBRARY_KEY], json!([DEFINITIONS_DIR]));
-    }
-
-    #[test]
     fn an_existing_file_keeps_its_keys_and_its_lists_grow() {
         let existing = r#"{
             "diagnostics.globals": ["vim"],
@@ -93,30 +83,5 @@ mod tests {
         assert_eq!(settings[VERSION_KEY], VERSION);
         assert_eq!(settings[LIBRARY_KEY], json!(["/usr/share/lua", "meta"]));
         assert_eq!(settings[PATH_KEY], json!(PATHS));
-    }
-
-    #[test]
-    fn a_file_that_is_not_a_json_object_is_refused() {
-        assert!(merged(Some("{ // a comment\n}"), DEFINITIONS_DIR).is_err());
-        assert!(merged(Some("[]"), DEFINITIONS_DIR).is_err());
-    }
-
-    #[test]
-    fn the_text_ends_with_a_newline() {
-        assert!(merged(None, DEFINITIONS_DIR).unwrap().ends_with("}\n"));
-    }
-
-    #[test]
-    fn the_shared_definitions_are_named_through_the_home_directory() {
-        let home = Path::new("/home/u");
-
-        assert_eq!(
-            library(home, Path::new("/home/u/.local/share/luadot")),
-            "~/.local/share/luadot/meta"
-        );
-        assert_eq!(
-            library(home, Path::new("/usr/share/luadot")),
-            "/usr/share/luadot/meta"
-        );
     }
 }

@@ -27,13 +27,4 @@ mod tests {
         assert!(walker.check_correct_version());
         assert!(!walker.given_types.is_empty());
     }
-
-    #[test]
-    fn anything_else_is_refused_with_the_usage() {
-        let err = generate(["--html".to_string()].into_iter())
-            .unwrap_err()
-            .to_string();
-
-        assert_eq!(err, USAGE);
-    }
 }

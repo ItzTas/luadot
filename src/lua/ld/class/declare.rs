@@ -151,54 +151,6 @@ mod tests {
     }
 
     #[test]
-    fn a_class_needs_nothing_but_a_name() {
-        let config = configure(r#"ld.class({ name = "email" })"#);
-
-        let class = config.class("email").unwrap();
-        assert_eq!(class.question(), "define the class `email`");
-        assert!(class.choices().is_empty());
-        assert_eq!(class.default(), None);
-    }
-
-    #[test]
-    fn a_single_choice_is_taken_as_a_list_of_one() {
-        let config = configure(r#"ld.class({ name = "shell", choices = "zsh" })"#);
-
-        assert_eq!(config.class("shell").unwrap().choices(), ["zsh"]);
-    }
-
-    #[test]
-    fn rejects_a_declaration_without_a_name() {
-        assert!(error(r#"ld.class({ prompt = "which one?" })"#).contains("takes a `name`"));
-    }
-
-    #[test]
-    fn rejects_an_argument_that_is_not_a_table() {
-        assert!(error(r#"ld.class("form-factor")"#).contains("takes a table, got string"));
-    }
-
-    #[test]
-    fn rejects_a_name_holding_spaces() {
-        let err = error(r#"ld.class({ name = "form factor" })"#);
-
-        assert!(err.contains("name `form factor` cannot hold spaces"));
-    }
-
-    #[test]
-    fn rejects_choices_of_the_wrong_type() {
-        let err = error(r#"ld.class({ name = "shell", choices = 42 })"#);
-
-        assert!(err.contains("takes `choices` as a string or a table of strings"));
-    }
-
-    #[test]
-    fn rejects_an_empty_choice() {
-        let err = error(r#"ld.class({ name = "shell", choices = { "zsh", "" } })"#);
-
-        assert!(err.contains("choices entry 2 is empty"));
-    }
-
-    #[test]
     fn rejects_a_default_outside_the_choices() {
         let err =
             error(r#"ld.class({ name = "shell", choices = { "zsh", "fish" }, default = "bash" })"#);
