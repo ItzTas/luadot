@@ -80,6 +80,7 @@ pub(super) fn destination(command: &str, home: &Path, repo: &Path, dir: &Path) -
         .with_context(|| format!("{command}: failed to place {}", dir.display()))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run(
     command: &str,
     source: &str,

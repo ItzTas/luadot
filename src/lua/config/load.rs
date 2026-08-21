@@ -100,8 +100,7 @@ mod tests {
     use crate::files::LinkMode;
 
     fn loaded(shared: Shared) -> Config {
-        let config = shared.lock().unwrap().clone();
-        config
+        shared.lock().unwrap().clone()
     }
 
     #[test]

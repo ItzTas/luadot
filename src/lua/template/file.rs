@@ -28,6 +28,7 @@ pub fn load_template_file(
     render(command, home, repo, &dirs, path, &source, classes, config)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render(
     command: &str,
     home: &Path,

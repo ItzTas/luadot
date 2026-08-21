@@ -137,6 +137,7 @@ fn known_extension(path: &Path) -> bool {
         .is_some_and(|ext| [LUA_EXT, SH_EXT].contains(&ext))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_path(
     command: &str,
     root: &Path,

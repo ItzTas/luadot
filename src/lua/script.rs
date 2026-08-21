@@ -33,6 +33,7 @@ pub fn run_script(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_source(
     command: &str,
     surface: Surface,
