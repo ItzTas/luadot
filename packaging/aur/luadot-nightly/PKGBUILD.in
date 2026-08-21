@@ -12,7 +12,7 @@ depends=('gcc-libs' 'glibc')
 makedepends=('cargo' 'cmake')
 provides=("$_pkgname=$pkgver")
 conflicts=("$_pkgname")
-options=('!lto')
+options=('!lto' '!debug')
 _registry='https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot'
 _version=@VERSION@
 _srcdir="$_pkgname-$pkgver"
