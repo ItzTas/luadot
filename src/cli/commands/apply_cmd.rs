@@ -17,7 +17,7 @@ struct Secrets<'a> {
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(value_name = "PATH", help = "Narrow the run to this file or directory")]
     pub path: Option<String>,
     #[arg(
         short = 'n',

@@ -7,7 +7,10 @@ use crate::{git, lua, output, state, utils};
 
 #[derive(Debug, Args)]
 pub struct InitArgs {
-    #[arg(value_name = "DIR")]
+    #[arg(
+        value_name = "DIR",
+        help = "Where the repository is created, the default place when left out"
+    )]
     pub dir: Option<String>,
 }
 

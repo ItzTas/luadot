@@ -17,7 +17,10 @@ use super::super::constants::{
 
 #[derive(Debug, Args)]
 pub struct StatusArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(
+        value_name = "PATH",
+        help = "Narrow the report to this file or directory"
+    )]
     pub path: Option<String>,
     #[arg(
         short,
@@ -31,7 +34,11 @@ pub struct StatusArgs {
 struct Counts([u32; STATUS_LABELS.len()]);
 
 pub fn status_cmd(args: StatusArgs) -> Result<()> {
-    let Workspace { config: shared, home, repo } = utils::workspace("status")?;
+    let Workspace {
+        config: shared,
+        home,
+        repo,
+    } = utils::workspace("status")?;
     let config = utils::configured("status", &shared)?;
 
     let root = utils::managed_root("status", &home, &repo, args.path.as_deref())?;
@@ -320,7 +327,6 @@ impl Counts {
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
-
 
     use super::*;
 

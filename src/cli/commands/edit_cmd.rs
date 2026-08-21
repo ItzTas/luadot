@@ -12,7 +12,10 @@ use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct EditArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(
+        value_name = "PATH",
+        help = "The managed file to open, or the file a template produces"
+    )]
     pub path: String,
 }
 

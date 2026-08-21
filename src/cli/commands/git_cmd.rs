@@ -12,7 +12,8 @@ pub struct GitArgs {
     #[arg(
         value_name = "ARGS",
         trailing_var_arg = true,
-        allow_hyphen_values = true
+        allow_hyphen_values = true,
+        help = "The arguments git receives, verbatim"
     )]
     pub args: Vec<String>,
 }

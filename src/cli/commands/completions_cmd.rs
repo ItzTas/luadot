@@ -10,7 +10,7 @@ use super::super::constants::{
 
 #[derive(Debug, Args)]
 pub struct CompletionsArgs {
-    #[arg(value_name = "SHELL", value_enum)]
+    #[arg(value_name = "SHELL", value_enum, help = "The shell the script is for")]
     pub shell: Shell,
 }
 
@@ -57,7 +57,7 @@ mod tests {
         let script = script(Shell::Bash).unwrap();
 
         assert!(script.contains("_luadot_git_load"));
-        assert!(script.contains("setup --list"));
+        assert!(script.contains("setup | doc)"));
         assert!(
             script.ends_with("complete -F _luadot_complete -o bashdefault -o default luadot\nfi\n")
         );
@@ -69,7 +69,7 @@ mod tests {
 
         assert_eq!(script.matches(ZSH_DISPATCH).count(), 1);
         assert!(script.contains("functions[_luadot_clap]=$functions[_luadot]"));
-        assert!(script.contains("setup --list"));
+        assert!(script.contains("setup | doc)"));
         assert!(script.ends_with("compdef _luadot luadot\nfi\n"));
     }
 }

@@ -12,7 +12,7 @@ use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct NewArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(value_name = "PATH", help = "The file the template produces")]
     pub path: String,
     #[arg(
         short,

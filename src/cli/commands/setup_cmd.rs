@@ -14,7 +14,10 @@ pub struct SetupArgs {
         help = "List the setups the repository declares, one per line"
     )]
     pub list: bool,
-    #[arg(value_name = "NAME")]
+    #[arg(
+        value_name = "NAME",
+        help = "The setups to run, the ones --list prints"
+    )]
     pub names: Vec<String>,
 }
 

@@ -17,7 +17,10 @@ const MILLIS: u64 = 1_000;
 
 #[derive(Debug, Args)]
 pub struct RestoreArgs {
-    #[arg(value_name = "BACKUP")]
+    #[arg(
+        value_name = "BACKUP",
+        help = "The backup to put back, the most recent one when left out"
+    )]
     pub backup: Option<String>,
     #[arg(short, long, help = "Show the backups instead of putting one back")]
     pub list: bool,

@@ -7,9 +7,12 @@ use crate::{git, lua, output, state, utils};
 
 #[derive(Debug, Args)]
 pub struct CloneArgs {
-    #[arg(value_name = "URL")]
+    #[arg(value_name = "URL", help = "The repository to clone")]
     pub url: String,
-    #[arg(value_name = "DIR")]
+    #[arg(
+        value_name = "DIR",
+        help = "Where the clone lands, the default place when left out"
+    )]
     pub dir: Option<String>,
 }
 

@@ -13,7 +13,11 @@ use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct AddArgs {
-    #[arg(value_name = "PATH", required = true)]
+    #[arg(
+        value_name = "PATH",
+        required = true,
+        help = "The files or directories to start managing"
+    )]
     pub paths: Vec<String>,
 }
 

@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::files::{self, Entry, FileStatus, Mirror, Side, Tracked};
-use crate::lua::{Config, Shared, Content, Diff, DiffCounts, DiffFile, DiffState, Output, Tool};
+use crate::lua::{Config, Content, Diff, DiffCounts, DiffFile, DiffState, Output, Shared, Tool};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, SYSTEM_TEXT_MODE, Workspace};
@@ -17,7 +17,10 @@ use super::super::constants::{
 
 #[derive(Debug, Args)]
 pub struct DiffArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(
+        value_name = "PATH",
+        help = "Narrow the report to this file or directory"
+    )]
     pub path: Option<String>,
     #[arg(
         short,
@@ -540,7 +543,8 @@ mod tests {
             &[Entry::Template(dir)],
             &Classes::default(),
             &configuration(),
-        ).unwrap();
+        )
+        .unwrap();
         let drifted = generated_items(&Config::default(), &home, &produced).unwrap();
 
         assert_eq!(drifted.len(), 1);
