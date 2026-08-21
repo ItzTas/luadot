@@ -56,3 +56,5 @@ pub const LFS_FILTERS: [&str; 4] = [
     "filter.lfs.process=git-lfs filter-process",
     "filter.lfs.required=true",
 ];
+
+pub const INTERRUPT_GRACE: usize = 0;
