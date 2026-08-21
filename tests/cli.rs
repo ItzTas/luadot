@@ -61,12 +61,25 @@ fn repository(repo: &Path) {
     }
 }
 
+fn lfs_available() -> bool {
+    std::process::Command::new("git-lfs")
+        .arg("version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
 fn staged(repo: &Path) -> String {
     git(repo, &["diff", "--cached", "--name-only"])
 }
 
 fn subject(repo: &Path) -> String {
     git(repo, &["log", "-1", "--format=%s"])
+}
+
+fn backed(saved: &Path, path: &Path) -> PathBuf {
+    saved.join(path.strip_prefix("/").unwrap())
 }
 
 fn write_state(home: &Path, repo: &Path) {
@@ -137,7 +150,7 @@ fn add_then_apply_manage_a_file_end_to_end() {
         .assert()
         .success();
     assert_eq!(
-        std::fs::read_to_string(repo.join("home/.vimrc")).unwrap(),
+        std::fs::read_to_string(repo.join(".vimrc")).unwrap(),
         "set number\n"
     );
 
@@ -170,7 +183,7 @@ fn add_stages_what_it_mirrors_and_rm_stages_what_it_takes_out() {
         .args(["add", home.join(".vimrc").to_str().unwrap()])
         .assert()
         .success();
-    assert_eq!(staged(&repo), "home/.vimrc\n");
+    assert_eq!(staged(&repo), ".vimrc\n");
 
     git(&repo, &["commit", "--quiet", "-m", "first"]);
     luadot_with_git(&home)
@@ -178,8 +191,37 @@ fn add_stages_what_it_mirrors_and_rm_stages_what_it_takes_out() {
         .assert()
         .success();
 
-    assert_eq!(staged(&repo), "home/.vimrc\n");
+    assert_eq!(staged(&repo), ".vimrc\n");
     assert_eq!(read(&home.join(".vimrc")), "set number\n");
+}
+
+#[test]
+fn add_stores_in_lfs_what_the_rules_send_there() {
+    if !lfs_available() {
+        return;
+    }
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    repository(&repo);
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.rules({ match = "Videos/**", lfs = true })"#,
+    );
+    write(&home.join("Videos/clip.mp4"), "a clip\n");
+    write_state(&home, &repo);
+
+    luadot_with_git(&home)
+        .args(["add", home.join("Videos/clip.mp4").to_str().unwrap()])
+        .assert()
+        .success();
+
+    assert_eq!(staged(&repo), ".gitattributes\nVideos/clip.mp4\n");
+    assert!(read(&repo.join(".gitattributes")).contains("Videos/** filter=lfs diff=lfs merge=lfs"));
+    assert!(
+        git(&repo, &["cat-file", "-p", ":Videos/clip.mp4"])
+            .starts_with("version https://git-lfs.github.com/spec/v1")
+    );
 }
 
 #[test]
@@ -231,7 +273,7 @@ fn a_class_a_template_declares_is_answered_from_the_state_or_asked_for() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     write(
-        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        &repo.join(".zshrc.luadot/luadot.lua"),
         r#"
         ld.class({ name = "editor", choices = { "nvim", "helix" } })
         return "EDITOR=" .. ld.class.get("editor") .. "\n"
@@ -265,9 +307,9 @@ fn a_setup_the_configuration_runs_overwrites_what_the_configuration_set() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(
-        &repo.join("home/.config/luadot/setup/dots.lua"),
+        &repo.join(".config/luadot/setup/dots.lua"),
         r#"ld.opt.link("symbolic")"#,
     );
     write(
@@ -295,7 +337,7 @@ fn a_file_the_configuration_writes_waits_for_a_run_that_is_not_dry() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     let generated = home.join(".config/mako/config");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(
         &home.join(".config/luadot/config.lua"),
         r#"ld.alt.out({ dest = "~/.config/mako/config", content = "font=monospace\n" })"#,
@@ -317,7 +359,7 @@ fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_i
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(&home.join(".bashrc"), "handwritten\n");
     write(
         &home.join(".config/luadot/config.lua"),
@@ -328,7 +370,10 @@ fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_i
     luadot(&home).arg("apply").assert().success();
 
     let saved = only_dir(&home.join("saved"));
-    assert_eq!(read(&saved.join("home/.bashrc")), "handwritten\n");
+    assert_eq!(
+        read(&backed(&saved, &home.join(".bashrc"))),
+        "handwritten\n"
+    );
     assert_eq!(read(&home.join(".bashrc")), "managed\n");
     assert!(!home.join(".local/share/luadot/backups").exists());
 
@@ -347,7 +392,7 @@ fn the_configuration_points_luadot_at_its_own_repository() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("dotfiles");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(
         &home.join(".config/luadot/config.lua"),
         &format!("ld.opt.repo_dir({:?})", repo.display()),
@@ -376,7 +421,7 @@ fn init_creates_a_repository_and_makes_it_the_managed_one() {
         .args(["add", home.join(".vimrc").to_str().unwrap()])
         .assert()
         .success();
-    assert_eq!(read(&repo.join("home/.vimrc")), "set number\n");
+    assert_eq!(read(&repo.join(".vimrc")), "set number\n");
 }
 
 #[test]
@@ -395,6 +440,51 @@ fn init_refuses_a_directory_holding_something() {
 }
 
 #[test]
+fn init_points_the_language_server_at_the_definitions() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("dotfiles");
+
+    luadot(&home)
+        .args(["init", repo.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("wrote"));
+
+    assert!(read(&home.join(".local/share/luadot/meta/ld.lua")).starts_with("---@meta\n"));
+    assert!(
+        read(&home.join(".config/luadot/.luarc.json")).contains("\"~/.local/share/luadot/meta\"")
+    );
+    assert!(read(&repo.join(".luarc.json")).contains("\"~/.local/share/luadot/meta\""));
+}
+
+#[test]
+fn clone_merges_the_settings_the_repository_carries() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("source");
+    let repo = root.path().join("dotfiles");
+    repository(&source);
+    write(
+        &source.join(".luarc.json"),
+        "{\n  \"diagnostics.globals\": [\"vim\"]\n}\n",
+    );
+    git(&source, &["add", ".luarc.json"]);
+    git(&source, &["commit", "--quiet", "-m", "settings"]);
+
+    luadot_with_git(&home)
+        .args(["clone", source.to_str().unwrap(), repo.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("merged"));
+
+    let merged = read(&repo.join(".luarc.json"));
+    assert!(merged.contains("\"diagnostics.globals\""));
+    assert!(merged.contains("\"~/.local/share/luadot/meta\""));
+    assert!(home.join(".local/share/luadot/meta/ld.lua").is_file());
+}
+
+#[test]
 fn clone_takes_the_directory_to_clone_into() {
     let home = tempfile::tempdir().unwrap();
 
@@ -410,7 +500,7 @@ fn a_limit_drops_the_oldest_backups() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(
         &home.join(".config/luadot/config.lua"),
         "ld.opt.backup_keep(2)",
@@ -425,7 +515,7 @@ fn a_limit_drops_the_oldest_backups() {
 
     let mut saved: Vec<String> = std::fs::read_dir(home.join(".local/share/luadot/backups"))
         .unwrap()
-        .map(|entry| read(&entry.unwrap().path().join("home/.bashrc")))
+        .map(|entry| read(&backed(&entry.unwrap().path(), &home.join(".bashrc"))))
         .collect();
     saved.sort();
 
@@ -437,7 +527,7 @@ fn rm_backs_up_what_it_takes_out_of_the_repository() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = home.join(".local/share/luadot/repo");
-    write(&repo.join("home/.vimrc"), "set number\n");
+    write(&repo.join(".vimrc"), "set number\n");
     write_state(&home, &repo);
 
     luadot(&home)
@@ -445,14 +535,11 @@ fn rm_backs_up_what_it_takes_out_of_the_repository() {
         .assert()
         .success();
 
-    assert!(!repo.join("home/.vimrc").exists());
+    assert!(!repo.join(".vimrc").exists());
     assert_eq!(read(&home.join(".vimrc")), "set number\n");
 
     let saved = only_dir(&home.join(".local/share/luadot/backups"));
-    assert_eq!(
-        read(&saved.join("home/.local/share/luadot/repo/home/.vimrc")),
-        "set number\n"
-    );
+    assert_eq!(read(&backed(&saved, &repo.join(".vimrc"))), "set number\n");
 }
 
 #[test]
@@ -460,7 +547,7 @@ fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(
         &home.join(".config/luadot/config.lua"),
         r#"ld.opt.link("symbolic")"#,
@@ -472,10 +559,7 @@ fn apply_places_a_symlink_when_the_configuration_asks_for_one() {
     let placed = home.join(".bashrc");
     let kind = std::fs::symlink_metadata(&placed).unwrap().file_type();
     assert!(kind.is_symlink());
-    assert_eq!(
-        std::fs::read_link(&placed).unwrap(),
-        repo.join("home/.bashrc")
-    );
+    assert_eq!(std::fs::read_link(&placed).unwrap(), repo.join(".bashrc"));
 }
 
 #[test]
@@ -484,15 +568,15 @@ fn alt_resolves_both_template_forms_and_apply_walks_past_them() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     write(
-        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        &repo.join(".zshrc.luadot/luadot.lua"),
         r#"return ld.alt.expand("zshrc.tmpl.zsh", { editor = "nvim" })"#,
     );
     write(
-        &repo.join("home/.zshrc.luadot/zshrc.tmpl.zsh"),
+        &repo.join(".zshrc.luadot/zshrc.tmpl.zsh"),
         "export EDITOR=<%= editor %>\n",
     );
     write(
-        &repo.join("home/.zprofile.luadot"),
+        &repo.join(".zprofile.luadot"),
         "<% for _, dir in ipairs({ \"a\", \"b\" }) do -%>\npath+=(<%= dir %>)\n<% end -%>\n",
     );
     write_state(&home, &repo);
@@ -551,7 +635,7 @@ fn tmpl_new_creates_both_template_forms_and_tmpl_alt_resolves_them() {
         .success()
         .stdout(predicate::str::contains("created"))
         .stdout(predicate::str::contains(
-            "added home/.config/nvim/init.lua.luadot",
+            "added .config/nvim/init.lua.luadot",
         ));
     luadot(&home)
         .args(["tmpl", "new", "-f", "~/.zprofile.luadot"])
@@ -563,11 +647,11 @@ fn tmpl_new_creates_both_template_forms_and_tmpl_alt_resolves_them() {
         "return \"\"\n"
     );
     assert_eq!(
-        read(&repo.join("home/.config/nvim/init.lua.luadot/luadot.lua")),
+        read(&repo.join(".config/nvim/init.lua.luadot/luadot.lua")),
         "return \"\"\n"
     );
     assert_eq!(read(&home.join(".zprofile.luadot")), "");
-    assert_eq!(read(&repo.join("home/.zprofile.luadot")), "");
+    assert_eq!(read(&repo.join(".zprofile.luadot")), "");
 
     luadot(&home)
         .args(["tmpl", "new"])
@@ -594,16 +678,13 @@ fn a_rule_runs_its_command_once_for_every_file_apply_touched() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     let reloaded = root.path().join("reloaded");
-    write(&repo.join("home/.config/mako/config"), "font=monospace\n");
-    write(
-        &repo.join("home/.config/mako/colors"),
-        "background=#000000\n",
-    );
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".config/mako/config"), "font=monospace\n");
+    write(&repo.join(".config/mako/colors"), "background=#000000\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(
         &home.join(".config/luadot/config.lua"),
         &format!(
-            r#"ld.rules({{ {{ match = "home/.config/mako/**", on_change = "printf x >> {}" }} }})"#,
+            r#"ld.rules({{ {{ match = ".config/mako/**", on_change = "printf x >> {}" }} }})"#,
             reloaded.display()
         ),
     );
@@ -629,15 +710,15 @@ fn alt_builds_a_file_out_of_fragments_and_runs_the_command_that_follows_it() {
     let repo = root.path().join("repo");
     let restarted = root.path().join("restarted");
     write(
-        &repo.join("home/.zshrc.luadot/conf.d/20-path.zsh"),
+        &repo.join(".zshrc.luadot/conf.d/20-path.zsh"),
         "path+=(b)\n",
     );
     write(
-        &repo.join("home/.zshrc.luadot/conf.d/10-env.zsh"),
+        &repo.join(".zshrc.luadot/conf.d/10-env.zsh"),
         "export A=1\n",
     );
     write(
-        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        &repo.join(".zshrc.luadot/luadot.lua"),
         &format!(
             r#"
             local parts = {{}}
@@ -685,7 +766,7 @@ fn add_leaves_out_what_the_repository_gitignores() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     gix::init(&repo).unwrap();
-    write(&repo.join(".gitignore"), "*.log\nhome/.cache/\n");
+    write(&repo.join(".gitignore"), "*.log\n.cache/\n");
     write(&home.join(".config/nvim/init.lua"), "vim.o.number = true\n");
     write(&home.join(".config/nvim/lsp.log"), "noise\n");
     write(&home.join(".cache/state"), "cached\n");
@@ -695,77 +776,82 @@ fn add_leaves_out_what_the_repository_gitignores() {
         .args(["add", home.join(".config/nvim").to_str().unwrap()])
         .assert()
         .success();
-    assert!(repo.join("home/.config/nvim/init.lua").exists());
-    assert!(!repo.join("home/.config/nvim/lsp.log").exists());
+    assert!(repo.join(".config/nvim/init.lua").exists());
+    assert!(!repo.join(".config/nvim/lsp.log").exists());
 
     luadot(&home)
         .args(["add", home.join(".cache").to_str().unwrap()])
         .assert()
         .failure()
         .stderr(predicate::str::contains(".gitignore"));
-    assert!(!repo.join("home/.cache").exists());
+    assert!(!repo.join(".cache").exists());
 }
 
 #[test]
-fn add_then_apply_manage_a_system_file_end_to_end() {
+fn add_refuses_a_file_outside_the_home_directory() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    let system = root.path().join("etc/app.conf");
+    let outside = root.path().join("etc/app.conf");
     std::fs::create_dir_all(&repo).unwrap();
-    write(&system, "conf\n");
+    write(&outside, "conf\n");
     write_state(&home, &repo);
 
     luadot(&home)
-        .args(["add", system.to_str().unwrap()])
+        .args(["add", outside.to_str().unwrap()])
         .assert()
-        .success();
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "add: cannot manage {}: outside your home directory",
+            outside.display()
+        )));
 
-    let managed = repo.join("root").join(system.strip_prefix("/").unwrap());
-    assert_eq!(read(&managed), "conf\n");
-
-    std::fs::remove_file(&system).unwrap();
-    luadot(&home).arg("apply").assert().success();
-    assert_eq!(read(&system), "conf\n");
-
-    luadot(&home)
-        .arg("status")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(
-            "nothing to apply, every managed file is synced",
-        ));
-
-    luadot(&home)
-        .args(["rm", "--yes", system.to_str().unwrap()])
-        .assert()
-        .success();
-    assert!(!managed.exists());
-    assert_eq!(read(&system), "conf\n");
+    assert!(!repo.join("etc").exists());
+    assert!(!repo.join("root").exists());
 }
 
 #[test]
-fn a_mode_rule_lands_on_a_system_file() {
+fn the_files_of_the_repository_itself_are_never_applied() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".gitignore"), "*.log\n");
+    write(&repo.join(".luarc.json"), "{}\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .arg("apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("applied 1 file(s)"));
+
+    assert_eq!(read(&home.join(".bashrc")), "managed\n");
+    assert!(!home.join(".gitignore").exists());
+    assert!(!home.join(".luarc.json").exists());
+}
+
+#[test]
+fn a_mode_rule_lands_on_a_managed_file_and_is_put_back_when_it_drifts() {
     use std::os::unix::fs::PermissionsExt;
 
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    let system = root.path().join("etc/app.conf");
-    let managed = repo.join("root").join(system.strip_prefix("/").unwrap());
-    write(&managed, "conf\n");
+    let placed = home.join(".ssh/config");
+    write(&repo.join(".ssh/config"), "Host example\n");
     write(
         &home.join(".config/luadot/config.lua"),
-        r#"ld.rules({ match = "root/**", mode = "0640" })"#,
+        r#"ld.rules({ match = ".ssh/**", link = "copy", mode = "0600" })"#,
     );
     write_state(&home, &repo);
 
     luadot(&home).arg("apply").assert().success();
 
-    assert_eq!(read(&system), "conf\n");
+    assert_eq!(read(&placed), "Host example\n");
     assert_eq!(
-        std::fs::metadata(&system).unwrap().permissions().mode() & 0o7777,
-        0o640
+        std::fs::metadata(&placed).unwrap().permissions().mode() & 0o7777,
+        0o600
     );
 
     luadot(&home)
@@ -773,28 +859,30 @@ fn a_mode_rule_lands_on_a_system_file() {
         .assert()
         .success()
         .stdout(predicate::str::contains("1 unchanged"));
-}
 
-#[test]
-fn a_replaced_system_file_is_backed_up_and_restored() {
-    let root = tempfile::tempdir().unwrap();
-    let home = root.path().join("home");
-    let repo = root.path().join("repo");
-    let system = root.path().join("etc/app.conf");
-    let managed = repo.join("root").join(system.strip_prefix("/").unwrap());
-    write(&managed, "managed\n");
-    write(&system, "handwritten\n");
-    write_state(&home, &repo);
+    std::fs::set_permissions(&placed, std::fs::Permissions::from_mode(0o644)).unwrap();
+    luadot(&home)
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("        differs:     .ssh/config"));
+    luadot(&home)
+        .arg("diff")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "mode       .ssh/config 0644 -> 0600",
+        ));
 
-    luadot(&home).arg("apply").assert().success();
-    assert_eq!(read(&system), "managed\n");
-
-    let saved = only_dir(&home.join(".local/share/luadot/backups"));
-    let entry = saved.join("root").join(system.strip_prefix("/").unwrap());
-    assert_eq!(read(&entry), "handwritten\n");
-
-    luadot(&home).args(["restore", "--yes"]).assert().success();
-    assert_eq!(read(&system), "handwritten\n");
+    luadot(&home)
+        .arg("apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 replaced"));
+    assert_eq!(
+        std::fs::metadata(&placed).unwrap().permissions().mode() & 0o7777,
+        0o600
+    );
 }
 
 #[test]
@@ -802,22 +890,20 @@ fn diff_reports_the_drift_and_what_the_system_is_missing() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
-    write(&repo.join("home/.vimrc"), "set number\n");
-    write(&repo.join("home/.zshrc"), "synced\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join(".vimrc"), "set number\n");
+    write(&repo.join(".zshrc"), "synced\n");
     write(&home.join(".bashrc"), "handwritten\n");
     write(&home.join(".zshrc"), "synced\n");
     write_state(&home, &repo);
 
     luadot(&home).arg("diff").assert().success().stdout(
-        predicate::str::contains("diff --git a/home/.bashrc b/home/.bashrc")
-            .and(predicate::str::contains("--- a/home/.bashrc"))
-            .and(predicate::str::contains("+++ b/home/.bashrc"))
+        predicate::str::contains("diff --git a/.bashrc b/.bashrc")
+            .and(predicate::str::contains("--- a/.bashrc"))
+            .and(predicate::str::contains("+++ b/.bashrc"))
             .and(predicate::str::contains("-managed"))
             .and(predicate::str::contains("+handwritten"))
-            .and(predicate::str::contains(
-                "diff --git a/home/.vimrc b/home/.vimrc",
-            ))
+            .and(predicate::str::contains("diff --git a/.vimrc b/.vimrc"))
             .and(predicate::str::contains("deleted file mode 100644"))
             .and(predicate::str::contains("-set number"))
             .and(predicate::str::contains(".zshrc").not())
@@ -830,8 +916,8 @@ fn diff_narrows_to_the_path_it_is_given_and_leaves_nothing_behind() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
-    write(&repo.join("home/.vimrc"), "set number\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join(".vimrc"), "set number\n");
     write(&home.join(".bashrc"), "handwritten\n");
     write_state(&home, &repo);
 
@@ -857,10 +943,10 @@ fn status_groups_what_apply_would_touch_under_the_repository_it_reads() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
-    write(&repo.join("home/.vimrc"), "set number\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join(".vimrc"), "set number\n");
     write(&home.join(".vimrc"), "set number\n");
-    write(&repo.join("home/.zshrc"), "repository\n");
+    write(&repo.join(".zshrc"), "repository\n");
     write(&home.join(".zshrc"), "system\n");
     write_state(&home, &repo);
 
@@ -871,16 +957,14 @@ fn status_groups_what_apply_would_touch_under_the_repository_it_reads() {
             .and(predicate::str::contains(
                 "(use \"luadot apply <path>...\" to write them)",
             ))
-            .and(predicate::str::contains(
-                "        missing:     home/.bashrc",
-            ))
+            .and(predicate::str::contains("        missing:     .bashrc"))
             .and(predicate::str::contains("Files not linked:"))
-            .and(predicate::str::contains("        unlinked:    home/.vimrc"))
+            .and(predicate::str::contains("        unlinked:    .vimrc"))
             .and(predicate::str::contains("Files that differ:"))
             .and(predicate::str::contains(
                 "(use \"luadot diff <path>...\" to see what changed)",
             ))
-            .and(predicate::str::contains("        differs:     home/.zshrc")),
+            .and(predicate::str::contains("        differs:     .zshrc")),
     );
 }
 
@@ -889,8 +973,8 @@ fn status_writes_the_entries_and_the_summary_the_configuration_asks_for() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
-    write(&repo.join("home/.vimrc"), "set number\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join(".vimrc"), "set number\n");
     write(&home.join(".vimrc"), "set number\n");
     write(
         &home.join(".config/luadot/config.lua"),
@@ -908,8 +992,8 @@ fn status_writes_the_entries_and_the_summary_the_configuration_asks_for() {
     write_state(&home, &repo);
 
     luadot(&home).arg("status").assert().success().stdout(
-        predicate::str::contains("» missing home/.bashrc")
-            .and(predicate::str::contains("» unlinked home/.vimrc"))
+        predicate::str::contains("» missing .bashrc")
+            .and(predicate::str::contains("» unlinked .vimrc"))
             .and(predicate::str::contains("0/2 on the repository"))
             .and(predicate::str::contains("managed file(s) (").not()),
     );
@@ -920,11 +1004,11 @@ fn status_hands_every_file_it_inspected_to_the_configuration() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
-    write(&repo.join("home/.vimrc"), "set number\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&repo.join(".vimrc"), "set number\n");
     write(&home.join(".vimrc"), "set number\n");
-    write(&repo.join("home/.zshrc"), "synced\n");
-    std::fs::hard_link(repo.join("home/.zshrc"), home.join(".zshrc")).unwrap();
+    write(&repo.join(".zshrc"), "synced\n");
+    std::fs::hard_link(repo.join(".zshrc"), home.join(".zshrc")).unwrap();
     write(
         &home.join(".config/luadot/config.lua"),
         r#"
@@ -942,9 +1026,9 @@ fn status_hands_every_file_it_inspected_to_the_configuration() {
     write_state(&home, &repo);
 
     luadot(&home).arg("status").assert().success().stdout(
-        predicate::str::contains("missing    home/.bashrc")
-            .and(predicate::str::contains("unlinked   home/.vimrc"))
-            .and(predicate::str::contains("synced     home/.zshrc"))
+        predicate::str::contains("missing    .bashrc")
+            .and(predicate::str::contains("unlinked   .vimrc"))
+            .and(predicate::str::contains("synced     .zshrc"))
             .and(predicate::str::contains("counted 3"))
             .and(predicate::str::contains("managed file(s)").not()),
     );
@@ -955,7 +1039,7 @@ fn diff_hands_every_drifted_file_to_the_configuration_and_runs_no_diff_of_its_ow
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(&home.join(".bashrc"), "handwritten\n");
     write(
         &home.join(".config/luadot/config.lua"),
@@ -975,7 +1059,7 @@ fn diff_hands_every_drifted_file_to_the_configuration_and_runs_no_diff_of_its_ow
     write_state(&home, &repo);
 
     luadot(&home).arg("diff").assert().success().stdout(
-        predicate::str::contains("home/.bashrc")
+        predicate::str::contains(".bashrc")
             .and(predicate::str::contains("- managed"))
             .and(predicate::str::contains("+ handwritten"))
             .and(predicate::str::contains("diff --git").not())
@@ -988,7 +1072,7 @@ fn diff_runs_the_tool_the_configuration_names_over_the_two_sides() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(&home.join(".bashrc"), "handwritten\n");
     write(
         &home.join(".config/luadot/config.lua"),
@@ -1008,7 +1092,7 @@ fn diff_reports_a_customization_that_breaks() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(&home.join(".bashrc"), "handwritten\n");
     write(
         &home.join(".config/luadot/config.lua"),
@@ -1023,6 +1107,72 @@ fn diff_reports_a_customization_that_breaks() {
         .stderr(predicate::str::contains(
             "diff: `ld.on.diff`: `summary` returned integer",
         ));
+}
+
+#[test]
+fn a_command_runs_the_functions_the_configuration_sets_before_and_after_it() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        ld.on.apply({
+          before = function() return "before " .. ld.argv.name end,
+          after = function() ld.print("after " .. ld.argv.name) end,
+        })
+        "#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success().stdout(
+        predicate::str::is_match("(?s)^before apply\n.*\\.bashrc.*\nafter apply\n$").unwrap(),
+    );
+}
+
+#[test]
+fn a_command_that_fails_stops_before_its_after_function() {
+    let home = tempfile::tempdir().unwrap();
+    write(
+        &home.path().join(".config/luadot/config.lua"),
+        r#"ld.on.status({ before = function() return "started" end, after = function() return "finished" end })"#,
+    );
+
+    luadot(home.path())
+        .arg("status")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("started").and(predicate::str::contains("finished").not()))
+        .stderr(predicate::str::contains("status: no repository set"));
+}
+
+#[test]
+fn a_tmpl_action_runs_the_functions_set_on_its_own_call() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(
+        &repo.join(".zshrc.luadot/luadot.lua"),
+        r#"return "generated\n""#,
+    );
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        ld.on.tmpl.alt({ after = function() return "alt done" end })
+        ld.on.tmpl.new({ after = function() return "new done" end })
+        "#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args(["tmpl", "alt"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("alt done").and(predicate::str::contains("new done").not()),
+        );
+    assert_eq!(read(&home.join(".zshrc")), "generated\n");
 }
 
 #[test]
@@ -1058,9 +1208,9 @@ fn rm_takes_a_template_out_and_leaves_the_file_it_produced_working() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.zshrc.luadot/laptop.zsh"), "laptop\n");
+    write(&repo.join(".zshrc.luadot/laptop.zsh"), "laptop\n");
     write(
-        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        &repo.join(".zshrc.luadot/luadot.lua"),
         r#"return { content = ld.alt.file("laptop.zsh"), link = "symbolic" }"#,
     );
     write_state(&home, &repo);
@@ -1068,7 +1218,7 @@ fn rm_takes_a_template_out_and_leaves_the_file_it_produced_working() {
     luadot(&home).args(["tmpl", "alt"]).assert().success();
     assert_eq!(
         std::fs::read_link(home.join(".zshrc")).unwrap(),
-        repo.join("home/.zshrc.luadot/laptop.zsh")
+        repo.join(".zshrc.luadot/laptop.zsh")
     );
 
     luadot(&home)
@@ -1078,7 +1228,7 @@ fn rm_takes_a_template_out_and_leaves_the_file_it_produced_working() {
         .stdout(predicate::str::contains(
             "would stop managing 1 template(s) (1 restored, 0 left untouched)",
         ));
-    assert!(repo.join("home/.zshrc.luadot").is_dir());
+    assert!(repo.join(".zshrc.luadot").is_dir());
 
     luadot(&home)
         .args(["rm", "--yes", home.join(".zshrc").to_str().unwrap()])
@@ -1088,7 +1238,7 @@ fn rm_takes_a_template_out_and_leaves_the_file_it_produced_working() {
             "stopped managing 1 template(s) (1 restored, 0 left untouched)",
         ));
 
-    assert!(!repo.join("home/.zshrc.luadot").exists());
+    assert!(!repo.join(".zshrc.luadot").exists());
     assert!(
         !std::fs::symlink_metadata(home.join(".zshrc"))
             .unwrap()
@@ -1102,10 +1252,10 @@ fn diff_shows_what_a_template_would_write_only_when_it_is_asked_to() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.bashrc"), "managed\n");
+    write(&repo.join(".bashrc"), "managed\n");
     write(&home.join(".bashrc"), "managed\n");
     write(
-        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        &repo.join(".zshrc.luadot/luadot.lua"),
         r#"return "export EDITOR=nvim\n""#,
     );
     write(&home.join(".zshrc"), "export EDITOR=vi\n");
@@ -1121,7 +1271,7 @@ fn diff_shows_what_a_template_would_write_only_when_it_is_asked_to() {
         .assert()
         .success()
         .stdout(
-            predicate::str::contains("diff --git a/home/.zshrc b/home/.zshrc")
+            predicate::str::contains("diff --git a/.zshrc b/.zshrc")
                 .and(predicate::str::contains("-export EDITOR=nvim"))
                 .and(predicate::str::contains("+export EDITOR=vi"))
                 .and(predicate::str::contains("1 of 1 generated file(s) differ")),
@@ -1201,10 +1351,56 @@ fn crypt_config(home: &Path) {
         &home.join(".config/luadot/config.lua"),
         r#"
         ld.crypt.lock({ recipients = "age1example", identity = "~/key.txt" })
-        ld.rules({ match = "home/.netrc", encrypt = true })
+        ld.rules({ match = ".netrc", encrypt = true })
         "#,
     );
     write(&home.join("key.txt"), "AGE-SECRET-KEY-FAKE\n");
+}
+
+#[test]
+fn every_secret_of_a_run_is_placed_with_its_own_plaintext() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let bin = fake_age(root.path());
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        ld.crypt.lock({ recipients = "age1example", identity = "~/key.txt" })
+        ld.rules({ match = ".secret*", encrypt = true })
+        "#,
+    );
+    write(&home.join("key.txt"), "AGE-SECRET-KEY-FAKE\n");
+    write_state(&home, &repo);
+
+    let names: Vec<String> = (0..6).map(|index| format!(".secret{index}")).collect();
+    for (index, name) in names.iter().enumerate() {
+        write(&home.join(name), &format!("password hunter{index}\n"));
+        luadot_with_tools(&home, &bin)
+            .args(["add", home.join(name).to_str().unwrap()])
+            .assert()
+            .success();
+        std::fs::remove_file(home.join(name)).unwrap();
+    }
+
+    let log = root.path().join("age.log");
+    luadot_with_tools(&home, &bin)
+        .env("FAKE_AGE_LOG", &log)
+        .arg("apply")
+        .assert()
+        .success();
+
+    let calls = read(&log);
+    let decrypts = calls
+        .lines()
+        .filter(|line| line.contains("--decrypt"))
+        .count();
+    assert_eq!(decrypts, names.len(), "{calls}");
+
+    for (index, name) in names.iter().enumerate() {
+        assert_eq!(read(&home.join(name)), format!("password hunter{index}\n"));
+    }
 }
 
 #[test]
@@ -1223,10 +1419,10 @@ fn an_encrypt_rule_keeps_only_ciphertext_in_the_repository() {
         .assert()
         .success();
 
-    let cipher = read(&repo.join("home/.netrc.age"));
+    let cipher = read(&repo.join(".netrc.age"));
     assert!(cipher.starts_with("FAKEAGE\n"));
     assert!(!cipher.contains("hunter2"));
-    assert!(!repo.join("home/.netrc").exists());
+    assert!(!repo.join(".netrc").exists());
 
     std::fs::remove_file(home.join(".netrc")).unwrap();
     luadot_with_tools(&home, &bin)
@@ -1281,12 +1477,12 @@ fn edit_reencrypts_and_leaves_no_plaintext_behind() {
         .assert()
         .success();
 
-    let entries: Vec<String> = std::fs::read_dir(repo.join("home"))
+    let entries: Vec<String> = std::fs::read_dir(&repo)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
     assert_eq!(entries, [".netrc.age"]);
-    assert!(read(&repo.join("home/.netrc.age")).starts_with("FAKEAGE\n"));
+    assert!(read(&repo.join(".netrc.age")).starts_with("FAKEAGE\n"));
 
     std::fs::remove_file(home.join(".netrc")).unwrap();
     luadot_with_tools(&home, &bin)
@@ -1310,7 +1506,7 @@ fn decrypting_with_age_asks_for_an_identity() {
         &home.join(".config/luadot/config.lua"),
         r#"
         ld.crypt.lock({ recipients = "age1example" })
-        ld.rules({ match = "home/.netrc", encrypt = true })
+        ld.rules({ match = ".netrc", encrypt = true })
         "#,
     );
     write(&home.join(".netrc"), "machine example password hunter2\n");
@@ -1354,35 +1550,15 @@ fn rm_restores_the_plaintext_of_an_encrypted_file() {
         .success()
         .stdout(predicate::str::contains("1 restored"));
 
-    assert!(!repo.join("home/.netrc.age").exists());
+    assert!(!repo.join(".netrc.age").exists());
     assert_eq!(
         read(&home.join(".netrc")),
         "machine example password hunter2\n"
     );
 }
 
-fn system_secret_config(home: &Path, rule: &str) {
-    write(
-        &home.join(".config/luadot/config.lua"),
-        &format!(
-            r#"
-        ld.crypt.lock({{ recipients = "age1example", identity = "~/key.txt" }})
-        ld.rules({{ match = "root/**", encrypt = true, {rule} }})
-        "#
-        ),
-    );
-    write(&home.join("key.txt"), "AGE-SECRET-KEY-FAKE\n");
-}
-
-fn stored_beside(system: &Path, repo: &Path) -> PathBuf {
-    repo.join("root").join(format!(
-        "{}.age",
-        system.strip_prefix("/").unwrap().display()
-    ))
-}
-
 #[test]
-fn an_encrypt_rule_reaches_a_system_file() {
+fn a_mode_rule_reaches_an_encrypted_file() {
     use std::os::unix::fs::PermissionsExt;
 
     let root = tempfile::tempdir().unwrap();
@@ -1390,30 +1566,37 @@ fn an_encrypt_rule_reaches_a_system_file() {
     let repo = root.path().join("repo");
     std::fs::create_dir_all(&repo).unwrap();
     let bin = fake_age(root.path());
-    let system = root.path().join("etc/wireguard/wg0.conf");
-    write(&system, "PrivateKey = hunter2\n");
-    system_secret_config(&home, "");
+    let secret = home.join(".config/wireguard/wg0.conf");
+    write(&secret, "PrivateKey = hunter2\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        ld.crypt.lock({ recipients = "age1example", identity = "~/key.txt" })
+        ld.rules({ match = ".config/wireguard/**", encrypt = true, mode = "0640" })
+        "#,
+    );
+    write(&home.join("key.txt"), "AGE-SECRET-KEY-FAKE\n");
     write_state(&home, &repo);
 
     luadot_with_tools(&home, &bin)
-        .args(["add", system.to_str().unwrap()])
+        .args(["add", secret.to_str().unwrap()])
         .assert()
         .success();
 
-    let cipher = read(&stored_beside(&system, &repo));
+    let cipher = read(&repo.join(".config/wireguard/wg0.conf.age"));
     assert!(cipher.starts_with("FAKEAGE\n"));
     assert!(!cipher.contains("hunter2"));
 
-    std::fs::remove_file(&system).unwrap();
+    std::fs::remove_file(&secret).unwrap();
     luadot_with_tools(&home, &bin)
         .arg("apply")
         .assert()
         .success();
 
-    assert_eq!(read(&system), "PrivateKey = hunter2\n");
+    assert_eq!(read(&secret), "PrivateKey = hunter2\n");
     assert_eq!(
-        std::fs::metadata(&system).unwrap().permissions().mode() & 0o7777,
-        0o600
+        std::fs::metadata(&secret).unwrap().permissions().mode() & 0o7777,
+        0o640
     );
 
     luadot_with_tools(&home, &bin)
@@ -1445,7 +1628,7 @@ fn rekey_re_encrypts_every_secret_for_the_recipients_set_now() {
         &home.join(".config/luadot/config.lua"),
         r#"
         ld.crypt.lock({ recipients = { "age1example", "age1second" }, identity = "~/key.txt" })
-        ld.rules({ match = "home/.netrc", encrypt = true })
+        ld.rules({ match = ".netrc", encrypt = true })
         "#,
     );
 
@@ -1459,7 +1642,7 @@ fn rekey_re_encrypts_every_secret_for_the_recipients_set_now() {
 
     let calls = read(&log);
     assert!(calls.contains("--recipient age1second"), "{calls}");
-    assert!(!read(&repo.join("home/.netrc.age")).contains("hunter2"));
+    assert!(!read(&repo.join(".netrc.age")).contains("hunter2"));
 
     std::fs::remove_file(home.join(".netrc")).unwrap();
     luadot_with_tools(&home, &bin)
@@ -1487,7 +1670,7 @@ fn rekey_reports_what_it_would_do_without_touching_the_repository() {
         .args(["add", home.join(".netrc").to_str().unwrap()])
         .assert()
         .success();
-    let before = read(&repo.join("home/.netrc.age"));
+    let before = read(&repo.join(".netrc.age"));
 
     luadot_with_tools(&home, &bin)
         .args(["rekey", "--dry-run"])
@@ -1495,7 +1678,7 @@ fn rekey_reports_what_it_would_do_without_touching_the_repository() {
         .success()
         .stdout(predicate::str::contains("would re-encrypt 1 secret(s)"));
 
-    assert_eq!(read(&repo.join("home/.netrc.age")), before);
+    assert_eq!(read(&repo.join(".netrc.age")), before);
 }
 
 #[test]
@@ -1509,7 +1692,7 @@ fn passphrase_mode_says_it_is_weaker_and_the_warning_can_be_silenced() {
         &home.join(".config/luadot/config.lua"),
         r#"
         ld.crypt.lock("passphrase")
-        ld.rules({ match = "home/.netrc", encrypt = true })
+        ld.rules({ match = ".netrc", encrypt = true })
         "#,
     );
     write(&home.join(".netrc"), "machine example password hunter2\n");
@@ -1528,7 +1711,7 @@ fn passphrase_mode_says_it_is_weaker_and_the_warning_can_be_silenced() {
     let calls = read(&log);
     assert!(calls.contains("--passphrase"), "{calls}");
     assert!(!calls.contains("--recipient"), "{calls}");
-    assert!(!read(&repo.join("home/.netrc.age")).contains("hunter2"));
+    assert!(!read(&repo.join(".netrc.age")).contains("hunter2"));
 
     std::fs::remove_file(home.join(".netrc")).unwrap();
     luadot_with_tools(&home, &bin)
@@ -1545,7 +1728,7 @@ fn passphrase_mode_says_it_is_weaker_and_the_warning_can_be_silenced() {
         r#"
         ld.crypt.lock("passphrase")
         ld.opt.passphrase_warn(false)
-        ld.rules({ match = "home/.netrc", encrypt = true })
+        ld.rules({ match = ".netrc", encrypt = true })
         "#,
     );
     luadot_with_tools(&home, &bin)
@@ -1566,7 +1749,7 @@ fn an_identity_command_hands_the_key_over_without_a_file() {
         &home.join(".config/luadot/config.lua"),
         r#"
         ld.crypt.lock({ recipients = "age1example", identity = "printf 'AGE-SECRET-KEY-FAKE\n'" })
-        ld.rules({ match = "home/.netrc", encrypt = true })
+        ld.rules({ match = ".netrc", encrypt = true })
         "#,
     );
     write(&home.join(".netrc"), "machine example password hunter2\n");
@@ -1613,7 +1796,7 @@ fn a_failing_identity_command_stops_the_command() {
         &home.join(".config/luadot/config.lua"),
         r#"
         ld.crypt.lock({ recipients = "age1example", identity = { type = "command", "echo locked >&2; exit 1" } })
-        ld.rules({ match = "home/.netrc", encrypt = true })
+        ld.rules({ match = ".netrc", encrypt = true })
         "#,
     );
 
@@ -1644,8 +1827,8 @@ fn setup_lists_the_names_the_repository_declares() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
-    write(&repo.join("home/.config/luadot/setup/packages.lua"), "");
-    write(&repo.join("home/.config/luadot/setup/shell.sh"), "");
+    write(&repo.join(".config/luadot/setup/packages.lua"), "");
+    write(&repo.join(".config/luadot/setup/shell.sh"), "");
     write_state(&home, &repo);
 
     luadot(&home)
@@ -1661,7 +1844,7 @@ fn every_command_that_resolves_a_template_lets_it_reach_the_configuration() {
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     write(
-        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        &repo.join(".zshrc.luadot/luadot.lua"),
         r#"
         ld.opt.conflict("skip")
         return "generated\n"
@@ -1705,8 +1888,8 @@ fn tmpl_new_points_the_language_server_at_the_shared_definitions() {
         .stdout(predicate::str::contains(".zshrc.luadot/.luarc.json"));
 
     let settings = read(&home.join(".zshrc.luadot/.luarc.json"));
-    assert!(settings.contains("\"~/.config/luadot/meta\""));
-    assert_eq!(read(&repo.join("home/.zshrc.luadot/.luarc.json")), settings);
+    assert!(settings.contains("\"~/.local/share/luadot/meta\""));
+    assert_eq!(read(&repo.join(".zshrc.luadot/.luarc.json")), settings);
 
     luadot(&home)
         .args(["tmpl", "new", "-f", "~/.zprofile"])
@@ -1716,7 +1899,7 @@ fn tmpl_new_points_the_language_server_at_the_shared_definitions() {
 }
 
 #[test]
-fn meta_install_writes_the_definitions_and_the_settings_where_the_configuration_is_edited() {
+fn meta_install_writes_the_definitions_once_and_points_the_settings_at_them() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
@@ -1732,14 +1915,16 @@ fn meta_install_writes_the_definitions_and_the_settings_where_the_configuration_
         .success()
         .stdout(predicate::str::contains("merged"));
 
-    let definitions = read(&home.join(".config/luadot/meta/ld.lua"));
+    let definitions = read(&home.join(".local/share/luadot/meta/ld.lua"));
     assert!(definitions.starts_with("---@meta\n"));
-    assert_eq!(read(&repo.join("meta/ld.lua")), definitions);
-    assert!(read(&home.join(".config/luadot/.luarc.json")).contains("\"workspace.library\""));
+    assert!(!repo.join("meta/ld.lua").exists());
+    assert!(
+        read(&home.join(".config/luadot/.luarc.json")).contains("\"~/.local/share/luadot/meta\"")
+    );
 
     let merged = read(&repo.join(".luarc.json"));
     assert!(merged.contains("\"diagnostics.globals\""));
-    assert!(merged.contains("\"meta\""));
+    assert!(merged.contains("\"~/.local/share/luadot/meta\""));
 
     luadot(&home)
         .arg("meta")
@@ -1749,12 +1934,38 @@ fn meta_install_writes_the_definitions_and_the_settings_where_the_configuration_
 }
 
 #[test]
+fn any_command_refreshes_definitions_an_older_binary_wrote() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let definitions = home.join(".local/share/luadot/meta/ld.lua");
+    std::fs::create_dir_all(&repo).unwrap();
+    write_state(&home, &repo);
+    write(&definitions, "---@meta\n---older\n");
+
+    luadot(&home)
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("older").not());
+
+    let current = luadot(&home).arg("meta").output().unwrap().stdout;
+    assert_eq!(std::fs::read(&definitions).unwrap(), current);
+    assert_eq!(
+        std::fs::read_dir(definitions.parent().unwrap())
+            .unwrap()
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn an_option_a_template_sets_reaches_the_file_that_template_produces() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
     write(
-        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        &repo.join(".zshrc.luadot/luadot.lua"),
         r#"
         ld.opt.conflict("skip")
         return "generated\n"
