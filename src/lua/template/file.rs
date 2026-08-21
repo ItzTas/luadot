@@ -3,11 +3,12 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::load::destination;
-use super::types::{Content, Output};
+use crate::lua::Shared;
 use crate::lua::constants::MODULES_DIR;
 use crate::lua::embed;
-use crate::lua::ld::{API, Paths, Surface, install};
+use crate::lua::ld::{API, Paths, Surface, install, share};
 use crate::lua::runtime::{add_module_path, environment, runtime};
+use crate::lua::scope::{Content, Output};
 use crate::state::Classes;
 use crate::utils;
 
@@ -17,15 +18,17 @@ pub fn load_template_file(
     repo: &Path,
     path: &Path,
     classes: &Classes,
+    config: &Shared,
 ) -> Result<Output> {
     let source = std::fs::read_to_string(path)
         .with_context(|| format!("{command}: failed to read {}", path.display()))?;
-    let config = utils::config_dir()
+    let dirs = utils::config_dir()
         .with_context(|| format!("{command}: failed to locate the configuration"))?;
 
-    render(command, home, repo, &config, path, &source, classes)
+    render(command, home, repo, &dirs, path, &source, classes, config)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render(
     command: &str,
     home: &Path,
@@ -34,15 +37,20 @@ fn render(
     path: &Path,
     source: &str,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<Output> {
     let dest = destination(command, home, repo, path)?;
     let chunk = embed::compile(source)
         .with_context(|| format!("{command}: failed to compile {}", path.display()))?;
 
     let lua = runtime().with_context(|| format!("{command}: failed to start the Lua runtime"))?;
-    let paths = Paths::new(home, config).with_repo(Some(repo));
+    let mut paths = Paths::new(home, config).with_repo(Some(repo));
+    if let Some(dir) = path.parent() {
+        paths = paths.with_dir(dir);
+    }
     install(&lua, Surface::Standalone, &paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
+    share(&lua, shared);
     add_module_path(&lua, config)
         .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
 
@@ -55,6 +63,14 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::lua::{Config, Shared};
+
+    fn configuration() -> Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
     use std::path::Path;
 
     use super::*;
@@ -68,7 +84,7 @@ mod tests {
         }
         std::fs::write(&path, source).unwrap();
 
-        load_template_file("alt", &home, &repo, &path, classes)
+        load_template_file("alt", &home, &repo, &path, classes, &configuration())
     }
 
     #[test]
@@ -92,18 +108,24 @@ mod tests {
     }
 
     #[test]
-    fn the_template_directory_calls_are_inert() {
+    fn the_alternatives_resolve_next_to_the_file_itself() {
         let root = tempfile::tempdir().unwrap();
+        let beside = root.path().join("repo/home");
+        std::fs::create_dir_all(&beside).unwrap();
+        std::fs::write(beside.join("aliases.zsh"), "alias ll='ls -l'").unwrap();
 
         let output = load(
             root.path(),
             "home/.zshrc.luadot",
-            "<% ld.alt.out({ content = \"x\" }) %><%= tostring(ld.alt.file(\"nope\")) %> <%= tostring(ld.path.dir) %>",
+            "<%= ld.alt.read(\"aliases.zsh\") %> in <%= ld.path.dir %>",
             &Classes::default(),
         )
         .unwrap();
 
-        assert_eq!(output.content(), &Content::Text("nil nil".to_string()));
+        assert_eq!(
+            output.content(),
+            &Content::Text(format!("alias ll='ls -l' in {}", beside.display()))
+        );
     }
 
     #[test]
@@ -125,6 +147,7 @@ mod tests {
             &root.path().join("repo/home/.zshrc.luadot"),
             "export EDITOR=<%= require(\"shell\").editor %>\n",
             &Classes::default(),
+            &configuration(),
         )
         .unwrap();
 

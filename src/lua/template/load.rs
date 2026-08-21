@@ -4,11 +4,12 @@ use anyhow::{Context, Result, bail};
 use mlua::Value;
 
 use super::constants::TEMPLATE_FILE;
-use super::types::{Output, Template};
 use crate::files::template_target;
+use crate::lua::Shared;
 use crate::lua::constants::MODULES_DIR;
-use crate::lua::ld::{API, Paths, Surface, install, output};
+use crate::lua::ld::{API, Paths, Surface, install, output, share};
 use crate::lua::runtime::{add_module_path, runtime};
+use crate::lua::scope::{Output, Scope};
 use crate::state::Classes;
 use crate::utils;
 
@@ -18,6 +19,7 @@ pub fn load_template(
     repo: &Path,
     dir: &Path,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<Vec<Output>> {
     let path = dir.join(TEMPLATE_FILE);
     let source = std::fs::read_to_string(&path)
@@ -32,8 +34,9 @@ pub fn load_template(
         &path,
         repo,
         &config,
-        Template::new(dir.to_path_buf(), home.to_path_buf(), dest),
+        Scope::new(dir.to_path_buf(), home.to_path_buf()).with_dest(dest),
         classes,
+        shared,
     )
 }
 
@@ -62,8 +65,9 @@ fn from_config(dir: &Path, source: &str, config: &Path, classes: &Classes) -> Re
         &dir.join(TEMPLATE_FILE),
         root,
         config,
-        Template::new(dir.to_path_buf(), root.to_path_buf(), dest),
+        Scope::new(dir.to_path_buf(), root.to_path_buf()).with_dest(dest),
         classes,
+        &std::sync::Arc::new(std::sync::Mutex::new(crate::lua::Config::default())),
     )
 }
 
@@ -76,25 +80,28 @@ pub(super) fn destination(command: &str, home: &Path, repo: &Path, dir: &Path) -
         .with_context(|| format!("{command}: failed to place {}", dir.display()))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run(
     command: &str,
     source: &str,
     path: &Path,
     repo: &Path,
     config: &Path,
-    template: Template,
+    scope: Scope,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<Vec<Output>> {
-    let dir = template.dir().to_path_buf();
-    let home = template.home().to_path_buf();
+    let dir = scope.dir().to_path_buf();
+    let home = scope.home().to_path_buf();
 
     let lua = runtime().with_context(|| format!("{command}: failed to start the Lua runtime"))?;
-    lua.set_app_data(template);
     let paths = Paths::new(&home, config)
         .with_repo(Some(repo))
         .with_dir(&dir);
     install(&lua, Surface::Template, &paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
+    share(&lua, shared);
+    lua.set_app_data(scope);
     for modules in [dir.as_path(), config].into_iter().rev() {
         add_module_path(&lua, modules)
             .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
@@ -112,7 +119,7 @@ fn run(
     }
 
     let outputs = lua
-        .remove_app_data::<Template>()
+        .remove_app_data::<Scope>()
         .with_context(|| {
             format!(
                 "{command}: the template was lost while running {}",
@@ -130,6 +137,14 @@ fn run(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::lua::Shared;
+
+    fn configuration() -> Shared {
+        Arc::new(Mutex::new(crate::lua::Config::default()))
+    }
+
     use super::*;
     use crate::files::{ConflictPolicy, LinkMode};
     use crate::lua::Content;
@@ -303,7 +318,15 @@ mod tests {
         write(&dir, "laptop.zsh", "laptop");
         write(&dir, TEMPLATE_FILE, r#"return ld.alt.file("laptop.zsh")"#);
 
-        let outputs = load_template("apply", &home, &repo, &dir, &Classes::default()).unwrap();
+        let outputs = load_template(
+            "apply",
+            &home,
+            &repo,
+            &dir,
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap();
 
         assert_eq!(outputs[0].dest(), home.join(".zshrc"));
         assert_eq!(outputs[0].content(), &Content::File(dir.join("laptop.zsh")));
@@ -341,7 +364,8 @@ mod tests {
                 &root.path().join("home"),
                 &repo,
                 &dir,
-                &Classes::default()
+                &Classes::default(),
+                &configuration(),
             )
             .unwrap_err()
         );

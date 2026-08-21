@@ -7,6 +7,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 
 use super::constants::{INIT_STEM, LUA_EXT, SETUP_DIR, SH_EXT};
+use crate::lua::Shared;
 use crate::lua::ld::{Paths, Surface};
 use crate::lua::script::run_script;
 use crate::state::{self, Classes};
@@ -16,13 +17,13 @@ thread_local! {
     static RUNNING: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
-pub fn run_setups(command: &str, repo: &Path, names: &[String]) -> Result<()> {
+pub fn run_setups(command: &str, repo: &Path, names: &[String], shared: &Shared) -> Result<()> {
     let home = utils::home_dir()?;
     let config = utils::config_dir()?;
     let classes = state::load()?.classes().clone();
 
     for name in names {
-        run_one(command, &home, &config, repo, name, &classes)?;
+        run_one(command, &home, &config, repo, name, &classes, shared)?;
     }
     Ok(())
 }
@@ -40,6 +41,7 @@ pub fn run_one(
     repo: &Path,
     name: &str,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<()> {
     let dir = setup_dir(command, home, config, repo)?;
     let Some(path) = find(&dir, name) else {
@@ -47,7 +49,7 @@ pub fn run_one(
     };
 
     enter(command, name)?;
-    let result = run_path(command, &dir, &path, home, config, repo, classes);
+    let result = run_path(command, &dir, &path, home, config, repo, classes, shared);
     leave(name);
     result
 }
@@ -135,6 +137,7 @@ fn known_extension(path: &Path) -> bool {
         .is_some_and(|ext| [LUA_EXT, SH_EXT].contains(&ext))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_path(
     command: &str,
     root: &Path,
@@ -143,6 +146,7 @@ fn run_path(
     config: &Path,
     repo: &Path,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<()> {
     if path.extension().is_none_or(|ext| ext != LUA_EXT) {
         return run_sh(command, path);
@@ -153,12 +157,20 @@ fn run_path(
         .with_context(|| format!("{command}: {} has no parent directory", root.display()))?;
     let own = path.parent().filter(|parent| *parent != root);
     let mut paths = Paths::new(home, config).with_repo(Some(repo));
-    if let Some(dir) = own {
+    if let Some(dir) = path.parent() {
         paths = paths.with_dir(dir);
     }
     let roots: Vec<&Path> = own.into_iter().chain([modules]).collect();
 
-    run_script(command, Surface::Setup, path, &roots, &paths, classes)
+    run_script(
+        command,
+        Surface::Setup,
+        path,
+        &roots,
+        &paths,
+        classes,
+        shared,
+    )
 }
 
 fn run_sh(command: &str, path: &Path) -> Result<()> {
@@ -202,6 +214,14 @@ fn leave(name: &str) {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::lua::{Config, Shared};
+
+    fn configuration() -> Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
     use super::*;
 
     fn dirs(root: &Path) -> (PathBuf, PathBuf, PathBuf) {
@@ -294,7 +314,16 @@ mod tests {
             "#,
         );
 
-        run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap();
+        run_one(
+            "setup",
+            &home,
+            &config,
+            &repo,
+            "ufw",
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap();
 
         assert_eq!(
             std::fs::read_to_string(repo.join("modules.txt")).unwrap(),
@@ -337,7 +366,16 @@ mod tests {
             "#,
         );
 
-        run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap();
+        run_one(
+            "setup",
+            &home,
+            &config,
+            &repo,
+            "ufw",
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap();
 
         assert_eq!(
             std::fs::read_to_string(repo.join("lua-ran.txt")).unwrap(),
@@ -358,7 +396,16 @@ mod tests {
             &format!("printf done > {}", out.display()),
         );
 
-        run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap();
+        run_one(
+            "setup",
+            &home,
+            &config,
+            &repo,
+            "ufw",
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap();
 
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "done");
     }
@@ -371,7 +418,16 @@ mod tests {
 
         let err = format!(
             "{:#}",
-            run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap_err()
+            run_one(
+                "setup",
+                &home,
+                &config,
+                &repo,
+                "ufw",
+                &Classes::default(),
+                &configuration(),
+            )
+            .unwrap_err()
         );
 
         assert!(err.contains("exited with status 5"));
@@ -382,9 +438,17 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let (home, config, repo) = dirs(root.path());
 
-        let err = run_one("setup", &home, &config, &repo, "ufw", &Classes::default())
-            .unwrap_err()
-            .to_string();
+        let err = run_one(
+            "setup",
+            &home,
+            &config,
+            &repo,
+            "ufw",
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap_err()
+        .to_string();
 
         assert!(err.contains("setup: no setup named `ufw`"));
     }
@@ -403,7 +467,16 @@ mod tests {
             &format!("printf nested > {}", out.display()),
         );
 
-        run_one("setup", &home, &config, &repo, "outer", &Classes::default()).unwrap();
+        run_one(
+            "setup",
+            &home,
+            &config,
+            &repo,
+            "outer",
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap();
 
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "nested");
     }
@@ -416,7 +489,16 @@ mod tests {
 
         let err = format!(
             "{:#}",
-            run_one("setup", &home, &config, &repo, "loop", &Classes::default()).unwrap_err()
+            run_one(
+                "setup",
+                &home,
+                &config,
+                &repo,
+                "loop",
+                &Classes::default(),
+                &configuration(),
+            )
+            .unwrap_err()
         );
 
         assert!(err.contains("already running"));

@@ -1,17 +1,12 @@
 use mlua::{Function, Lua};
 
-use super::super::surface::{self, Surface};
-use super::constants::{NAMESPACE, READ};
+use super::constants::READ;
 use super::file::{read, resolve};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, name: String| {
-        if surface::inert(lua, &format!("{NAMESPACE}.{READ}"), Surface::Template) {
-            return Ok(None);
-        }
-
         let path = resolve(lua, &name, READ)?;
-        read(READ, &path).map(Some)
+        read(READ, &path)
     })
 }
 

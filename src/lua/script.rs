@@ -1,10 +1,12 @@
 use std::path::Path;
+use std::sync::MutexGuard;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 use super::constants::MODULES_DIR;
-use super::ld::{API, Paths, Surface, install};
+use super::ld::{API, Paths, Surface, install, share};
 use super::runtime::{add_module_path, runtime};
+use super::{Config, Shared};
 use crate::state::Classes;
 
 pub fn run_script(
@@ -14,6 +16,7 @@ pub fn run_script(
     modules: &[&Path],
     paths: &Paths,
     classes: &Classes,
+    config: &Shared,
 ) -> Result<()> {
     let source = std::fs::read_to_string(path)
         .with_context(|| format!("{command}: failed to read {}", path.display()))?;
@@ -26,9 +29,11 @@ pub fn run_script(
         modules,
         paths,
         classes,
+        config,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_source(
     command: &str,
     surface: Surface,
@@ -37,10 +42,12 @@ pub fn run_source(
     modules: &[&Path],
     paths: &Paths,
     classes: &Classes,
+    config: &Shared,
 ) -> Result<()> {
     let lua = runtime().with_context(|| format!("{command}: failed to start the Lua runtime"))?;
     install(&lua, surface, paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
+    share(&lua, config);
 
     for dir in modules.iter().rev() {
         add_module_path(&lua, dir)
@@ -50,5 +57,16 @@ pub fn run_source(
     lua.load(source)
         .set_name(name)
         .exec()
-        .with_context(|| format!("{command}: failed to run {name}"))
+        .with_context(|| format!("{command}: failed to run {name}"))?;
+
+    lua.remove_app_data::<Shared>();
+    kept(command, config)?.keep_runtime(lua);
+
+    Ok(())
+}
+
+fn kept<'a>(command: &str, config: &'a Shared) -> Result<MutexGuard<'a, Config>> {
+    config
+        .lock()
+        .map_err(|_| anyhow!("{command}: the configuration is still being changed"))
 }

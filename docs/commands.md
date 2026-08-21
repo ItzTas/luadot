@@ -23,15 +23,32 @@
 | `luadot sync [-m MSG] [--no-push]` | Stages what changed in the repository, commits it and pushes it. |
 | `luadot git <args>...` | Runs git inside the repository. |
 | `luadot push [args]...` | Shorthand for `luadot git push`. |
+| `luadot doc [-l] [call]` | Describes a call of the `ld` interface, `-l` names every one. |
 | `luadot completions <shell>` | Prints a completion script for that shell. |
+| `luadot man` | Prints the manual page, the one the packages install. |
 
 `luadot --help` explains any command in place (`luadot rm --help`);
 `luadot --version` prints the version.
 
+`luadot doc` answers for the `ld` interface instead: `luadot doc opt.link`
+writes what that call takes and does, `luadot doc opt` every call under the
+namespace, `luadot doc` all of them. The `ld.` prefix is optional and a piece
+of a name is enough, so `luadot doc backup` finds the four calls carrying the
+word. The text is the one on the pages here, built into the binary.
+
 The bash, zsh and fish completions hand `luadot git` and `luadot push` over to
 git's own completion, pointed at the managed repository: `luadot git checkout
 <Tab>` answers with the branches of that repository, not of the directory you
-are in. `luadot setup <Tab>` answers with the setups the repository declares.
+are in. `luadot setup <Tab>` answers with the setups the repository declares,
+`luadot doc <Tab>` with the calls of the interface.
+
+`man luadot` opens the same reference after any of the packages. The page is
+built from the commands themselves, so `luadot man` prints it wherever the
+binary came from:
+
+```
+luadot man >~/.local/share/man/man1/luadot.1
+```
 
 ## Where the repository lives
 

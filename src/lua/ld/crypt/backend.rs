@@ -12,7 +12,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     }
 
     let backend = choice(NAMESPACE, &value, BACKEND, &CRYPT_BACKENDS, "crypt backend")?;
-    Config::building(lua)?.set_crypt_backend(backend);
+    Config::building(lua, |config| config.set_crypt_backend(backend))?;
     Ok(())
 }
 

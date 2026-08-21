@@ -3,17 +3,18 @@ use std::path::PathBuf;
 use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::API;
-use super::super::parse::{conflict_policy, external, link_mode, mode_bits};
+use super::super::parse::{chain, conflict_policy, external, link_mode, mode_bits};
 use super::super::surface::{self, Surface};
-use super::constants::{FILE, NAMESPACE, OUT};
+use super::constants::{DEST_ALONE, FILE, NAMESPACE, OUT};
 use super::file::handle;
-use crate::lua::{Content, Output, Template};
+use crate::files::{sync_file, write_file};
+use crate::hook::Hooks;
+use crate::lua::{Content, Output, Scope};
+use crate::utils::dry_run;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, value: Value| {
-        if surface::inert(lua, &format!("{NAMESPACE}.{OUT}"), Surface::Template) {
-            return Ok(());
-        }
+        surface::slow_in(lua, &format!("{NAMESPACE}.{OUT}"), Surface::Config);
 
         output(lua, value)
     })
@@ -21,9 +22,42 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 
 pub fn output(lua: &Lua, value: Value) -> mlua::Result<()> {
     let output = parse(lua, value)?;
-    Template::building(lua)?.add_output(output);
+    if Surface::current(lua) == Some(Surface::Template) {
+        Scope::building(lua)?.add_output(output);
+        return Ok(());
+    }
 
-    Ok(())
+    place(&output)
+}
+
+fn place(output: &Output) -> mlua::Result<()> {
+    if dry_run() {
+        return Ok(());
+    }
+
+    let call = format!("`{API}.{NAMESPACE}.{OUT}`");
+    let policy = output.conflict().unwrap_or_default();
+
+    let outcome = match output.content() {
+        Content::Text(text) => write_file(policy, output.dest(), text, output.mode()),
+        Content::File(source) => sync_file(
+            policy,
+            output.link().unwrap_or_default(),
+            source,
+            output.dest(),
+        ),
+    }
+    .map_err(|err| {
+        external(format!(
+            "{call} failed to write {}: {err:#}",
+            output.dest().display()
+        ))
+    })?;
+
+    let mut hooks = Hooks::new(false);
+    hooks.record(outcome, output.on_change());
+
+    hooks.finish(&call).map_err(chain)
 }
 
 fn parse(lua: &Lua, value: Value) -> mlua::Result<Output> {
@@ -81,7 +115,9 @@ fn mode(value: &Value, content: &Content) -> mlua::Result<Option<u32>> {
 }
 
 fn destination(lua: &Lua, raw: Option<&str>) -> mlua::Result<PathBuf> {
-    Ok(Template::building(lua)?.destination(raw))
+    Scope::building(lua)?
+        .destination(raw)
+        .ok_or_else(|| external(format!("`{API}.{NAMESPACE}.{OUT}` {DEST_ALONE}")))
 }
 
 fn content(value: &Value) -> mlua::Result<Content> {
@@ -99,10 +135,50 @@ fn content(value: &Value) -> mlua::Result<Content> {
 mod tests {
     use std::path::{Path, PathBuf};
 
+    use super::super::super::{Paths, install};
+    use super::*;
     use crate::lua::from_template;
+    use crate::lua::runtime::runtime;
+    use crate::state::Classes;
 
     fn error(dir: &Path, source: &str) -> String {
         format!("{:#}", from_template(dir, source).unwrap_err())
+    }
+
+    fn script(dir: &Path, source: &str) -> mlua::Result<()> {
+        let lua = runtime().unwrap();
+        let paths = Paths::new(dir, dir).with_dir(dir);
+        install(&lua, Surface::Bootstrap, &paths, &Classes::default()).unwrap();
+
+        lua.load(source).exec()
+    }
+
+    #[test]
+    fn a_script_writes_the_file_where_it_declares_it() {
+        let root = tempfile::tempdir().unwrap();
+        let dest = root.path().join("generated/motd");
+
+        script(
+            root.path(),
+            &format!(
+                r#"ld.alt.out({{ dest = "{}", content = "welcome\n", mode = "600" }})"#,
+                dest.display()
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "welcome\n");
+    }
+
+    #[test]
+    fn a_script_has_no_file_to_stand_for_by_itself() {
+        let root = tempfile::tempdir().unwrap();
+
+        let err = script(root.path(), r#"ld.alt.out({ content = "welcome\n" })"#)
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("needs a `dest`"));
     }
 
     fn template(root: &Path) -> PathBuf {

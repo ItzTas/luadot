@@ -20,6 +20,11 @@ luadot is a small Rust CLI; the toolchain is pinned with proto (`.prototools`).
 - Do not write comments. No line comments and no doc comments. The code
   must explain itself through names and structure.
 
+## Documentation
+
+- Before writing or editing any documentation, load the `humanizer`
+  skill and apply it to the text.
+
 ## Changes
 
 - After making any change, check for errors. If there are any, change the

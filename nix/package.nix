@@ -37,6 +37,9 @@ rustPlatform.buildRustPackage {
       --bash <($out/bin/luadot completions bash) \
       --zsh <($out/bin/luadot completions zsh) \
       --fish <($out/bin/luadot completions fish)
+
+    $out/bin/luadot man >luadot.1
+    installManPage luadot.1
   '';
 
   meta = {

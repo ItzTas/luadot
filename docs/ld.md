@@ -96,26 +96,47 @@ the pattern for `~/.config/nvim/init.lua`, `root/etc/pacman.conf` the one for
 ## One interface everywhere
 
 Every script luadot runs carries the same `ld`: `config.lua`, `bootstrap.lua`,
-the setup scripts, a template's `luadot.lua` and `luadot exec`. What changes
-is what a call does once it runs:
+the setup scripts, a template's `luadot.lua` and `luadot exec`. A call does the
+same thing wherever it runs, on the one configuration the command is using, so
+a setup script that `config.lua` invokes and a template that `tmpl alt`
+resolves both write into it.
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.backup_age`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.crypt.backend`, `ld.crypt.lock`, `ld.class`, `ld.on.status`, `ld.on.diff` | `config.lua`, which builds the configuration | does nothing, warns |
-| `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
+| `ld.crypt.backend`, `ld.crypt.lock` | `config.lua`, which builds the configuration | does nothing, warns |
 | `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
-| `ld.opt.pkg_warn`, `ld.opt.passphrase_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path`, `ld.print`, `ld.regex` | everywhere | |
+| `ld.alt.out` | everywhere | warns in `config.lua`, where it writes its file before every command |
+| everything else | everywhere | |
 
-A call away from where it has an effect is not an error; it runs, does nothing
-and says so:
+`ld.crypt` is the one exception. luadot reads the lock once, before it touches
+any file, so a script cannot change it halfway through a run. A crypt call
+elsewhere is not an error; it runs, does nothing and says so:
 
 ```
-luadot: `ld.rules` in a setup script does nothing; config.lua is where it has an
-effect (silence it with `ld.opt.pkg_warn(false)`)
+luadot: `ld.crypt.lock` in a setup script does nothing; config.lua is where it
+has an effect (silence it with `ld.opt.pkg_warn(false)`)
 ```
+
+The order the scripts run in decides what wins. `config.lua` runs first, then
+the command, and `tmpl alt` resolves one template at a time while it is already
+placing files, so an option the second template sets never reaches what the
+first one produced. The same goes for what a run reads once at the start:
+`ld.opt.repo_dir` picks the repository before anything else runs, and the
+backup options are read when the run opens its backup directory.
+
+`ld.alt` resolves its files against the directory the running script lives in,
+which is the template directory inside a template and `ld.path.dir` anywhere
+else. Outside a template `ld.alt.out` writes its file where `dest` says and
+applies `mode`, `conflict` and `on_change`; it takes no backup, and a
+`--dry-run` writes nothing.
+
+Declaring a class in `config.lua` collects it for `bootstrap`, `clone` and
+`class` to ask about later. Declaring one anywhere else asks straight away when
+the machine has no answer yet and writes the answer to the state, so
+`ld.class.get` reads it for the rest of the run.
 
 `ld.path` carries `home` and `config` everywhere, `repo` once a repository is
-set, and `dir` inside a template or a setup directory. Inside `config.lua`
+set, and `dir`, the directory of the script that is running. Inside `config.lua`
 itself, `ld.path.repo` is the repository known before the file ran, so it does
 not answer for an `ld.opt.repo_dir` set in that same file; every script that
 runs afterwards gets the resolved one.
@@ -554,6 +575,9 @@ anything.
 
 ## Every call
 
+`luadot doc opt.link` writes the row of a call in the terminal, `luadot doc
+opt` every row of a namespace, `luadot doc --list` the names alone.
+
 | Call | Arguments | Effect |
 | --- | --- | --- |
 | `ld.opt.link(mode)` | `"hard"`, `"symbolic"`, `"copy"` | Default strategy used to link a managed file. |
@@ -572,7 +596,7 @@ anything.
 | `ld.opt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |
 | `ld.crypt(options)` | a table of options | Sets several crypt options at once; only the keys it carries. |
 | `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, marks them as encrypted, and commits and pushes them on their own. |
-| `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
+| `ld.class(class)` | a table declaring a class | Declares a question this machine answers once. In `config.lua` it waits for `bootstrap`, `clone` or `luadot class` to ask; anywhere else it asks straight away and saves the answer. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |
 | `ld.setup(name)` | a setup name | Runs one setup script: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. |

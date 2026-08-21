@@ -20,19 +20,22 @@ pub enum ClassAction {
     List,
     #[command(about = "Answer a class, or ask for every one still unanswered")]
     Set {
-        #[arg(value_name = "NAME")]
+        #[arg(
+            value_name = "NAME",
+            help = "The class to answer, every unanswered one when left out"
+        )]
         name: Option<String>,
-        #[arg(value_name = "VALUE")]
+        #[arg(value_name = "VALUE", help = "The answer, asked for when left out")]
         value: Vec<String>,
     },
     #[command(about = "Forget the answer of a class")]
     Unset {
-        #[arg(value_name = "NAME")]
+        #[arg(value_name = "NAME", help = "The class to forget")]
         name: String,
     },
     #[command(about = "Print the answer alone, for a script to read")]
     Get {
-        #[arg(value_name = "NAME")]
+        #[arg(value_name = "NAME", help = "The class to print")]
         name: String,
     },
 }
@@ -48,6 +51,7 @@ pub fn class_cmd(args: ClassArgs) -> Result<()> {
 
 fn list() -> Result<()> {
     let config = lua::load_config()?;
+    let config = utils::configured("class", &config)?;
     let state = state::load()?;
 
     if config.classes().is_empty() && state.classes().is_empty() {
@@ -74,6 +78,7 @@ fn list() -> Result<()> {
 
 fn set(name: Option<String>, values: Vec<String>) -> Result<()> {
     let config = lua::load_config()?;
+    let config = utils::configured("class", &config)?;
     let Some(name) = name else {
         return set_missing(&config);
     };

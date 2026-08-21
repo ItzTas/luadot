@@ -10,7 +10,7 @@ use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct RekeyArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(value_name = "PATH", help = "Narrow the run to this file or directory")]
     pub path: Option<String>,
     #[arg(
         short = 'n',
@@ -29,6 +29,7 @@ struct Secret {
 
 pub fn rekey_cmd(args: RekeyArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("rekey")?;
+    let config = utils::configured("rekey", &config)?;
 
     let root = utils::managed_root("rekey", &home, &repo, args.path.as_deref())?;
     let files = utils::managed_files("rekey", &repo, &root, |relative| {

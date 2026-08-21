@@ -7,6 +7,7 @@ use tracing_subscriber::EnvFilter;
 use super::commands;
 use super::constants::{DEFAULT_FILTER, TRACE_FILTER, VERBOSE_FILTER};
 use super::types::{Cli, Cmd};
+use crate::utils;
 
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
@@ -32,6 +33,8 @@ fn filter(verbose: u8) -> EnvFilter {
 }
 
 fn dispatch(cli: Cli) -> Result<()> {
+    utils::set_dry_run(dry_run(&cli.command));
+
     match cli.command {
         Cmd::Add(args) => commands::add_cmd(args),
         Cmd::Restore(args) => commands::restore_cmd(args),
@@ -43,10 +46,12 @@ fn dispatch(cli: Cli) -> Result<()> {
         Cmd::Completions(args) => commands::completions_cmd(args),
         Cmd::Config(args) => commands::config_cmd(args),
         Cmd::Diff(args) => commands::diff_cmd(args),
+        Cmd::Doc(args) => commands::doc_cmd(args),
         Cmd::Edit(args) => commands::edit_cmd(args),
         Cmd::Exec(args) => commands::exec_cmd(args),
         Cmd::Git(args) => commands::git_cmd(args),
         Cmd::Init(args) => commands::init_cmd(args),
+        Cmd::Man => commands::man_cmd(),
         Cmd::Push(args) => commands::push_cmd(args),
         Cmd::Rekey(args) => commands::rekey_cmd(args),
         Cmd::Rm(args) => commands::rm_cmd(args),
@@ -54,5 +59,16 @@ fn dispatch(cli: Cli) -> Result<()> {
         Cmd::Status(args) => commands::status_cmd(args),
         Cmd::Sync(args) => commands::sync_cmd(args),
         Cmd::Tmpl(args) => commands::tmpl_cmd(args),
+    }
+}
+
+fn dry_run(command: &Cmd) -> bool {
+    match command {
+        Cmd::Apply(args) => args.dry_run,
+        Cmd::Rekey(args) => args.dry_run,
+        Cmd::Restore(args) => args.dry_run,
+        Cmd::Rm(args) => args.dry_run,
+        Cmd::Tmpl(args) => args.dry_run(),
+        _ => false,
     }
 }

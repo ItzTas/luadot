@@ -50,6 +50,11 @@ mod tests {
     use crate::lua::runtime::runtime;
 
     #[test]
+    fn a_bootstrap_and_a_setup_script_are_interchangeable() {
+        assert_eq!(Surface::Bootstrap.cost(), Surface::Setup.cost());
+    }
+
+    #[test]
     fn the_installed_surface_is_the_current_one() {
         let lua = runtime().unwrap();
 

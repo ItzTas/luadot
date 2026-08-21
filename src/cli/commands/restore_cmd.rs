@@ -17,7 +17,10 @@ const MILLIS: u64 = 1_000;
 
 #[derive(Debug, Args)]
 pub struct RestoreArgs {
-    #[arg(value_name = "BACKUP")]
+    #[arg(
+        value_name = "BACKUP",
+        help = "The backup to put back, the most recent one when left out"
+    )]
     pub backup: Option<String>,
     #[arg(short, long, help = "Show the backups instead of putting one back")]
     pub list: bool,
@@ -32,7 +35,8 @@ pub struct RestoreArgs {
 }
 
 pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
-    let root = backup::backups_root(lua::load_config()?.backup_dir())?;
+    let config = lua::load_config()?;
+    let root = backup::backups_root(utils::configured("restore", &config)?.backup_dir())?;
     let taken = backup::taken("restore", &root)?;
     if taken.is_empty() {
         output::note("no backup taken yet");

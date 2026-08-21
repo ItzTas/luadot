@@ -17,7 +17,7 @@ struct Secrets<'a> {
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(value_name = "PATH", help = "Narrow the run to this file or directory")]
     pub path: Option<String>,
     #[arg(
         short = 'n',
@@ -29,6 +29,7 @@ pub struct ApplyArgs {
 
 pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("apply")?;
+    let config = utils::configured("apply", &config)?;
 
     let root = utils::managed_root("apply", &home, &repo, args.path.as_deref())?;
 

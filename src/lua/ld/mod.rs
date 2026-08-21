@@ -24,6 +24,6 @@ mod value;
 
 pub use alt::output;
 pub use constants::API;
-pub use install::install;
+pub use install::{install, share};
 pub use path::Paths;
 pub use surface::Surface;

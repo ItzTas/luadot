@@ -24,10 +24,6 @@ if ld.sys.has_battery() then
 end
 ```
 
-Secrets go through `age` or `gpg` and never reach the repository as plaintext.
-Files under `/etc` are written with `sudo` only when the filesystem demands
-it. Everything luadot overwrites is backed up first.
-
 ## Quick start
 
 ```
@@ -62,8 +58,3 @@ has the details.
 - [Backups](docs/backups.md): what a run saved, and restore.
 
 Notes on packaging and internals live in [internal/](internal/).
-
-## License
-
-MIT; see [LICENSE](LICENSE). The bundled LPeg keeps its own MIT notice in
-[vendor/lpeg/LICENSE](vendor/lpeg/LICENSE).

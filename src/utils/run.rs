@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::OnceLock;
 
 use anyhow::Result;
 
@@ -7,6 +8,16 @@ use crate::files::SyncOutcome;
 use crate::hook::Hooks;
 use crate::lua::Config;
 use crate::output;
+
+static DRY_RUN: OnceLock<bool> = OnceLock::new();
+
+pub fn set_dry_run(dry_run: bool) {
+    let _ = DRY_RUN.set(dry_run);
+}
+
+pub fn dry_run() -> bool {
+    DRY_RUN.get().copied().unwrap_or(false)
+}
 
 #[derive(Debug, Default)]
 pub struct Run {

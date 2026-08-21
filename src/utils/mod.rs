@@ -25,6 +25,8 @@ pub use paths::{
     repo_path, system_path,
 };
 pub use repo::{destination, managed_path, require_repo};
-pub use run::Run;
+pub use run::{Run, dry_run, set_dry_run};
 pub use span::{seconds, span};
-pub use workspace::{Workspace, managed_entries, managed_files, managed_root, workspace};
+pub use workspace::{
+    Workspace, configured, managed_entries, managed_files, managed_root, workspace,
+};

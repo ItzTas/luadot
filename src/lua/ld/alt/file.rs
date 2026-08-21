@@ -1,29 +1,24 @@
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
-use mlua::{AnyUserData, Function, Lua, Value};
+use mlua::{AnyUserData, Function, Lua};
 
 use super::super::constants::API;
 use super::super::parse::external;
-use super::super::surface::{self, Surface};
 use super::constants::{FILE, NAMESPACE};
-use crate::lua::{Handle, Template};
+use crate::lua::{Handle, Scope};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, name: String| {
-        if surface::inert(lua, &format!("{NAMESPACE}.{FILE}"), Surface::Template) {
-            return Ok(Value::Nil);
-        }
-
         let path = resolve(lua, &name, FILE)?;
-        Ok(Value::UserData(lua.create_userdata(Handle::new(path))?))
+        lua.create_userdata(Handle::new(path))
     })
 }
 
 pub fn resolve(lua: &Lua, name: &str, caller: &str) -> mlua::Result<PathBuf> {
     let (dir, path) = {
-        let template = Template::building(lua)?;
-        (template.dir().to_path_buf(), template.resolve(name))
+        let scope = Scope::building(lua)?;
+        (scope.dir().to_path_buf(), scope.resolve(name))
     };
 
     path.ok_or_else(|| external(missing(name, caller, &dir)))

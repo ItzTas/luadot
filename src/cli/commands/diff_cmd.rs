@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::files::{self, Entry, FileStatus, Mirror, Side, Tracked};
-use crate::lua::{Config, Content, Diff, DiffCounts, DiffFile, DiffState, Output, Tool};
+use crate::lua::{Config, Content, Diff, DiffCounts, DiffFile, DiffState, Output, Shared, Tool};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, SYSTEM_TEXT_MODE, Workspace};
@@ -17,7 +17,10 @@ use super::super::constants::{
 
 #[derive(Debug, Args)]
 pub struct DiffArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(
+        value_name = "PATH",
+        help = "Narrow the report to this file or directory"
+    )]
     pub path: Option<String>,
     #[arg(
         short,
@@ -41,7 +44,12 @@ struct Item {
 }
 
 pub fn diff_cmd(args: DiffArgs) -> Result<()> {
-    let Workspace { config, home, repo } = utils::workspace("diff")?;
+    let Workspace {
+        config: shared,
+        home,
+        repo,
+    } = utils::workspace("diff")?;
+    let config = utils::configured("diff", &shared)?;
 
     let root = utils::managed_root("diff", &home, &repo, args.path.as_deref())?;
 
@@ -74,7 +82,9 @@ pub fn diff_cmd(args: DiffArgs) -> Result<()> {
     }
 
     let classes = state::load()?.classes().clone();
-    let produced = resolve(&home, &repo, &templates, &classes)?;
+    drop(config);
+    let produced = resolve(&home, &repo, &templates, &classes, &shared)?;
+    let config = utils::configured("diff", &shared)?;
     let drifted = generated_items(&config, &home, &produced)?;
     let shown = drifted.len();
     show(&config, Side::Generated, &drifted)?;
@@ -112,10 +122,11 @@ fn resolve(
     repo: &Path,
     templates: &[Entry],
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<Vec<Output>> {
     let mut produced = Vec::new();
     for entry in templates {
-        produced.extend(utils::outputs("diff", home, repo, entry, classes)?);
+        produced.extend(utils::outputs("diff", home, repo, entry, classes, shared)?);
     }
 
     Ok(produced)
@@ -369,6 +380,12 @@ fn shows(status: FileStatus) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    fn configuration() -> crate::lua::Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
     use std::ffi::OsStr;
 
     use super::*;
@@ -520,7 +537,14 @@ mod tests {
         std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
         std::fs::write(home.join(".zshrc"), "handwritten\n").unwrap();
 
-        let produced = resolve(&home, &repo, &[Entry::Template(dir)], &Classes::default()).unwrap();
+        let produced = resolve(
+            &home,
+            &repo,
+            &[Entry::Template(dir)],
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap();
         let drifted = generated_items(&Config::default(), &home, &produced).unwrap();
 
         assert_eq!(drifted.len(), 1);

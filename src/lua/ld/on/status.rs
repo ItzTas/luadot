@@ -1,6 +1,5 @@
 use mlua::{Function, Lua, Table};
 
-use super::super::surface::{self, Surface};
 use super::constants::{NAMESPACE, REPORT_KEYS, STATUS};
 use super::parse::{known, report};
 use crate::lua::Config;
@@ -8,13 +7,9 @@ use crate::lua::Config;
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, options: Table| {
         let call = format!("{NAMESPACE}.{STATUS}");
-        if surface::inert(lua, &call, Surface::Config) {
-            return Ok(());
-        }
-
         known(&call, &options, &REPORT_KEYS)?;
         let status = report(&call, &options)?;
-        Config::building(lua)?.set_status(status);
+        Config::building(lua, |config| config.set_status(status))?;
 
         Ok(())
     })

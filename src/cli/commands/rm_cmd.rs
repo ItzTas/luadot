@@ -8,7 +8,7 @@ use crate::backup::Backup;
 use crate::crypt;
 use crate::files::{self, Entry};
 use crate::git;
-use crate::lua::Config;
+use crate::lua::{Config, Shared};
 use crate::output;
 use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
@@ -45,7 +45,11 @@ struct Counts {
 }
 
 pub fn rm_cmd(args: RmArgs) -> Result<()> {
-    let Workspace { config, home, repo } = utils::workspace("rm")?;
+    let Workspace {
+        config: shared,
+        home,
+        repo,
+    } = utils::workspace("rm")?;
 
     let entries = plan(&home, &repo, &args.paths)?;
     if entries.is_empty() {
@@ -55,31 +59,37 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
 
     let classes = classes(&entries)?;
     if args.dry_run {
-        return foresee(&home, &repo, &entries, &classes);
+        return foresee(&home, &repo, &entries, &classes, &shared);
     }
 
-    let lock = config.crypt_lock();
-    let mut identity = config.crypt_identity(&home);
+    let (lock, mut identity) = {
+        let config = utils::configured("rm", &shared)?;
+        (config.crypt_lock(), config.crypt_identity(&home))
+    };
 
     if !args.yes && !confirmed(&repo, &entries)? {
         output::warn("aborted");
         return Ok(());
     }
 
-    let mut backup = match config.backup() {
-        true => Some(Backup::open(
-            "rm",
-            &home,
-            config.backup_dir(),
-            config.retention(),
-        )?),
-        false => None,
+    let mut backup = {
+        let config = utils::configured("rm", &shared)?;
+        match config.backup() {
+            true => Some(Backup::open(
+                "rm",
+                &home,
+                config.backup_dir(),
+                config.retention(),
+            )?),
+            false => None,
+        }
     };
 
     let mut counts = Counts::default();
     for entry in &entries {
         let detached = match entry {
             Entry::File(file) => {
+                let config = utils::configured("rm", &shared)?;
                 vec![detach_file(
                     &config,
                     lock,
@@ -90,14 +100,17 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
                     &mut backup,
                 )?]
             }
-            template => detach_template(&home, &repo, template, &classes, &mut backup)?,
+            template => detach_template(&home, &repo, template, &classes, &mut backup, &shared)?,
         };
         counts.record(&detached);
     }
     let removed = removed(&entries);
     git::unstage("rm", &repo, &removed)?;
 
-    let automatic = utils::automatic(&config, &repo, &removed);
+    let automatic = {
+        let config = utils::configured("rm", &shared)?;
+        utils::automatic(&config, &repo, &removed)
+    };
     git::auto("rm", &repo, automatic.commits, automatic.pushes)?;
 
     output::note(summary("stopped managing", &entries, &counts));
@@ -115,14 +128,20 @@ fn removed(entries: &[Entry]) -> Vec<PathBuf> {
         .collect()
 }
 
-fn foresee(home: &Path, repo: &Path, entries: &[Entry], classes: &Classes) -> Result<()> {
+fn foresee(
+    home: &Path,
+    repo: &Path,
+    entries: &[Entry],
+    classes: &Classes,
+    shared: &Shared,
+) -> Result<()> {
     output::line(preview(repo, entries, entries.len()));
 
     let mut counts = Counts::default();
     for entry in entries {
         let detached = match entry {
             Entry::File(file) => vec![foresee_file(home, repo, file)?],
-            template => foresee_template(home, repo, template, classes)?,
+            template => foresee_template(home, repo, template, classes, shared)?,
         };
         counts.record(&detached);
     }
@@ -243,11 +262,12 @@ fn detach_template(
     entry: &Entry,
     classes: &Classes,
     backup: &mut Option<Backup>,
+    shared: &Shared,
 ) -> Result<Vec<Detached>> {
     let template = entry.path();
 
     let mut detached = Vec::new();
-    for dest in produced(home, repo, entry, classes)? {
+    for dest in produced(home, repo, entry, classes, shared)? {
         detached.push(match link_into(template, &dest)? {
             Some(source) => detach(&source, &dest, backup)?,
             None => Detached::Untouched,
@@ -284,10 +304,11 @@ fn foresee_template(
     repo: &Path,
     entry: &Entry,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<Vec<Detached>> {
     let template = entry.path();
 
-    produced(home, repo, entry, classes)?
+    produced(home, repo, entry, classes, shared)?
         .iter()
         .map(|dest| {
             Ok(match link_into(template, dest)? {
@@ -298,14 +319,20 @@ fn foresee_template(
         .collect()
 }
 
-fn produced(home: &Path, repo: &Path, entry: &Entry, classes: &Classes) -> Result<Vec<PathBuf>> {
+fn produced(
+    home: &Path,
+    repo: &Path,
+    entry: &Entry,
+    classes: &Classes,
+    shared: &Shared,
+) -> Result<Vec<PathBuf>> {
     let mirrored = utils::system_path(home, repo, &entry.target())?;
 
     let Entry::Template(_) = entry else {
         return Ok(vec![mirrored]);
     };
 
-    match utils::outputs("rm", home, repo, entry, classes) {
+    match utils::outputs("rm", home, repo, entry, classes, shared) {
         Ok(outputs) => Ok(outputs
             .iter()
             .map(|output| output.dest().to_path_buf())
@@ -499,6 +526,12 @@ fn points_at(link: &Path, target: &Path) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    fn configuration() -> crate::lua::Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
     use super::*;
 
     fn write(path: &Path, contents: &str) {
@@ -680,6 +713,7 @@ mod tests {
             &Entry::Template(template.clone()),
             &Classes::default(),
             &mut None,
+            &configuration(),
         )
         .unwrap();
 
@@ -712,6 +746,7 @@ mod tests {
             &Entry::Template(template.clone()),
             &Classes::default(),
             &mut None,
+            &configuration(),
         )
         .unwrap();
 
@@ -745,6 +780,7 @@ mod tests {
             &Entry::Standalone(template.clone()),
             &Classes::default(),
             &mut None,
+            &configuration(),
         )
         .unwrap();
 

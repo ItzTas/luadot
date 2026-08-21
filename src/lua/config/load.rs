@@ -1,17 +1,18 @@
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use tracing::debug;
 
 use super::constants::CONFIG_FILE;
-use super::types::Config;
+use super::types::{Config, Shared};
 use crate::lua::constants::MODULES_DIR;
 use crate::lua::ld::{API, Paths, Surface, install};
 use crate::lua::runtime::{add_module_path, runtime};
 use crate::state::{self, Classes};
 use crate::utils;
 
-pub fn load_config() -> Result<Config> {
+pub fn load_config() -> Result<Shared> {
     load_from(&config_path()?)
 }
 
@@ -22,19 +23,25 @@ pub fn from_source(source: &str) -> Result<Config> {
 
 #[cfg(test)]
 pub fn from_classes(source: &str, classes: &Classes) -> Result<Config> {
-    run(source, "test", None, None, classes)
+    let shared = run(source, "test", None, None, classes)?;
+    let config = shared
+        .lock()
+        .map_err(|_| anyhow!("config: the configuration is still being changed"))?
+        .clone();
+
+    Ok(config)
 }
 
 pub fn config_path() -> Result<PathBuf> {
     Ok(utils::config_dir()?.join(CONFIG_FILE))
 }
 
-fn load_from(path: &Path) -> Result<Config> {
+fn load_from(path: &Path) -> Result<Shared> {
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             debug!(path = %path.display(), "no configuration file, using the defaults");
-            return Ok(Config::default());
+            return Ok(Arc::new(Mutex::new(Config::default())));
         }
         Err(err) => {
             return Err(err).with_context(|| format!("config: failed to read {}", path.display()));
@@ -57,7 +64,7 @@ fn run(
     dir: Option<&Path>,
     repo: Option<&Path>,
     classes: &Classes,
-) -> Result<Config> {
+) -> Result<Shared> {
     let home = utils::home_dir().context("config: failed to locate your home directory")?;
     let dirs = utils::config_dir().context("config: failed to locate the configuration")?;
 
@@ -76,12 +83,15 @@ fn run(
         .exec()
         .with_context(|| format!("config: failed to run {name}"))?;
 
-    let mut config = lua
-        .remove_app_data::<Config>()
+    let shared = lua
+        .remove_app_data::<Shared>()
         .context("config: the configuration was lost while running the script")?;
-    config.keep_runtime(lua);
+    shared
+        .lock()
+        .map_err(|_| anyhow!("config: the configuration is still being changed"))?
+        .keep_runtime(lua);
 
-    Ok(config)
+    Ok(shared)
 }
 
 #[cfg(test)]
@@ -89,11 +99,15 @@ mod tests {
     use super::*;
     use crate::files::LinkMode;
 
+    fn loaded(shared: Shared) -> Config {
+        shared.lock().unwrap().clone()
+    }
+
     #[test]
     fn missing_file_yields_the_default_config() {
         let dir = tempfile::tempdir().unwrap();
 
-        let config = load_from(&dir.path().join(CONFIG_FILE)).unwrap();
+        let config = loaded(load_from(&dir.path().join(CONFIG_FILE)).unwrap());
 
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Hard);
     }
@@ -104,7 +118,7 @@ mod tests {
         let path = dir.path().join(CONFIG_FILE);
         std::fs::write(&path, r#"ld.opt.link("symbolic")"#).unwrap();
 
-        let config = load_from(&path).unwrap();
+        let config = loaded(load_from(&path).unwrap());
 
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
     }
@@ -134,7 +148,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = load_from(&path).unwrap();
+        let config = loaded(load_from(&path).unwrap());
 
         assert!(config.is_ignored(Path::new(".vimrc.swp")));
         assert!(config.is_ignored(Path::new(".cache/nvim/log")));
@@ -165,7 +179,7 @@ mod tests {
         let path = dir.path().join(CONFIG_FILE);
         std::fs::write(&path, r#"require("dots").setup("symbolic")"#).unwrap();
 
-        let config = load_from(&path).unwrap();
+        let config = loaded(load_from(&path).unwrap());
 
         assert_eq!(config.link_mode(Path::new(".bashrc")), LinkMode::Symbolic);
     }

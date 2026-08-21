@@ -17,5 +17,7 @@ pub struct ExecArgs {
 }
 
 pub fn exec_cmd(args: ExecArgs) -> Result<()> {
-    lua::run_exec("exec", &args.target)
+    let config = lua::load_config()?;
+
+    lua::run_exec("exec", &args.target, &config)
 }

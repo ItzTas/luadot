@@ -10,7 +10,8 @@ use crate::{lua, utils};
 use super::super::constants::DEFAULT_SHELL;
 
 pub fn cd_cmd() -> Result<()> {
-    let repo = utils::require_repo("cd", lua::load_config()?.repo_dir())?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("cd", utils::configured("cd", &config)?.repo_dir())?;
 
     let shell = resolve_shell(env::var_os("SHELL"));
     let status = build_command(&shell, &repo)

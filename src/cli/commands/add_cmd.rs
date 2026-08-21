@@ -13,12 +13,17 @@ use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct AddArgs {
-    #[arg(value_name = "PATH", required = true)]
+    #[arg(
+        value_name = "PATH",
+        required = true,
+        help = "The files or directories to start managing"
+    )]
     pub paths: Vec<String>,
 }
 
 pub fn add_cmd(args: AddArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("add")?;
+    let config = utils::configured("add", &config)?;
 
     let pairs = plan(&home, &repo, &args.paths, &config)?;
     let lock = config.crypt_lock();

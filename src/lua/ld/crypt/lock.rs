@@ -18,7 +18,7 @@ pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
     }
 
     let secrets = secrets(&value)?;
-    Config::building(lua)?.set_crypt_secrets(secrets);
+    Config::building(lua, |config| config.set_crypt_secrets(secrets))?;
     Ok(())
 }
 

@@ -76,9 +76,7 @@ ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 | `ld.alt.glob(pattern)` | a pattern | The names of the files it matches, sorted, named the way `ld.alt.read` takes them. |
 | `ld.alt.json(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. |
 
-The rest of the [ld interface](ld.md) is there too: `ld.sys`, `ld.class.get`,
-`ld.cmd`, `ld.git`, `ld.argv`, `ld.print`, `ld.path` (whose `dir` is the
-template's own directory).
+The rest of the [ld interface](ld.md) is there too.
 
 A declared file carries what it needs and nothing else:
 
@@ -233,13 +231,14 @@ is missing is what needs the directory:
 
 | Missing | Reason |
 | --- | --- |
-| several outputs | there is no `ld.alt.out` to call |
+| several outputs | the file renders to one string, which is the file it produces |
 | `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `config.lua` still applies |
 | `require` of its own `lua/` directory | there is no directory; `~/.config/luadot/lua/` is still requirable |
-| `ld.alt.*` | inert, warned; `ld.alt.json` is the exception, it needs no directory |
 
-`ld.path.dir` is `nil`, since there is no template directory; `ld.path.repo`
-still reaches a file shared elsewhere in the repository.
+`ld.alt.*` reads the files sitting next to the `.luadot` file, which is what
+`ld.path.dir` names; `ld.path.repo` still reaches a file shared elsewhere in
+the repository. `ld.alt.out` writes where its `dest` says instead of adding an
+output, since the rendered string is already the file this template produces.
 
 ## The other commands
 

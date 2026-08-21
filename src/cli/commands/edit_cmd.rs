@@ -12,12 +12,16 @@ use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct EditArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(
+        value_name = "PATH",
+        help = "The managed file to open, or the file a template produces"
+    )]
     pub path: String,
 }
 
 pub fn edit_cmd(args: EditArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("edit")?;
+    let config = utils::configured("edit", &config)?;
     let in_repo = utils::managed_path("edit", &home, &repo, &args.path)?;
 
     if let Some(script) = template_script(&in_repo) {

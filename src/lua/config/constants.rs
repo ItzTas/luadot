@@ -42,3 +42,7 @@ pub const DIFF_STATES: [(&str, DiffState); 4] = [
     ("mode", DiffState::Mode),
     ("other", DiffState::Other),
 ];
+
+pub const MISSING: &str = "the configuration is not available";
+
+pub const LOCKED: &str = "the configuration is already being changed";

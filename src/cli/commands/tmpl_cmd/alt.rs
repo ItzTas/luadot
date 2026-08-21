@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::files::{self, ConflictPolicy, Entry, SyncOutcome};
-use crate::lua::{Config, Content, Output};
+use crate::lua::{Config, Content, Output, Shared};
 use crate::output;
 use crate::state::{self, Classes};
 use crate::utils::{self, Run, Workspace};
@@ -22,7 +22,12 @@ pub struct AltArgs {
 }
 
 pub fn alt(args: AltArgs) -> Result<()> {
-    let Workspace { config, home, repo } = utils::workspace("tmpl alt")?;
+    let Workspace {
+        config: shared,
+        home,
+        repo,
+    } = utils::workspace("tmpl alt")?;
+    let config = utils::configured("tmpl alt", &shared)?;
 
     let classes = state::load()?.classes().clone();
 
@@ -46,10 +51,11 @@ pub fn alt(args: AltArgs) -> Result<()> {
     }
 
     let mut run = Run::open("tmpl alt", args.dry_run, &home, &config)?;
+    drop(config);
 
     let mut outcomes: Vec<SyncOutcome> = Vec::new();
     for entry in &templates {
-        outcomes.extend(resolve(&config, &home, &repo, entry, &classes, &mut run)?);
+        outcomes.extend(resolve(&shared, &home, &repo, entry, &classes, &mut run)?);
     }
 
     output::note(format!(
@@ -89,16 +95,19 @@ fn template_root(home: &Path, repo: &Path, arg: &str) -> Result<PathBuf> {
 }
 
 fn resolve(
-    config: &Config,
+    shared: &Shared,
     home: &Path,
     repo: &Path,
     entry: &Entry,
     classes: &Classes,
     run: &mut Run,
 ) -> Result<Vec<SyncOutcome>> {
-    utils::outputs("tmpl alt", home, repo, entry, classes)?
+    let outputs = utils::outputs("tmpl alt", home, repo, entry, classes, shared)?;
+    let config = utils::configured("tmpl alt", shared)?;
+
+    outputs
         .iter()
-        .map(|output| place(config, home, output, run))
+        .map(|output| place(&config, home, output, run))
         .collect()
 }
 
@@ -166,6 +175,12 @@ fn count(outcomes: &[SyncOutcome], kind: SyncOutcome) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    fn configuration() -> crate::lua::Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
     use super::*;
     use crate::backup::Backup;
     use crate::lua;
@@ -190,7 +205,7 @@ mod tests {
         );
 
         let outcomes = resolve(
-            &Config::default(),
+            &configuration(),
             &home,
             &repo,
             &Entry::Template(dir.clone()),
@@ -218,7 +233,7 @@ mod tests {
         );
 
         let outcomes = resolve(
-            &Config::default(),
+            &configuration(),
             &home,
             &repo,
             &Entry::Template(dir.clone()),
@@ -234,7 +249,7 @@ mod tests {
         );
 
         let outcomes = resolve(
-            &Config::default(),
+            &configuration(),
             &home,
             &repo,
             &Entry::Template(dir.clone()),
@@ -259,7 +274,7 @@ mod tests {
         );
 
         resolve(
-            &Config::default(),
+            &configuration(),
             &home,
             &repo,
             &Entry::Template(dir.clone()),
@@ -284,7 +299,7 @@ mod tests {
 
         let mut run = Run::new(true, None);
         let outcomes = resolve(
-            &Config::default(),
+            &configuration(),
             &home,
             &repo,
             &Entry::Template(dir.clone()),
@@ -309,7 +324,7 @@ mod tests {
         let saved = root.path().join("backup");
         let mut run = Run::new(false, Some(Backup::at("tmpl alt", &home, saved.clone())));
         resolve(
-            &Config::default(),
+            &configuration(),
             &home,
             &repo,
             &Entry::Template(dir.clone()),
@@ -351,7 +366,7 @@ mod tests {
         write(&file, "export HOST=<%= 1 + 1 %>\n");
 
         let outcomes = resolve(
-            &Config::default(),
+            &configuration(),
             &home,
             &repo,
             &Entry::Standalone(file),
@@ -375,7 +390,7 @@ mod tests {
 
     fn resolved(home: &Path, repo: &Path, dir: &Path, run: &mut Run) -> Vec<SyncOutcome> {
         resolve(
-            &Config::default(),
+            &configuration(),
             home,
             repo,
             &Entry::Template(dir.to_path_buf()),
@@ -410,7 +425,7 @@ mod tests {
         run: &mut Run,
     ) -> Vec<SyncOutcome> {
         let outcomes = resolve(
-            config,
+            &Arc::new(Mutex::new(config.clone())),
             home,
             repo,
             &Entry::Template(dir.to_path_buf()),
@@ -492,7 +507,7 @@ mod tests {
 
         let mut run = Run::default();
         resolve(
-            &Config::default(),
+            &configuration(),
             &home,
             &repo,
             &Entry::Template(dir),
