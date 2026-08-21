@@ -95,7 +95,7 @@ mod tests {
 
         let output = load(
             root.path(),
-            "home/.zshrc.luadot",
+            ".zshrc.luadot",
             "<%= type(ld.sys.host.name) %> on a <%= ld.class.get(\"form-factor\") %>",
             &classes,
         )
@@ -110,13 +110,13 @@ mod tests {
     #[test]
     fn the_alternatives_resolve_next_to_the_file_itself() {
         let root = tempfile::tempdir().unwrap();
-        let beside = root.path().join("repo/home");
+        let beside = root.path().join("repo");
         std::fs::create_dir_all(&beside).unwrap();
         std::fs::write(beside.join("aliases.zsh"), "alias ll='ls -l'").unwrap();
 
         let output = load(
             root.path(),
-            "home/.zshrc.luadot",
+            ".zshrc.luadot",
             "<%= ld.alt.read(\"aliases.zsh\") %> in <%= ld.path.dir %>",
             &Classes::default(),
         )
@@ -144,7 +144,7 @@ mod tests {
             &root.path().join("home"),
             &root.path().join("repo"),
             &config,
-            &root.path().join("repo/home/.zshrc.luadot"),
+            &root.path().join("repo/.zshrc.luadot"),
             "export EDITOR=<%= require(\"shell\").editor %>\n",
             &Classes::default(),
             &configuration(),
@@ -165,7 +165,7 @@ mod tests {
             "{:#}",
             load(
                 root.path(),
-                "home/.zshrc.luadot",
+                ".zshrc.luadot",
                 "export EDITOR=<%= editor %>\n",
                 &Classes::default(),
             )
@@ -184,7 +184,7 @@ mod tests {
             "{:#}",
             load(
                 root.path(),
-                "home/.zshrc.luadot",
+                ".zshrc.luadot",
                 "fine\n<%= missing() %>\n",
                 &Classes::default(),
             )

@@ -39,45 +39,39 @@ mod tests {
     #[test]
     fn stored_appends_the_backend_extension() {
         assert_eq!(
-            stored(Path::new("home/.netrc"), Backend::Age),
-            PathBuf::from("home/.netrc.age")
+            stored(Path::new(".netrc"), Backend::Age),
+            PathBuf::from(".netrc.age")
         );
         assert_eq!(
-            stored(Path::new("home/.ssh/id_ed25519"), Backend::Gpg),
-            PathBuf::from("home/.ssh/id_ed25519.gpg")
+            stored(Path::new(".ssh/id_ed25519"), Backend::Gpg),
+            PathBuf::from(".ssh/id_ed25519.gpg")
         );
     }
 
     #[test]
     fn split_reads_the_extension_back() {
         assert_eq!(
-            split(Path::new("home/.netrc.age")),
-            Some((PathBuf::from("home/.netrc"), Backend::Age))
+            split(Path::new(".netrc.age")),
+            Some((PathBuf::from(".netrc"), Backend::Age))
         );
         assert_eq!(
-            split(Path::new("home/.ssh/id_ed25519.gpg")),
-            Some((PathBuf::from("home/.ssh/id_ed25519"), Backend::Gpg))
+            split(Path::new(".ssh/id_ed25519.gpg")),
+            Some((PathBuf::from(".ssh/id_ed25519"), Backend::Gpg))
         );
     }
 
     #[test]
     fn split_leaves_plain_files_alone() {
-        assert_eq!(split(Path::new("home/.netrc")), None);
-        assert_eq!(split(Path::new("home/.config/nvim/init.lua")), None);
-        assert_eq!(split(Path::new("home/.age")), None);
-        assert_eq!(split(Path::new("home/agenda")), None);
+        assert_eq!(split(Path::new(".netrc")), None);
+        assert_eq!(split(Path::new(".config/nvim/init.lua")), None);
+        assert_eq!(split(Path::new(".age")), None);
+        assert_eq!(split(Path::new("agenda")), None);
     }
 
     #[test]
     fn logical_strips_only_what_split_recognizes() {
-        assert_eq!(
-            logical(Path::new("home/.netrc.age")),
-            PathBuf::from("home/.netrc")
-        );
-        assert_eq!(
-            logical(Path::new("home/.netrc")),
-            PathBuf::from("home/.netrc")
-        );
+        assert_eq!(logical(Path::new(".netrc.age")), PathBuf::from(".netrc"));
+        assert_eq!(logical(Path::new(".netrc")), PathBuf::from(".netrc"));
     }
 
     #[test]

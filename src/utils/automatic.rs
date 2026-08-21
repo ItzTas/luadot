@@ -33,12 +33,12 @@ mod tests {
     fn one_path_asking_for_it_is_enough() {
         let repo = Path::new("/repo");
         let paths = vec![
-            PathBuf::from("/repo/home/.bashrc"),
-            PathBuf::from("/repo/home/.ssh/config"),
+            PathBuf::from("/repo/.bashrc"),
+            PathBuf::from("/repo/.ssh/config"),
         ];
 
         let automatic = automatic(
-            &config(r#"ld.rules({ match = "home/.ssh/**", autocommit = true })"#),
+            &config(r#"ld.rules({ match = ".ssh/**", autocommit = true })"#),
             repo,
             &paths,
         );
@@ -55,10 +55,10 @@ mod tests {
     #[test]
     fn a_path_the_rules_leave_out_asks_for_nothing() {
         let repo = Path::new("/repo");
-        let paths = vec![PathBuf::from("/repo/home/.bashrc")];
+        let paths = vec![PathBuf::from("/repo/.bashrc")];
 
         let automatic = automatic(
-            &config(r#"ld.rules({ match = "home/.ssh/**", autopush = true })"#),
+            &config(r#"ld.rules({ match = ".ssh/**", autopush = true })"#),
             repo,
             &paths,
         );

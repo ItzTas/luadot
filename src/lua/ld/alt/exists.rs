@@ -8,15 +8,10 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
+    use super::super::fixture::template;
     use crate::lua::{Content, from_template};
-
-    fn template(root: &Path) -> PathBuf {
-        let dir = root.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
 
     fn answer(dir: &Path, name: &str) -> String {
         let outputs =

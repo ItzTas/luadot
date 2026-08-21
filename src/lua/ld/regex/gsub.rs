@@ -77,15 +77,7 @@ fn replace(
 
 #[cfg(test)]
 mod tests {
-    use super::super::table::table;
-    use crate::lua::runtime::runtime;
-
-    fn eval(source: &str) -> mlua::Result<String> {
-        let lua = runtime().unwrap();
-        lua.globals().set("regex", table(&lua).unwrap()).unwrap();
-
-        lua.load(source).eval()
-    }
+    use super::super::fixture::eval;
 
     #[test]
     fn rewrites_every_match_and_says_how_many() {

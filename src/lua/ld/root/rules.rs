@@ -1,9 +1,9 @@
 use mlua::{Function, Lua, Table, Value};
 
-use super::super::constants::{API, CONFLICT, LINK, MODE, ON_CHANGE};
+use super::super::constants::{API, CONFLICT, LINK, MATCH, MODE, ON_CHANGE};
 use super::super::parse::{conflict_policy, external, link_mode, matcher, mode_bits, owner_name};
-use super::constants::{AUTOCOMMIT, AUTOPUSH, ENCRYPT, IGNORE, OWNER, RULE_KEYS};
-use crate::lua::{Config, Rule};
+use super::constants::{AUTOCOMMIT, AUTOPUSH, ENCRYPT, IGNORE, LFS, OWNER, RULE_KEYS};
+use crate::lua::{Config, Matcher, Rule};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, list: Table| {
@@ -46,8 +46,10 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
     let mode: Option<String> = entry.get(MODE)?;
     let owner: Option<String> = entry.get(OWNER)?;
     let encrypt: Option<bool> = entry.get(ENCRYPT)?;
+    let lfs: Option<bool> = entry.get(LFS)?;
     let autocommit: Option<bool> = entry.get(AUTOCOMMIT)?;
     let autopush: Option<bool> = entry.get(AUTOPUSH)?;
+    tracked(&pattern, lfs, encrypt)?;
 
     Ok(
         Rule::new(pattern, link_mode(link)?, conflict_policy(conflict)?)
@@ -56,9 +58,36 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
             .with_mode(mode.map(|raw| mode_bits(&raw, "a rule")).transpose()?)
             .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?)
             .with_encrypt(encrypt)
+            .with_lfs(lfs)
             .with_autocommit(autocommit)
             .with_autopush(autopush),
     )
+}
+
+fn tracked(pattern: &Matcher, lfs: Option<bool>, encrypt: Option<bool>) -> mlua::Result<()> {
+    if lfs.is_none() {
+        return Ok(());
+    }
+    if expressive(pattern) {
+        return Err(external(format!(
+            "`{LFS}` needs a `{MATCH}` pattern, `.gitattributes` has no regular expressions"
+        )));
+    }
+    if encrypt == Some(true) && lfs == Some(true) {
+        return Err(external(format!(
+            "a rule takes `{ENCRYPT}` or `{LFS}`, not both"
+        )));
+    }
+
+    Ok(())
+}
+
+fn expressive(pattern: &Matcher) -> bool {
+    match pattern {
+        Matcher::Regex(_) => true,
+        Matcher::Any(matchers) => matchers.iter().any(expressive),
+        Matcher::Glob(_) => false,
+    }
 }
 
 fn known(entry: &Table) -> mlua::Result<()> {
@@ -226,20 +255,20 @@ mod tests {
         let config = configure(
             r#"
             ld.rules({
-              { match = "root/etc/**", mode = "0644", owner = "root:root" },
-              { match = "root/etc/sudoers.d/**", mode = "0440" },
+              { match = ".ssh/**", mode = "0644", owner = "me:wheel" },
+              { match = ".ssh/id_*", mode = "0600" },
             })
             "#,
         );
 
-        let sudoers = Path::new("root/etc/sudoers.d/wheel");
-        assert_eq!(config.mode(sudoers), Some(0o440));
-        assert_eq!(config.owner(sudoers), Some("root:root"));
+        let key = Path::new(".ssh/id_ed25519");
+        assert_eq!(config.mode(key), Some(0o600));
+        assert_eq!(config.owner(key), Some("me:wheel"));
 
-        let pacman = Path::new("root/etc/pacman.conf");
-        assert_eq!(config.mode(pacman), Some(0o644));
+        let known = Path::new(".ssh/known_hosts");
+        assert_eq!(config.mode(known), Some(0o644));
 
-        let bashrc = Path::new("home/.bashrc");
+        let bashrc = Path::new(".bashrc");
         assert_eq!(config.mode(bashrc), None);
         assert_eq!(config.owner(bashrc), None);
     }
@@ -249,16 +278,16 @@ mod tests {
         let config = configure(
             r#"
             ld.rules({
-              { match = "home/.ssh/id_*", encrypt = true },
-              { match = "home/.config/*/secrets.toml", encrypt = true },
+              { match = ".ssh/id_*", encrypt = true },
+              { match = ".config/*/secrets.toml", encrypt = true },
             })
             "#,
         );
 
-        assert!(config.encrypt(Path::new("home/.ssh/id_ed25519")));
-        assert!(config.encrypt(Path::new("home/.config/mail/secrets.toml")));
-        assert!(!config.encrypt(Path::new("home/.ssh/config")));
-        assert!(!config.encrypt(Path::new("home/.bashrc")));
+        assert!(config.encrypt(Path::new(".ssh/id_ed25519")));
+        assert!(config.encrypt(Path::new(".config/mail/secrets.toml")));
+        assert!(!config.encrypt(Path::new(".ssh/config")));
+        assert!(!config.encrypt(Path::new(".bashrc")));
     }
 
     #[test]
@@ -266,14 +295,68 @@ mod tests {
         let config = configure(
             r#"
             ld.rules({
-              { match = "home/.ssh/**", encrypt = true },
-              { match = "home/.ssh/*.pub", encrypt = false },
+              { match = ".ssh/**", encrypt = true },
+              { match = ".ssh/*.pub", encrypt = false },
             })
             "#,
         );
 
-        assert!(config.encrypt(Path::new("home/.ssh/id_ed25519")));
-        assert!(!config.encrypt(Path::new("home/.ssh/id_ed25519.pub")));
+        assert!(config.encrypt(Path::new(".ssh/id_ed25519")));
+        assert!(!config.encrypt(Path::new(".ssh/id_ed25519.pub")));
+    }
+
+    #[test]
+    fn a_rule_sends_the_files_it_matches_to_lfs_in_the_order_it_was_declared() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = { "Videos/**", "*.iso" }, lfs = true },
+              { match = "Videos/notes/**", lfs = false },
+            })
+            "#,
+        );
+
+        assert_eq!(
+            config.lfs_patterns(),
+            [
+                ("Videos/**".to_string(), true),
+                ("*.iso".to_string(), true),
+                ("Videos/notes/**".to_string(), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_lfs_patterns_are_dropped_when_the_option_turns_them_off() {
+        let config = configure(
+            r#"
+            ld.opt.lfs(false)
+            ld.rules({ match = "Videos/**", lfs = true })
+            "#,
+        );
+
+        assert!(config.lfs_patterns().is_empty());
+    }
+
+    #[test]
+    fn rejects_lfs_on_a_regex() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ regex = "\\.mp4$", lfs = true })"#).unwrap_err()
+        );
+
+        assert!(err.contains("`lfs` needs a `match` pattern"));
+    }
+
+    #[test]
+    fn rejects_a_rule_encrypting_what_it_sends_to_lfs() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = ".secret.iso", lfs = true, encrypt = true })"#)
+                .unwrap_err()
+        );
+
+        assert!(err.contains("takes `encrypt` or `lfs`, not both"));
     }
 
     #[test]
@@ -281,21 +364,21 @@ mod tests {
         let config = configure(
             r#"
             ld.rules({
-              { match = "home/.config/nvim/**", autocommit = true },
-              { match = "home/.ssh/**", autopush = true },
+              { match = ".config/nvim/**", autocommit = true },
+              { match = ".ssh/**", autopush = true },
             })
             "#,
         );
 
-        let nvim = Path::new("home/.config/nvim/init.lua");
+        let nvim = Path::new(".config/nvim/init.lua");
         assert!(config.autocommit(nvim));
         assert!(!config.autopush(nvim));
 
-        let key = Path::new("home/.ssh/config");
+        let key = Path::new(".ssh/config");
         assert!(config.autopush(key));
         assert!(config.autocommit(key));
 
-        assert!(!config.autocommit(Path::new("home/.bashrc")));
+        assert!(!config.autocommit(Path::new(".bashrc")));
     }
 
     #[test]
@@ -303,19 +386,19 @@ mod tests {
         let config = configure(
             r#"
             ld.opt.autocommit(true)
-            ld.rules({ { match = "home/.ssh/**", autocommit = false } })
+            ld.rules({ { match = ".ssh/**", autocommit = false } })
             "#,
         );
 
-        assert!(config.autocommit(Path::new("home/.bashrc")));
-        assert!(!config.autocommit(Path::new("home/.ssh/config")));
+        assert!(config.autocommit(Path::new(".bashrc")));
+        assert!(!config.autocommit(Path::new(".ssh/config")));
     }
 
     #[test]
     fn rejects_an_invalid_mode() {
         let err = format!(
             "{:#}",
-            from_source(r#"ld.rules({ match = "root/etc/**", mode = "80" })"#).unwrap_err()
+            from_source(r#"ld.rules({ match = ".ssh/**", mode = "80" })"#).unwrap_err()
         );
 
         assert!(err.contains("three or four octal digits"));
@@ -325,7 +408,7 @@ mod tests {
     fn rejects_an_invalid_owner() {
         let err = format!(
             "{:#}",
-            from_source(r#"ld.rules({ match = "root/etc/**", owner = "a:b:c" })"#).unwrap_err()
+            from_source(r#"ld.rules({ match = ".ssh/**", owner = "a:b:c" })"#).unwrap_err()
         );
 
         assert!(err.contains("needs an `owner`"));
@@ -363,9 +446,9 @@ mod tests {
             "#,
         );
 
-        assert!(config.is_ignored(Path::new("home/.cache/build.tmp")));
-        assert!(config.is_ignored(Path::new("home/.vimrc.swp")));
-        assert!(!config.is_ignored(Path::new("home/.vimrc")));
+        assert!(config.is_ignored(Path::new(".cache/build.tmp")));
+        assert!(config.is_ignored(Path::new(".vimrc.swp")));
+        assert!(!config.is_ignored(Path::new(".vimrc")));
     }
 
     #[test]
@@ -373,14 +456,14 @@ mod tests {
         let config = configure(
             r#"
             ld.rules({
-              { regex = { "^home/\\.local/state/", "\\.sw[po]$" }, ignore = true },
+              { regex = { "^\\.local/state/", "\\.sw[po]$" }, ignore = true },
             })
             "#,
         );
 
-        assert!(config.is_ignored(Path::new("home/.local/state/nvim/log")));
-        assert!(config.is_ignored(Path::new("home/.vimrc.swp")));
-        assert!(!config.is_ignored(Path::new("home/.local/share/list")));
+        assert!(config.is_ignored(Path::new(".local/state/nvim/log")));
+        assert!(config.is_ignored(Path::new(".vimrc.swp")));
+        assert!(!config.is_ignored(Path::new(".local/share/list")));
     }
 
     #[test]
@@ -441,7 +524,7 @@ mod tests {
         );
 
         assert!(err.contains("`ld.rules` entry 1: unknown key `lnk`"));
-        assert!(err.contains("available: match, regex, link, conflict, on_change, ignore, mode, owner, encrypt, autocommit, autopush"));
+        assert!(err.contains("available: match, regex, link, conflict, on_change, ignore, mode, owner, encrypt, lfs, autocommit, autopush"));
     }
 
     #[test]

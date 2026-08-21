@@ -93,51 +93,43 @@ mod tests {
 
         assert!(
             excludes
-                .excluded(Path::new("home/.vimrc.swp"), Kind::File)
+                .excluded(Path::new(".vimrc.swp"), Kind::File)
                 .unwrap()
         );
-        assert!(
-            !excludes
-                .excluded(Path::new("home/.vimrc"), Kind::File)
-                .unwrap()
-        );
+        assert!(!excludes.excluded(Path::new(".vimrc"), Kind::File).unwrap());
     }
 
     #[test]
     fn an_excluded_directory_carries_its_contents() {
-        let (_dir, repo) = repository("home/.cache/\n");
+        let (_dir, repo) = repository(".cache/\n");
         let mut excludes = Excludes::open("add", &repo).unwrap();
 
+        assert!(!excludes.excluded(Path::new(".cache"), Kind::File).unwrap());
         assert!(
-            !excludes
-                .excluded(Path::new("home/.cache"), Kind::File)
+            excludes
+                .excluded(Path::new(".cache"), Kind::Directory)
                 .unwrap()
         );
         assert!(
             excludes
-                .excluded(Path::new("home/.cache"), Kind::Directory)
-                .unwrap()
-        );
-        assert!(
-            excludes
-                .excluded(Path::new("home/.cache/nvim/log"), Kind::File)
+                .excluded(Path::new(".cache/nvim/log"), Kind::File)
                 .unwrap()
         );
     }
 
     #[test]
     fn a_negated_pattern_takes_a_file_back() {
-        let (_dir, repo) = repository("home/.config/*\n!home/.config/nvim\n");
+        let (_dir, repo) = repository(".config/*\n!.config/nvim\n");
         let mut excludes = Excludes::open("add", &repo).unwrap();
 
         assert!(
             excludes
-                .excluded(Path::new("home/.config/fish"), Kind::Directory)
+                .excluded(Path::new(".config/fish"), Kind::Directory)
                 .unwrap()
         );
         assert!(
             !excludes
-                .excluded(Path::new("home/.config/nvim"), Kind::Directory)
+                .excluded(Path::new(".config/nvim"), Kind::Directory)
                 .unwrap()
         );
     }

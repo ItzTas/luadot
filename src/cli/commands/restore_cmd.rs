@@ -54,9 +54,8 @@ pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
         return Ok(());
     }
 
-    let home = utils::home_dir()?;
     if args.dry_run {
-        return foresee(dir, &home, &saved, stamp);
+        return foresee(dir, &saved, stamp);
     }
 
     if !args.yes && !confirmed(dir, &saved, stamp)? {
@@ -65,7 +64,7 @@ pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
     }
 
     for file in &saved {
-        put_back("restore", dir, &home, file)?;
+        put_back("restore", dir, file)?;
     }
 
     output::note(format!(
@@ -106,13 +105,9 @@ fn rows(taken: &[(u64, PathBuf)], now: u64) -> Result<Vec<(u64, String, usize)>>
         .collect()
 }
 
-fn foresee(dir: &Path, home: &Path, saved: &[PathBuf], stamp: u64) -> Result<()> {
+fn foresee(dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<()> {
     for file in saved {
-        output::entry(
-            Tone::Warning,
-            "restore",
-            destination(dir, home, file)?.display(),
-        );
+        output::entry(Tone::Warning, "restore", destination(dir, file)?.display());
     }
 
     output::note(format!(
@@ -159,33 +154,27 @@ fn chosen<'a>(taken: &'a [(u64, PathBuf)], name: Option<&String>) -> Result<(u64
     Ok((*stamp, dir.as_path()))
 }
 
-fn destination(dir: &Path, home: &Path, file: &Path) -> Result<PathBuf> {
-    utils::system_path(home, dir, file).with_context(|| {
+fn destination(dir: &Path, file: &Path) -> Result<PathBuf> {
+    let relative = file.strip_prefix(dir).with_context(|| {
         format!(
             "restore: {} cannot be placed back from the backup {}",
             file.display(),
             dir.display()
         )
-    })
+    })?;
+
+    Ok(Path::new("/").join(relative))
 }
 
-fn put_back(command: &str, dir: &Path, home: &Path, file: &Path) -> Result<()> {
-    let dest = destination(dir, home, file)?;
-
-    match put_plain(command, file, &dest) {
-        Err(err) if files::permission_denied(&err) => files::escalate_entry(command, file, &dest),
-        other => other,
-    }
-}
-
-fn put_plain(command: &str, file: &Path, dest: &Path) -> Result<()> {
+fn put_back(command: &str, dir: &Path, file: &Path) -> Result<()> {
+    let dest = destination(dir, file)?;
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("{command}: failed to create {}", parent.display()))?;
     }
-    clear(command, dest)?;
+    clear(command, &dest)?;
 
-    backup::copy_entry(command, file, dest)
+    backup::copy_entry(command, file, &dest)
 }
 
 fn clear(command: &str, dest: &Path) -> Result<()> {
@@ -244,13 +233,32 @@ mod tests {
         assert!(err.contains("restore: no backup named 42"));
     }
 
+    fn backed(dir: &Path, path: &Path) -> PathBuf {
+        dir.join(path.strip_prefix("/").unwrap())
+    }
+
+    #[test]
+    fn a_saved_file_goes_back_to_its_absolute_path() {
+        let dir = Path::new("/data/backups/100");
+
+        assert_eq!(
+            destination(dir, &dir.join("home/u/.zshrc")).unwrap(),
+            PathBuf::from("/home/u/.zshrc")
+        );
+
+        let err = destination(dir, Path::new("/elsewhere/.zshrc"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("cannot be placed back from the backup"));
+    }
+
     #[test]
     fn restoring_over_a_hard_link_leaves_the_other_file_alone() {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let saved = dir.join("home/.zshrc");
+        let saved = backed(&dir, &home.join(".zshrc"));
         let managed = repo.join(".zshrc");
         std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
         std::fs::create_dir_all(&home).unwrap();
@@ -259,7 +267,7 @@ mod tests {
         std::fs::write(&managed, "managed").unwrap();
         std::fs::hard_link(&managed, home.join(".zshrc")).unwrap();
 
-        put_back("restore", &dir, &home, &saved).unwrap();
+        put_back("restore", &dir, &saved).unwrap();
 
         assert_eq!(
             std::fs::read_to_string(home.join(".zshrc")).unwrap(),
@@ -273,14 +281,12 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let home = root.path().join("home");
-        let saved = dir.join("home/.zshrc");
+        let saved = backed(&dir, &home.join(".zshrc"));
         std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
         std::fs::create_dir_all(home.join(".zshrc")).unwrap();
         std::fs::write(&saved, "handwritten").unwrap();
 
-        let err = put_back("restore", &dir, &home, &saved)
-            .unwrap_err()
-            .to_string();
+        let err = put_back("restore", &dir, &saved).unwrap_err().to_string();
 
         assert!(err.contains("refusing to replace directory"));
     }

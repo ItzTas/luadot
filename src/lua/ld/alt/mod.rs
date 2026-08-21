@@ -4,6 +4,8 @@ mod describe;
 mod exists;
 mod expand;
 mod file;
+#[cfg(test)]
+mod fixture;
 mod glob;
 mod json;
 mod out;

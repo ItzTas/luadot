@@ -143,7 +143,7 @@ pub const OUTPUT_FIELDS: [Field; 6] = [
     Field {
         name: LINK,
         kind: Kind::Optional(&Kind::Named(LINK_MODE_TYPENAME)),
-        doc: "How an `ld.alt.file` is placed. Defaults to the configured mode. A destination under `/` is always a copy.",
+        doc: "How an `ld.alt.file` is placed. Defaults to the configured mode.",
     },
     Field {
         name: CONFLICT,

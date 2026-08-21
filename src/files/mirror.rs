@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn each_side_keeps_the_managed_path_below_its_own_directory() {
         let mirror = Mirror::open("diff").unwrap();
-        let relative = Path::new("home/.config/nvim/init.lua");
+        let relative = Path::new(".config/nvim/init.lua");
         mirror
             .place(Side::Repository, relative, b"managed\n", 0o644)
             .unwrap();
@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn a_placed_file_carries_the_mode_it_is_given() {
         let mirror = Mirror::open("diff").unwrap();
-        let relative = Path::new("root/etc/app.conf");
+        let relative = Path::new(".config/app.conf");
         mirror
             .place(Side::Repository, relative, b"conf\n", 0o640)
             .unwrap();
@@ -220,7 +220,7 @@ mod tests {
         let mirror = Mirror::open("diff").unwrap();
         let root = mirror.root().to_path_buf();
         mirror
-            .place(Side::System, Path::new("home/.netrc"), b"secret\n", 0o600)
+            .place(Side::System, Path::new(".netrc"), b"secret\n", 0o600)
             .unwrap();
 
         assert_eq!(bits(&root), MIRROR_MODE);

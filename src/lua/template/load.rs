@@ -314,7 +314,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = template_dir(&repo, "home/.zshrc.luadot");
+        let dir = template_dir(&repo, ".zshrc.luadot");
         write(&dir, "laptop.zsh", "laptop");
         write(&dir, TEMPLATE_FILE, r#"return ld.alt.file("laptop.zsh")"#);
 

@@ -101,7 +101,7 @@ pub fn owner_name(raw: &str, what: &str) -> mlua::Result<String> {
         || raw.contains(char::is_whitespace);
     if broken {
         return Err(external(format!(
-            "{what} needs an `owner` like \"root\" or \"root:root\", got `{raw}`"
+            "{what} needs an `owner` like \"user\" or \"user:group\", got `{raw}`"
         )));
     }
 
@@ -172,14 +172,14 @@ mod tests {
 
     #[test]
     fn owner_name_takes_a_user_with_an_optional_group() {
-        assert_eq!(owner_name("root", "a rule").unwrap(), "root");
-        assert_eq!(owner_name("root:wheel", "a rule").unwrap(), "root:wheel");
-        assert_eq!(owner_name("0:0", "a rule").unwrap(), "0:0");
+        assert_eq!(owner_name("me", "a rule").unwrap(), "me");
+        assert_eq!(owner_name("me:wheel", "a rule").unwrap(), "me:wheel");
+        assert_eq!(owner_name("1000:1000", "a rule").unwrap(), "1000:1000");
     }
 
     #[test]
     fn owner_name_rejects_a_broken_name() {
-        for raw in ["", ":", "root:", ":wheel", "a:b:c", "ro ot"] {
+        for raw in ["", ":", "me:", ":wheel", "a:b:c", "m e"] {
             let err = owner_name(raw, "a rule").unwrap_err().to_string();
 
             assert!(err.contains("needs an `owner`"), "{raw}");

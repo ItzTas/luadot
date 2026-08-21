@@ -13,7 +13,7 @@ pub const LIST: &str = "list";
 pub const NAMESPACE_TYPENAME: &str = "ld.setup";
 
 #[cfg(feature = "meta")]
-pub const DOC: &str = "The setup scripts of the repository, under `home/.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`, and warns elsewhere.";
+pub const DOC: &str = "The setup scripts of the repository, under `.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`, and warns elsewhere.";
 
 #[cfg(feature = "meta")]
 pub const OPTIONS_TYPENAME: &str = "ld.SetupOptions";

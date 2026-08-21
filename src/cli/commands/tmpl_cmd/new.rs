@@ -26,7 +26,8 @@ pub fn new(args: NewArgs) -> Result<()> {
     let Workspace { home, repo, .. } = utils::workspace("tmpl new")?;
 
     let template = destination(&home, &args.path)?;
-    let managed = utils::repo_path(&home, &repo, &template)?;
+    let managed = utils::repo_path(&home, &repo, &template)
+        .with_context(|| format!("tmpl new: cannot manage {}", template.display()))?;
 
     create(&template, &managed, args.file)?;
     output::note(format!("created {}", template.display()));
@@ -41,7 +42,7 @@ pub fn new(args: NewArgs) -> Result<()> {
 }
 
 fn settings(home: &Path, template: &Path) -> Result<()> {
-    match lua::point_at_definitions("tmpl new", template, home, &utils::config_dir()?)? {
+    match lua::point_at_definitions("tmpl new", template, home, &utils::data_dir()?)? {
         Placed::Written(path) => output::note(format!("created {}", path.display())),
         Placed::Merged(path) => output::note(format!("updated {}", path.display())),
         Placed::Kept(path, _) => output::warn(format!(
@@ -190,23 +191,13 @@ mod tests {
     }
 
     #[test]
-    fn a_system_path_keeps_its_own_location() {
-        let (_root, home, _repo) = home_and_repo();
-
-        assert_eq!(
-            destination(&home, "/etc/zsh/zshrc").unwrap(),
-            PathBuf::from("/etc/zsh/zshrc.luadot")
-        );
-    }
-
-    #[test]
     fn an_existing_template_is_left_alone() {
         let (_root, home, repo) = home_and_repo();
         let template = home.join(".zshrc.luadot");
         std::fs::create_dir_all(&template).unwrap();
         std::fs::write(template.join(TEMPLATE_FILE), "kept").unwrap();
 
-        let err = create(&template, &repo.join("home/.zshrc.luadot"), false)
+        let err = create(&template, &repo.join(".zshrc.luadot"), false)
             .unwrap_err()
             .to_string();
 
@@ -221,7 +212,7 @@ mod tests {
     #[test]
     fn a_template_the_repository_already_holds_is_reported() {
         let (_root, home, repo) = home_and_repo();
-        let managed = repo.join("home/.zshrc.luadot");
+        let managed = repo.join(".zshrc.luadot");
         std::fs::create_dir_all(&managed).unwrap();
 
         let err = create(&home.join(".zshrc.luadot"), &managed, false)
@@ -236,12 +227,11 @@ mod tests {
     #[test]
     fn a_file_the_repository_already_manages_is_reported() {
         let (_root, home, repo) = home_and_repo();
-        std::fs::create_dir_all(repo.join("home")).unwrap();
-        std::fs::write(repo.join("home/.zshrc"), "managed").unwrap();
+        std::fs::write(repo.join(".zshrc"), "managed").unwrap();
 
         let err = create(
             &home.join(".zshrc.luadot"),
-            &repo.join("home/.zshrc.luadot"),
+            &repo.join(".zshrc.luadot"),
             false,
         )
         .unwrap_err()

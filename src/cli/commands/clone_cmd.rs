@@ -19,14 +19,15 @@ pub struct CloneArgs {
 pub fn clone_cmd(args: CloneArgs) -> Result<()> {
     let home = utils::home_dir()?;
     let config = lua::load_config()?;
-    let configured = utils::configured("clone", &config)?
-        .repo_dir()
-        .map(Path::to_path_buf);
+    let (configured, lfs) = {
+        let loaded = utils::configured("clone", &config)?;
+        (loaded.repo_dir().map(Path::to_path_buf), loaded.lfs())
+    };
 
     let dir = utils::destination("clone", &home, args.dir.as_deref(), configured.as_deref())?;
 
     output::note(format!("cloning {} into {}", args.url, dir.display()));
-    let cloned = git::clone(&dir, &args.url)?;
+    let cloned = git::clone(&dir, &args.url, lfs)?;
 
     let mut current = state::load()?;
     current.set_repo(dir.clone());

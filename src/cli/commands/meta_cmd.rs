@@ -3,12 +3,12 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 
-use crate::lua::{self, DEFINITIONS, Placed};
-use crate::output::{self, Tone};
+use crate::lua::{self, DEFINITIONS};
+use crate::output;
 use crate::state;
 use crate::utils;
 
-use super::super::constants::{META_KEPT, META_MERGED, META_NO_REPOSITORY, META_WROTE};
+use super::super::constants::META_NO_REPOSITORY;
 
 #[derive(Debug, Args)]
 pub struct MetaArgs {
@@ -19,7 +19,7 @@ pub struct MetaArgs {
 #[derive(Debug, Subcommand)]
 pub enum MetaAction {
     #[command(
-        about = "Write the definitions and a .luarc.json into the configuration directory and the repository"
+        about = "Write the definitions into the data directory and a .luarc.json loading them into the configuration directory and the repository"
     )]
     Install(MetaInstallArgs),
 }
@@ -28,7 +28,7 @@ pub enum MetaAction {
 pub struct MetaInstallArgs {
     #[arg(
         value_name = "DIR",
-        help = "One directory to write into, instead of those two"
+        help = "One directory to write the .luarc.json into, instead of those two"
     )]
     pub dir: Option<PathBuf>,
 }
@@ -46,13 +46,7 @@ fn print() -> Result<()> {
 }
 
 fn install(args: MetaInstallArgs) -> Result<()> {
-    for dir in roots(args.dir)? {
-        for placed in lua::install_definitions("meta", &dir)? {
-            report(&placed);
-        }
-    }
-
-    Ok(())
+    utils::place_definitions("meta", &roots(args.dir)?)
 }
 
 fn roots(dir: Option<PathBuf>) -> Result<Vec<PathBuf>> {
@@ -75,15 +69,4 @@ fn roots(dir: Option<PathBuf>) -> Result<Vec<PathBuf>> {
     roots.push(utils::require_repo("meta", configured.as_deref())?);
 
     Ok(roots)
-}
-
-fn report(placed: &Placed) {
-    match placed {
-        Placed::Written(path) => output::entry(Tone::Good, META_WROTE, path.display()),
-        Placed::Merged(path) => output::entry(Tone::Good, META_MERGED, path.display()),
-        Placed::Kept(path, wanted) => {
-            output::warn(format!("meta: {} {META_KEPT}", path.display()));
-            output::line(wanted);
-        }
-    }
 }

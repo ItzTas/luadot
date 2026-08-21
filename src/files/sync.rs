@@ -5,6 +5,7 @@ use tracing::debug;
 
 use super::constants::COMMAND;
 use super::fs::{create_parent, exists, regular_file, remove_existing};
+use super::placement::Placement;
 use super::{LinkMode, link};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -35,11 +36,11 @@ pub enum SyncOutcome {
 
 pub fn sync_file(
     policy: ConflictPolicy,
-    mode: LinkMode,
+    placement: Placement,
     source: &Path,
     dest: &Path,
 ) -> Result<SyncOutcome> {
-    let outcome = sync(policy, mode, source, dest)?;
+    let outcome = sync(policy, placement, source, dest)?;
     debug!(
         source = %source.display(),
         dest = %dest.display(),
@@ -49,17 +50,22 @@ pub fn sync_file(
     Ok(outcome)
 }
 
-fn sync(policy: ConflictPolicy, mode: LinkMode, source: &Path, dest: &Path) -> Result<SyncOutcome> {
+fn sync(
+    policy: ConflictPolicy,
+    placement: Placement,
+    source: &Path,
+    dest: &Path,
+) -> Result<SyncOutcome> {
     if !source.is_file() {
         bail!("files: {} is not a file", source.display());
     }
 
     if !exists(COMMAND, dest)? {
-        place(mode, source, dest)?;
+        place(placement, source, dest)?;
         return Ok(SyncOutcome::Created);
     }
 
-    if already_synced(mode, source, dest)? {
+    if already_synced(placement.link(), source, dest)? && placement.carried_by(dest) {
         return Ok(SyncOutcome::AlreadySynced);
     }
 
@@ -68,7 +74,7 @@ fn sync(policy: ConflictPolicy, mode: LinkMode, source: &Path, dest: &Path) -> R
     }
 
     remove_existing(COMMAND, dest)?;
-    place(mode, source, dest)?;
+    place(placement, source, dest)?;
 
     Ok(SyncOutcome::Replaced)
 }
@@ -81,12 +87,14 @@ pub fn refused(command: &str, policy: ConflictPolicy, dest: &Path) -> Result<Opt
     }
 }
 
-fn place(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
+fn place(placement: Placement, source: &Path, dest: &Path) -> Result<()> {
     create_parent(COMMAND, dest)?;
-    match mode {
-        LinkMode::Hard => hard_or_copy(source, dest),
-        LinkMode::Symbolic | LinkMode::Copy => link(mode, source, dest),
+    match placement.link() {
+        LinkMode::Hard => hard_or_copy(source, dest)?,
+        LinkMode::Symbolic | LinkMode::Copy => link(placement.link(), source, dest)?,
     }
+
+    placement.set_on(COMMAND, dest)
 }
 
 fn hard_or_copy(source: &Path, dest: &Path) -> Result<()> {
@@ -164,6 +172,10 @@ mod tests {
         std::fs::write(path, contents).unwrap();
     }
 
+    fn placed(link: LinkMode) -> Placement<'static> {
+        Placement::new(link)
+    }
+
     #[test]
     fn creates_a_hard_link_when_destination_is_missing() {
         let dir = tempfile::tempdir().unwrap();
@@ -171,7 +183,13 @@ mod tests {
         let dest = dir.path().join("dest");
         write(&source, "data");
 
-        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap();
+        let outcome = sync_file(
+            ConflictPolicy::Overwrite,
+            placed(LinkMode::Hard),
+            &source,
+            &dest,
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::Created);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
@@ -187,9 +205,21 @@ mod tests {
         let source = dir.path().join("source");
         let dest = dir.path().join("dest");
         write(&source, "data");
-        sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap();
+        sync_file(
+            ConflictPolicy::Overwrite,
+            placed(LinkMode::Hard),
+            &source,
+            &dest,
+        )
+        .unwrap();
 
-        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap();
+        let outcome = sync_file(
+            ConflictPolicy::Overwrite,
+            placed(LinkMode::Hard),
+            &source,
+            &dest,
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::AlreadySynced);
     }
@@ -202,7 +232,13 @@ mod tests {
         write(&source, "repo");
         write(&dest, "stale");
 
-        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Hard, &source, &dest).unwrap();
+        let outcome = sync_file(
+            ConflictPolicy::Overwrite,
+            placed(LinkMode::Hard),
+            &source,
+            &dest,
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::Replaced);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "repo");
@@ -220,7 +256,8 @@ mod tests {
         write(&source, "repo");
         write(&dest, "stale");
 
-        let outcome = sync_file(ConflictPolicy::Skip, LinkMode::Hard, &source, &dest).unwrap();
+        let outcome =
+            sync_file(ConflictPolicy::Skip, placed(LinkMode::Hard), &source, &dest).unwrap();
 
         assert_eq!(outcome, SyncOutcome::Skipped);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "stale");
@@ -234,7 +271,15 @@ mod tests {
         write(&source, "repo");
         write(&dest, "stale");
 
-        assert!(sync_file(ConflictPolicy::Error, LinkMode::Hard, &source, &dest).is_err());
+        assert!(
+            sync_file(
+                ConflictPolicy::Error,
+                placed(LinkMode::Hard),
+                &source,
+                &dest
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -246,7 +291,7 @@ mod tests {
 
         let outcome = sync_file(
             ConflictPolicy::Overwrite,
-            LinkMode::Symbolic,
+            placed(LinkMode::Symbolic),
             &source,
             &dest,
         )
@@ -263,7 +308,7 @@ mod tests {
 
         let outcome = sync_file(
             ConflictPolicy::Overwrite,
-            LinkMode::Symbolic,
+            placed(LinkMode::Symbolic),
             &source,
             &dest,
         )
@@ -278,7 +323,13 @@ mod tests {
         let dest = dir.path().join("dest");
         write(&source, "data");
 
-        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Copy, &source, &dest).unwrap();
+        let outcome = sync_file(
+            ConflictPolicy::Overwrite,
+            placed(LinkMode::Copy),
+            &source,
+            &dest,
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::Created);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
@@ -287,7 +338,39 @@ mod tests {
             std::fs::metadata(&dest).unwrap().ino()
         );
 
-        let outcome = sync_file(ConflictPolicy::Overwrite, LinkMode::Copy, &source, &dest).unwrap();
+        let outcome = sync_file(
+            ConflictPolicy::Overwrite,
+            placed(LinkMode::Copy),
+            &source,
+            &dest,
+        )
+        .unwrap();
         assert_eq!(outcome, SyncOutcome::AlreadySynced);
+    }
+
+    #[test]
+    fn a_mode_lands_on_the_placed_file_and_is_put_back_when_it_drifts() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        let dest = dir.path().join("dest");
+        write(&source, "secret");
+        let placement = placed(LinkMode::Copy).with_mode(Some(0o600));
+
+        let outcome = sync_file(ConflictPolicy::Overwrite, placement, &source, &dest).unwrap();
+        assert_eq!(outcome, SyncOutcome::Created);
+        assert_eq!(
+            std::fs::metadata(&dest).unwrap().permissions().mode() & 0o7777,
+            0o600
+        );
+
+        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let outcome = sync_file(ConflictPolicy::Overwrite, placement, &source, &dest).unwrap();
+        assert_eq!(outcome, SyncOutcome::Replaced);
+        assert_eq!(
+            std::fs::metadata(&dest).unwrap().permissions().mode() & 0o7777,
+            0o600
+        );
     }
 }

@@ -4,6 +4,8 @@ pub const DEFINITIONS_DIR: &str = "meta";
 
 pub const DEFINITIONS_FILE: &str = "ld.lua";
 
+pub const STAGED_SUFFIX: &str = "tmp";
+
 pub const LUARC_FILE: &str = ".luarc.json";
 
 pub const SCHEMA_KEY: &str = "$schema";

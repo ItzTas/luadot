@@ -5,14 +5,14 @@ use clap::Args;
 
 use crate::crypt;
 use crate::files::{self, Entry, FileStatus, Side};
-use crate::lua::{Config, Shared, StatusCounts, StatusFile};
+use crate::lua::{Command, Config, Shared, StatusCounts, StatusFile};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
 
 use super::super::constants::{
-    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, STATUS_CLEAN, STATUS_CUSTOM,
-    STATUS_GENERATED_CLEAN, STATUS_GENERATED_HEAD, STATUS_HEAD, STATUS_LABELS, STATUS_SECTIONS,
+    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, STATUS_CLEAN, STATUS_GENERATED_CLEAN,
+    STATUS_GENERATED_HEAD, STATUS_HEAD, STATUS_LABELS, STATUS_SECTIONS,
 };
 
 #[derive(Debug, Args)]
@@ -120,8 +120,8 @@ fn managed_files(
             .map(|(stripped, _)| stripped.as_path())
             .unwrap_or(relative);
         let dest = utils::system_path(home, repo, &repo.join(logical))?;
-        let status = match (&split, utils::is_root(relative)) {
-            (Some((stripped, backend)), true) => crypt::system_status(
+        let status = match &split {
+            Some((stripped, backend)) => crypt::status(
                 "status",
                 *backend,
                 lock,
@@ -130,16 +130,7 @@ fn managed_files(
                 &dest,
                 config.mode(stripped),
             ),
-            (Some((_, backend)), false) => crypt::status(
-                "status",
-                *backend,
-                lock,
-                identity.path("status")?,
-                file,
-                &dest,
-            ),
-            (None, true) => files::inspect_system(file, &dest, config.mode(relative)),
-            (None, false) => files::file_status(config.link_mode(relative), file, &dest),
+            None => files::file_status(config.placement(relative), file, &dest),
         }
         .with_context(|| format!("status: failed to inspect {}", dest.display()))?;
 
@@ -285,7 +276,7 @@ fn counted(reported: &[StatusFile]) -> Counts {
 }
 
 fn what(key: &str) -> String {
-    utils::customized("status", STATUS_CUSTOM, key)
+    utils::customized("status", &Command::Status.call(), key)
 }
 
 fn display(status: FileStatus) -> (Tone, &'static str) {
@@ -390,7 +381,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
+        let dir = repo.join(".zshrc.luadot");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
 
@@ -405,7 +396,7 @@ mod tests {
 
         assert_eq!(reported.len(), 1);
         assert_eq!(reported[0].state(), FileStatus::Missing);
-        assert_eq!(reported[0].path(), Path::new("home/.zshrc"));
+        assert_eq!(reported[0].path(), Path::new(".zshrc"));
     }
 
     #[test]
@@ -413,7 +404,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
+        let dir = repo.join(".zshrc.luadot");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::create_dir_all(&home).unwrap();
         std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();

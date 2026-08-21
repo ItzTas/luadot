@@ -3,7 +3,7 @@ use std::sync::MutexGuard;
 
 use anyhow::{Result, anyhow};
 
-use super::paths::{home_dir, is_managed, relative};
+use super::paths::{home_dir, relative};
 use super::repo::{managed_path, require_repo};
 use crate::files::{self, Entry};
 use crate::lua::{self, Config, Shared};
@@ -64,11 +64,6 @@ pub fn managed_entries(
 ) -> Result<Vec<Entry>> {
     Ok(files::collect_entries(command, root)?
         .into_iter()
-        .filter(|entry| {
-            let target = entry.target();
-            let relative = relative(repo, &target);
-
-            is_managed(relative) && !ignored(relative)
-        })
+        .filter(|entry| !ignored(relative(repo, &entry.target())))
         .collect())
 }

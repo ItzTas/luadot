@@ -5,12 +5,9 @@ use super::constants::{CALL, DOC, NAMESPACE_TYPENAME, OPTIONS_DOC, OPTIONS_TYPEN
 
 pub fn describe(walker: TypeWalker) -> TypeWalker {
     walker
-        .instance(NAMESPACE_TYPENAME, DOC)
-        .record(
-            record(NAMESPACE_TYPENAME, DOC)
-                .functions(&SIGNATURES)
-                .call(&CALL),
-        )
+        .namespace(NAMESPACE_TYPENAME, DOC, |record| {
+            record.functions(&SIGNATURES).call(&CALL)
+        })
         .record(record(OPTIONS_TYPENAME, OPTIONS_DOC).options(&SIGNATURES))
 }
 

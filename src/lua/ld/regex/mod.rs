@@ -4,6 +4,8 @@ mod constants;
 mod describe;
 mod escape;
 mod find;
+#[cfg(test)]
+mod fixture;
 mod gmatch;
 mod gsub;
 mod r#match;

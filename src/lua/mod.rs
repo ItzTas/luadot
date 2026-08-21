@@ -14,16 +14,18 @@ mod template;
 
 pub use bootstrap::{bootstrap_path, run_bootstrap};
 pub use config::{
-    Call, Class, Config, Custom, Diff, DiffCounts, DiffFile, DiffState, Matcher, Report, Rule,
-    Shared, StatusCounts, StatusFile, Tool, config_path, load_config,
+    Around, Call, Class, Config, Custom, Diff, DiffCounts, DiffFile, DiffState, Matcher, Moment,
+    Report, Rule, Shared, StatusCounts, StatusFile, Tool, config_path, load_config,
 };
 #[cfg(test)]
 pub use config::{from_classes, from_source};
 pub use exec::run_exec;
+pub use ld::Command;
 #[cfg(feature = "meta")]
 pub use meta::generate as generate_definitions;
 pub use meta::{
     DEFINITIONS, Placed, install as install_definitions, point as point_at_definitions,
+    refresh as refresh_definitions,
 };
 pub use scope::{Content, Handle, Output, Scope};
 pub use setup::{list_setups, run_setups};

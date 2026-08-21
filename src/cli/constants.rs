@@ -3,6 +3,8 @@ use crate::output::Tone;
 
 pub const DEFAULT_FILTER: &str = "warn";
 
+pub const REFRESH_PANICKED: &str = "meta: refreshing the definitions panicked";
+
 pub const VERBOSE_FILTER: &str = "luadot=debug";
 
 pub const TRACE_FILTER: &str = "luadot=trace";
@@ -23,10 +25,6 @@ pub const DIFF_PROGRAM: &str = "git";
 
 pub const DIFF_ARGUMENTS: [&str; 1] = ["diff"];
 
-pub const DIFF_CUSTOM: &str = "ld.on.diff";
-
-pub const STATUS_CUSTOM: &str = "ld.on.status";
-
 pub const CUSTOM_ENTRY: &str = "entry";
 
 pub const CUSTOM_RENDER: &str = "render";
@@ -36,12 +34,6 @@ pub const CUSTOM_SUMMARY: &str = "summary";
 pub const MANAGED_FILES: &str = "managed";
 
 pub const GENERATED_FILES: &str = "generated";
-
-pub const META_WROTE: &str = "wrote";
-
-pub const META_MERGED: &str = "merged";
-
-pub const META_KEPT: &str = "could not be parsed and was left alone; add this to it:";
 
 pub const META_NO_REPOSITORY: &str =
     "no repository set; only the configuration directory gets the definitions";
@@ -122,7 +114,7 @@ pub const MAN_FILES: [(&str, &str); 5] = [
         "One directory per run, holding what apply, tmpl alt and rm wrote over.",
     ),
     (
-        "<repository>/home/.config/luadot/bootstrap.lua",
+        "<repository>/.config/luadot/bootstrap.lua",
         "The script luadot bootstrap runs.",
     ),
 ];
@@ -403,7 +395,7 @@ pub const STATUS_SECTIONS: [(FileStatus, &str, &str); 4] = [
     ),
     (
         FileStatus::Unreadable,
-        "Files luadot may not read:",
-        "(use \"luadot apply <path>...\" with the privilege to read them)",
+        "Files luadot could not decrypt:",
+        "(use \"luadot apply <path>...\" to see what the backend says)",
     ),
 ];

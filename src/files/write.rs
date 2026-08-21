@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 
 use super::constants::COMMAND;
 use super::fs::{create_parent, exists, mode_bits, regular_file, remove_existing, write_mode};
+use super::placement::Placement;
 use super::status::FileStatus;
 use super::sync::{ConflictPolicy, SyncOutcome, refused};
 
@@ -21,17 +22,17 @@ pub fn text_status(dest: &Path, contents: &str, mode: Option<u32>) -> Result<Fil
 
 pub fn write_file(
     policy: ConflictPolicy,
+    placement: Placement,
     dest: &Path,
     contents: &str,
-    mode: Option<u32>,
 ) -> Result<SyncOutcome> {
     if !exists(COMMAND, dest)? {
         create_parent(COMMAND, dest)?;
-        write(dest, contents, mode)?;
+        write(placement, dest, contents)?;
         return Ok(SyncOutcome::Created);
     }
 
-    if holds(dest, contents, mode)? {
+    if holds(dest, contents, placement.mode())? {
         return Ok(SyncOutcome::AlreadySynced);
     }
 
@@ -40,7 +41,7 @@ pub fn write_file(
     }
 
     remove_existing(COMMAND, dest)?;
-    write(dest, contents, mode)?;
+    write(placement, dest, contents)?;
 
     Ok(SyncOutcome::Replaced)
 }
@@ -56,13 +57,14 @@ fn holds(path: &Path, contents: &str, mode: Option<u32>) -> Result<bool> {
     Ok(matches!(std::fs::read(path), Ok(found) if found == contents.as_bytes()))
 }
 
-fn write(dest: &Path, contents: &str, mode: Option<u32>) -> Result<()> {
-    let Some(mode) = mode else {
-        return std::fs::write(dest, contents)
-            .with_context(|| format!("{COMMAND}: failed to write {}", dest.display()));
-    };
+fn write(placement: Placement, dest: &Path, contents: &str) -> Result<()> {
+    match placement.mode() {
+        Some(mode) => write_mode(COMMAND, dest, contents.as_bytes(), mode)?,
+        None => std::fs::write(dest, contents)
+            .with_context(|| format!("{COMMAND}: failed to write {}", dest.display()))?,
+    }
 
-    write_mode(COMMAND, dest, contents.as_bytes(), mode)
+    placement.own(COMMAND, dest)
 }
 
 #[cfg(test)]
@@ -72,12 +74,22 @@ mod tests {
 
     use super::*;
 
+    fn with_mode(mode: u32) -> Placement<'static> {
+        Placement::default().with_mode(Some(mode))
+    }
+
     #[test]
     fn writes_a_missing_destination() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join("nested/deep/.zshrc");
 
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "generated", None).unwrap();
+        let outcome = write_file(
+            ConflictPolicy::Overwrite,
+            Placement::default(),
+            &dest,
+            "generated",
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::Created);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "generated");
@@ -89,7 +101,13 @@ mod tests {
         let dest = dir.path().join(".zshrc");
         std::fs::write(&dest, "generated").unwrap();
 
-        let outcome = write_file(ConflictPolicy::Error, &dest, "generated", None).unwrap();
+        let outcome = write_file(
+            ConflictPolicy::Error,
+            Placement::default(),
+            &dest,
+            "generated",
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::AlreadySynced);
     }
@@ -100,7 +118,13 @@ mod tests {
         let dest = dir.path().join(".zshrc");
         std::fs::write(&dest, "stale").unwrap();
 
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "generated", None).unwrap();
+        let outcome = write_file(
+            ConflictPolicy::Overwrite,
+            Placement::default(),
+            &dest,
+            "generated",
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::Replaced);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "generated");
@@ -112,7 +136,13 @@ mod tests {
         let dest = dir.path().join(".zshrc");
         std::fs::write(&dest, "stale").unwrap();
 
-        let outcome = write_file(ConflictPolicy::Skip, &dest, "generated", None).unwrap();
+        let outcome = write_file(
+            ConflictPolicy::Skip,
+            Placement::default(),
+            &dest,
+            "generated",
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::Skipped);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "stale");
@@ -124,7 +154,15 @@ mod tests {
         let dest = dir.path().join(".zshrc");
         std::fs::write(&dest, "stale").unwrap();
 
-        assert!(write_file(ConflictPolicy::Error, &dest, "generated", None).is_err());
+        assert!(
+            write_file(
+                ConflictPolicy::Error,
+                Placement::default(),
+                &dest,
+                "generated"
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -132,7 +170,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".netrc");
 
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o600)).unwrap();
+        let outcome =
+            write_file(ConflictPolicy::Overwrite, with_mode(0o600), &dest, "secret").unwrap();
 
         assert_eq!(outcome, SyncOutcome::Created);
         assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o600);
@@ -146,7 +185,8 @@ mod tests {
         std::fs::write(&dest, "secret").unwrap();
         std::fs::set_permissions(&dest, Permissions::from_mode(0o644)).unwrap();
 
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o600)).unwrap();
+        let outcome =
+            write_file(ConflictPolicy::Overwrite, with_mode(0o600), &dest, "secret").unwrap();
 
         assert_eq!(outcome, SyncOutcome::Replaced);
         assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o600);
@@ -156,9 +196,9 @@ mod tests {
     fn a_mode_that_diverges_follows_the_policy() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".netrc");
-        write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o644)).unwrap();
+        write_file(ConflictPolicy::Overwrite, with_mode(0o644), &dest, "secret").unwrap();
 
-        let outcome = write_file(ConflictPolicy::Skip, &dest, "secret", Some(0o600)).unwrap();
+        let outcome = write_file(ConflictPolicy::Skip, with_mode(0o600), &dest, "secret").unwrap();
 
         assert_eq!(outcome, SyncOutcome::Skipped);
         assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o644);
@@ -168,7 +208,7 @@ mod tests {
     fn text_status_reports_a_mode_that_diverges() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".netrc");
-        write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o644)).unwrap();
+        write_file(ConflictPolicy::Overwrite, with_mode(0o644), &dest, "secret").unwrap();
 
         assert_eq!(
             text_status(&dest, "secret", Some(0o600)).unwrap(),

@@ -5,14 +5,16 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::files::{self, Entry, FileStatus, Mirror, Side, Tracked};
-use crate::lua::{Config, Content, Diff, DiffCounts, DiffFile, DiffState, Output, Shared, Tool};
+use crate::lua::{
+    self, Config, Content, Diff, DiffCounts, DiffFile, DiffState, Output, Shared, Tool,
+};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, SYSTEM_TEXT_MODE, Workspace};
 
 use super::super::constants::{
-    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, DIFF_ARGUMENTS, DIFF_CUSTOM, DIFF_PROGRAM,
-    GENERATED_FILES, MANAGED_FILES,
+    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, DIFF_ARGUMENTS, DIFF_PROGRAM, GENERATED_FILES,
+    MANAGED_FILES,
 };
 
 #[derive(Debug, Args)]
@@ -97,11 +99,8 @@ fn managed_items(config: &Config, home: &Path, repo: &Path, files: &[Entry]) -> 
     for file in files.iter().map(Entry::path) {
         let relative = utils::relative(repo, file);
         let dest = utils::system_path(home, repo, file)?;
-        let status = match utils::is_root(relative) {
-            true => files::escalated_status(file, &dest, config.mode(relative)),
-            false => files::file_status(config.link_mode(relative), file, &dest),
-        }
-        .with_context(|| format!("diff: failed to inspect {}", dest.display()))?;
+        let status = files::file_status(config.placement(relative), file, &dest)
+            .with_context(|| format!("diff: failed to inspect {}", dest.display()))?;
 
         if !shows(status) {
             continue;
@@ -110,7 +109,7 @@ fn managed_items(config: &Config, home: &Path, repo: &Path, files: &[Entry]) -> 
             relative: relative.to_path_buf(),
             dest,
             contents: files::read_contents("diff", file)?,
-            mode: Some(files::effective_mode(file, config.mode(relative))?),
+            mode: Some(files::effective_mode("diff", file, config.mode(relative))?),
         });
     }
 
@@ -135,7 +134,7 @@ fn resolve(
 fn generated_items(config: &Config, home: &Path, produced: &[Output]) -> Result<Vec<Item>> {
     let mut drifted = Vec::new();
     for output in produced {
-        let status = utils::escalated_output_status("diff", config, home, output)?;
+        let status = utils::output_status("diff", config, home, output)?;
         if !shows(status) {
             continue;
         }
@@ -154,14 +153,13 @@ fn generated_items(config: &Config, home: &Path, produced: &[Output]) -> Result<
 }
 
 fn expected(config: &Config, relative: &Path, output: &Output) -> Result<(Vec<u8>, Option<u32>)> {
+    let mode = utils::output_placement(config, relative, output).mode();
+
     match output.content() {
-        Content::Text(text) => Ok((
-            text.as_bytes().to_vec(),
-            utils::generated_mode(config, relative, output),
-        )),
+        Content::Text(text) => Ok((text.as_bytes().to_vec(), mode)),
         Content::File(source) => Ok((
             files::read_contents("diff", source)?,
-            Some(files::effective_mode(source, config.mode(relative))?),
+            Some(files::effective_mode("diff", source, mode)?),
         )),
     }
 }
@@ -337,7 +335,7 @@ fn named(side: Side) -> &'static str {
 }
 
 fn what(key: &str) -> String {
-    utils::customized("diff", DIFF_CUSTOM, key)
+    utils::customized("diff", &lua::Command::Diff.call(), key)
 }
 
 fn system_side(dest: &Path) -> Result<System> {
@@ -348,7 +346,7 @@ fn system_side(dest: &Path) -> Result<System> {
         return Ok(System::Other);
     }
 
-    let mode = files::effective_mode(dest, None)?;
+    let mode = files::effective_mode("diff", dest, None)?;
 
     Ok(System::Holds(files::read_contents("diff", dest)?, mode))
 }
@@ -440,7 +438,7 @@ mod tests {
         let mirror = Mirror::open("diff").unwrap();
         let files = [
             DiffFile::new(
-                PathBuf::from("home/.bashrc"),
+                PathBuf::from(".bashrc"),
                 PathBuf::from("/home/u/.bashrc"),
                 Side::Repository,
                 DiffState::Differs,
@@ -448,7 +446,7 @@ mod tests {
             .with_source(b"managed\n".to_vec(), 0o644)
             .with_system(b"handwritten\n".to_vec(), 0o644),
             DiffFile::new(
-                PathBuf::from("home/.vimrc"),
+                PathBuf::from(".vimrc"),
                 PathBuf::from("/home/u/.vimrc"),
                 Side::Repository,
                 DiffState::Missing,
@@ -458,23 +456,20 @@ mod tests {
 
         let tree = tracked_tree(&mirror, &files.iter().collect::<Vec<&DiffFile>>()).unwrap();
 
-        let staged = tracked("home/.bashrc")
+        let staged = tracked(".bashrc")
             .current_dir(tree.root())
             .output()
             .unwrap();
         assert_eq!(staged.stdout, b"managed\n");
 
         assert_eq!(
-            std::fs::read(tree.root().join("home/.bashrc")).unwrap(),
+            std::fs::read(tree.root().join(".bashrc")).unwrap(),
             b"handwritten\n"
         );
 
-        let staged = tracked("home/.vimrc")
-            .current_dir(tree.root())
-            .output()
-            .unwrap();
+        let staged = tracked(".vimrc").current_dir(tree.root()).output().unwrap();
         assert_eq!(staged.stdout, b"set number\n");
-        assert!(!tree.root().join("home/.vimrc").exists());
+        assert!(!tree.root().join(".vimrc").exists());
     }
 
     #[test]
@@ -515,7 +510,7 @@ mod tests {
             None,
             None,
         );
-        let relative = Path::new("home/.netrc");
+        let relative = Path::new(".netrc");
 
         let (contents, mode) = expected(&Config::default(), relative, &output).unwrap();
         assert_eq!(contents, b"machine example\n");
@@ -527,11 +522,25 @@ mod tests {
     }
 
     #[test]
+    fn generated_content_falls_back_to_the_mode_of_the_rules() {
+        let config = lua::from_source(r#"ld.rules({ match = ".netrc", mode = "0640" })"#).unwrap();
+        let output = Output::new(
+            PathBuf::from("/home/u/.netrc"),
+            Content::Text("machine example\n".to_string()),
+            None,
+            None,
+        );
+
+        let (_, mode) = expected(&config, Path::new(".netrc"), &output).unwrap();
+        assert_eq!(mode, Some(0o640));
+    }
+
+    #[test]
     fn a_drifted_generated_file_is_staged_on_both_sides() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
+        let dir = repo.join(".zshrc.luadot");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::create_dir_all(&home).unwrap();
         std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
@@ -548,7 +557,7 @@ mod tests {
         let drifted = generated_items(&Config::default(), &home, &produced).unwrap();
 
         assert_eq!(drifted.len(), 1);
-        assert_eq!(drifted[0].relative, Path::new("home/.zshrc"));
+        assert_eq!(drifted[0].relative, Path::new(".zshrc"));
         assert_eq!(drifted[0].contents, b"generated\n");
     }
 }

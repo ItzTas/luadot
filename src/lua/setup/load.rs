@@ -249,7 +249,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(dir, PathBuf::from("/data/repo/home/.config/luadot/setup"));
+        assert_eq!(dir, PathBuf::from("/data/repo/.config/luadot/setup"));
     }
 
     #[test]

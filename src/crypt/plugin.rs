@@ -64,6 +64,17 @@ pub fn for_identity(
     Ok(())
 }
 
+pub fn plugged(identity: Option<&Path>) -> bool {
+    let Some(identity) = identity else {
+        return false;
+    };
+    let Ok(contents) = std::fs::read_to_string(identity) else {
+        return false;
+    };
+
+    !from_identity(&contents).is_empty()
+}
+
 fn require(command: &str, name: &str, what: &str) -> Result<()> {
     if seen(&CHECKED, name) {
         return Ok(());

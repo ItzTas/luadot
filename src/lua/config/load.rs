@@ -13,7 +13,10 @@ use crate::state::{self, Classes};
 use crate::utils;
 
 pub fn load_config() -> Result<Shared> {
-    load_from(&config_path()?)
+    let shared = load_from(&config_path()?)?;
+    utils::started(&shared)?;
+
+    Ok(shared)
 }
 
 #[cfg(test)]

@@ -31,44 +31,19 @@ pub fn function(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
-    use std::process::Command;
 
-    use tempfile::TempDir;
-
+    use super::super::super::fixture;
     use super::super::super::path::Paths;
+    use super::super::constants::NAMESPACE;
     use super::super::table::table;
-    use crate::lua::runtime::runtime;
+    use crate::git::fixture::repository;
 
     fn eval(paths: &Paths, source: &str) -> mlua::Result<String> {
-        let lua = runtime().unwrap();
-        lua.globals()
-            .set("git", table(&lua, paths).unwrap())
-            .unwrap();
-
-        lua.load(source).eval()
+        fixture::eval(NAMESPACE, |lua| table(lua, paths), source)
     }
 
     fn paths(repo: Option<&Path>) -> Paths {
         Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot")).with_repo(repo)
-    }
-
-    fn repository() -> TempDir {
-        let repo = tempfile::tempdir().unwrap();
-
-        for args in [
-            vec!["init", "--quiet"],
-            vec!["config", "user.email", "test@luadot"],
-            vec!["config", "user.name", "luadot"],
-        ] {
-            let status = Command::new("git")
-                .current_dir(repo.path())
-                .args(args)
-                .status()
-                .unwrap();
-            assert!(status.success());
-        }
-
-        repo
     }
 
     #[test]

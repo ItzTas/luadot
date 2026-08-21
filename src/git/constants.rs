@@ -33,3 +33,26 @@ pub const SET_UPSTREAM: [&str; 3] = ["--set-upstream", "origin", "HEAD"];
 pub const MESSAGE: &str = "sync";
 
 pub const MESSAGE_FROM: &str = "sync from";
+
+pub const LFS_PROGRAM: &str = "git-lfs";
+
+pub const LFS_VERSION: &str = "version";
+
+pub const LFS_INSTALL: [&str; 3] = ["lfs", "install", "--local"];
+
+pub const ATTRIBUTES_FILE: &str = ".gitattributes";
+
+pub const MARKER_START: &str = "# luadot:lfs";
+
+pub const MARKER_END: &str = "# /luadot:lfs";
+
+pub const TRACKED: &str = "filter=lfs diff=lfs merge=lfs -text";
+
+pub const UNTRACKED: &str = "-filter -diff -merge text";
+
+pub const LFS_FILTERS: [&str; 4] = [
+    "filter.lfs.clean=git-lfs clean -- %f",
+    "filter.lfs.smudge=git-lfs smudge -- %f",
+    "filter.lfs.process=git-lfs filter-process",
+    "filter.lfs.required=true",
+];
