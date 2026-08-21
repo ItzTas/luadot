@@ -13,8 +13,8 @@ mod template;
 
 pub use bootstrap::{bootstrap_path, run_bootstrap};
 pub use config::{
-    Call, Class, Config, Custom, Diff, DiffCounts, DiffFile, DiffState, Matcher, Report, Rule, Shared,
-    StatusCounts, StatusFile, Tool, config_path, load_config,
+    Call, Class, Config, Custom, Diff, DiffCounts, DiffFile, DiffState, Matcher, Report, Rule,
+    Shared, StatusCounts, StatusFile, Tool, config_path, load_config,
 };
 #[cfg(test)]
 pub use config::{from_classes, from_source};

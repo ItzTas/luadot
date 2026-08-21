@@ -50,7 +50,6 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         home,
         repo,
     } = utils::workspace("rm")?;
-    let config = utils::configured("rm", &shared)?;
 
     let entries = plan(&home, &repo, &args.paths)?;
     if entries.is_empty() {
@@ -63,28 +62,34 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         return foresee(&home, &repo, &entries, &classes, &shared);
     }
 
-    let lock = config.crypt_lock();
-    let mut identity = config.crypt_identity(&home);
+    let (lock, mut identity) = {
+        let config = utils::configured("rm", &shared)?;
+        (config.crypt_lock(), config.crypt_identity(&home))
+    };
 
     if !args.yes && !confirmed(&repo, &entries)? {
         output::warn("aborted");
         return Ok(());
     }
 
-    let mut backup = match config.backup() {
-        true => Some(Backup::open(
-            "rm",
-            &home,
-            config.backup_dir(),
-            config.retention(),
-        )?),
-        false => None,
+    let mut backup = {
+        let config = utils::configured("rm", &shared)?;
+        match config.backup() {
+            true => Some(Backup::open(
+                "rm",
+                &home,
+                config.backup_dir(),
+                config.retention(),
+            )?),
+            false => None,
+        }
     };
 
     let mut counts = Counts::default();
     for entry in &entries {
         let detached = match entry {
             Entry::File(file) => {
+                let config = utils::configured("rm", &shared)?;
                 vec![detach_file(
                     &config,
                     lock,
@@ -102,7 +107,10 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
     let removed = removed(&entries);
     git::unstage("rm", &repo, &removed)?;
 
-    let automatic = utils::automatic(&config, &repo, &removed);
+    let automatic = {
+        let config = utils::configured("rm", &shared)?;
+        utils::automatic(&config, &repo, &removed)
+    };
     git::auto("rm", &repo, automatic.commits, automatic.pushes)?;
 
     output::note(summary("stopped managing", &entries, &counts));

@@ -3,15 +3,13 @@ use mlua::{Function, Lua, Value};
 use super::super::constants::API;
 use super::super::parse::external;
 use super::constants::{GET, NAMESPACE};
-use crate::state::Classes;
+use super::values::current;
 
-pub fn function(lua: &Lua, classes: &Classes) -> mlua::Result<Function> {
-    let classes = classes.clone();
-
-    lua.create_function(move |_, value: Value| {
+pub fn function(lua: &Lua) -> mlua::Result<Function> {
+    lua.create_function(move |lua, value: Value| {
         let name = name(&value)?;
 
-        Ok(classes.get(&name).map(str::to_string))
+        Ok(current(lua).get(&name).map(str::to_string))
     })
 }
 

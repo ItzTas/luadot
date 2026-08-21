@@ -226,6 +226,70 @@ fn sync_without_a_git_repository_says_how_to_get_one() {
 }
 
 #[test]
+fn a_class_a_template_declares_is_answered_from_the_state_or_asked_for() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(
+        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        r#"
+        ld.class({ name = "editor", choices = { "nvim", "helix" } })
+        return "EDITOR=" .. ld.class.get("editor") .. "\n"
+        "#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args(["status", "--templates"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("luadot class set editor"));
+
+    write(
+        &home.join(".local/share/luadot/state.json"),
+        &format!(
+            r#"{{"repo":{:?},"classes":{{"editor":"nvim"}}}}"#,
+            repo.display()
+        ),
+    );
+
+    luadot(&home)
+        .args(["status", "--templates"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(".zshrc"));
+}
+
+#[test]
+fn a_setup_the_configuration_runs_overwrites_what_the_configuration_set() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join("home/.bashrc"), "managed\n");
+    write(
+        &repo.join("home/.config/luadot/setup/dots.lua"),
+        r#"ld.opt.link("symbolic")"#,
+    );
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        ld.opt.link("hard")
+        ld.setup("dots")
+        "#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+
+    assert!(
+        std::fs::symlink_metadata(home.join(".bashrc"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+}
+
+#[test]
 fn a_file_the_configuration_writes_waits_for_a_run_that_is_not_dry() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -238,7 +302,10 @@ fn a_file_the_configuration_writes_waits_for_a_run_that_is_not_dry() {
     );
     write_state(&home, &repo);
 
-    luadot(&home).args(["apply", "--dry-run"]).assert().success();
+    luadot(&home)
+        .args(["apply", "--dry-run"])
+        .assert()
+        .success();
     assert!(!generated.exists());
 
     luadot(&home).arg("apply").assert().success();
@@ -1586,4 +1653,61 @@ fn setup_lists_the_names_the_repository_declares() {
         .assert()
         .success()
         .stdout(predicate::str::diff("packages\nshell\n"));
+}
+
+#[test]
+fn every_command_that_resolves_a_template_lets_it_reach_the_configuration() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(
+        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        r#"
+        ld.opt.conflict("skip")
+        return "generated\n"
+        "#,
+    );
+    write_state(&home, &repo);
+
+    let zshrc = home.join(".zshrc");
+    let removed = zshrc.to_str().unwrap();
+
+    for args in [
+        vec!["status", "--templates"],
+        vec!["diff", "--templates"],
+        vec!["tmpl", "alt", "--dry-run"],
+        vec!["rm", "--dry-run", "--yes", removed],
+    ] {
+        let out = luadot(&home).args(&args).assert().success();
+        let printed = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+
+        assert!(
+            !printed.contains("already being changed"),
+            "{args:?} kept the configuration locked: {printed}"
+        );
+    }
+}
+
+#[test]
+fn an_option_a_template_sets_reaches_the_file_that_template_produces() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(
+        &repo.join("home/.zshrc.luadot/luadot.lua"),
+        r#"
+        ld.opt.conflict("skip")
+        return "generated\n"
+        "#,
+    );
+    write(&home.join(".zshrc"), "handwritten\n");
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args(["tmpl", "alt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 skipped"));
+
+    assert_eq!(read(&home.join(".zshrc")), "handwritten\n");
 }

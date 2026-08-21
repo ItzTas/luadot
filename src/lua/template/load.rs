@@ -5,11 +5,11 @@ use mlua::Value;
 
 use super::constants::TEMPLATE_FILE;
 use crate::files::template_target;
+use crate::lua::Shared;
 use crate::lua::constants::MODULES_DIR;
 use crate::lua::ld::{API, Paths, Surface, install, output, share};
 use crate::lua::runtime::{add_module_path, runtime};
 use crate::lua::scope::{Output, Scope};
-use crate::lua::Shared;
 use crate::state::Classes;
 use crate::utils;
 
@@ -325,7 +325,8 @@ mod tests {
             &dir,
             &Classes::default(),
             &configuration(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(outputs[0].dest(), home.join(".zshrc"));
         assert_eq!(outputs[0].content(), &Content::File(dir.join("laptop.zsh")));

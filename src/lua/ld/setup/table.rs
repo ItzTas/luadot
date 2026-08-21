@@ -1,13 +1,13 @@
 use mlua::{Function, Lua, Table};
 
 use super::super::class;
-use crate::lua::Config;
 use super::super::constants::API;
 use super::super::path::Paths;
 use super::super::repo::require;
 use super::super::surface;
 use super::constants::{ALL, LIST, NAMESPACE};
 use super::{all, list, scripts};
+use crate::lua::Config;
 
 pub fn table(lua: &Lua, paths: &Paths) -> mlua::Result<Table> {
     let setup = lua.create_table()?;

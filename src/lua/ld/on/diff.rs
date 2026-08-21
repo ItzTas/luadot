@@ -2,7 +2,6 @@ use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::API;
 use super::super::parse::external;
-use super::super::surface::{self, Surface};
 use super::constants::{ARGS, DIFF, DIFF_KEYS, NAMESPACE, TOOL};
 use super::parse::{known, report};
 use crate::lua::{Config, Diff, Tool};
@@ -10,10 +9,6 @@ use crate::lua::{Config, Diff, Tool};
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, options: Table| {
         let call = format!("{NAMESPACE}.{DIFF}");
-        if surface::inert(lua, &call, Surface::Config) {
-            return Ok(());
-        }
-
         let diff = diff(&call, &options)?;
         Config::building(lua, |config| config.set_diff(diff))?;
 

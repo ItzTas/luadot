@@ -1,21 +1,39 @@
 use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::API;
+use super::super::parse::chain;
 use super::super::parse::external;
-use super::super::surface::{self, Surface};
+use super::super::surface::Surface;
 use super::constants::{CHOICES, DEFAULT, NAME, NAMESPACE, PROMPT};
+use super::values::remember;
 use crate::lua::{Class, Config};
+use crate::state;
+use crate::utils;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, (_, value): (Table, Value)| {
-        if surface::inert(lua, NAMESPACE, Surface::Config) {
-            return Ok(());
+        let class = class(&value)?;
+        if Surface::current(lua) == Some(Surface::Config) {
+            return Config::building(lua, |config| config.add_class(class));
         }
 
-        let class = class(&value)?;
-        Config::building(lua, |config| config.add_class(class))?;
-        Ok(())
+        answer(lua, &class)
     })
+}
+
+fn answer(lua: &Lua, class: &Class) -> mlua::Result<()> {
+    let command = format!("`{API}.{NAMESPACE}`");
+    let mut state = state::load().map_err(chain)?;
+    if state.class(class.name()).is_some() {
+        return Ok(());
+    }
+
+    let value = utils::ask(&command, class, None).map_err(chain)?;
+    state.set_class(class.name(), &value);
+    state::save(&state).map_err(chain)?;
+    remember(lua, class.name(), &value);
+
+    Ok(())
 }
 
 fn class(value: &Value) -> mlua::Result<Class> {

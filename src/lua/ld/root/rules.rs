@@ -2,16 +2,10 @@ use mlua::{Function, Lua, Table};
 
 use super::super::constants::API;
 use super::super::parse::{conflict_policy, external, link_mode, matcher, mode_bits, owner_name};
-use super::super::surface::{self, Surface};
-use super::constants::RULES;
 use crate::lua::{Config, Rule};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, list: Table| {
-        if surface::inert(lua, RULES, Surface::Config) {
-            return Ok(());
-        }
-
         let rules = rules(&list)?;
         Config::building(lua, |config| config.add_rules(rules))?;
         Ok(())

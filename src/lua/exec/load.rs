@@ -77,7 +77,15 @@ fn run_file(
     let modules = modules(path);
     let paths = paths.clone().with_dir(&modules);
 
-    run_script(command, Surface::Exec, path, &[&modules], &paths, classes, shared)
+    run_script(
+        command,
+        Surface::Exec,
+        path,
+        &[&modules],
+        &paths,
+        classes,
+        shared,
+    )
 }
 
 fn modules(path: &Path) -> PathBuf {

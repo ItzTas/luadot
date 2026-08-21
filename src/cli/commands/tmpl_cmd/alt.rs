@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::files::{self, ConflictPolicy, Entry, SyncOutcome};
-use crate::lua::{Config, Shared, Content, Output};
+use crate::lua::{Config, Content, Output, Shared};
 use crate::output;
 use crate::state::{self, Classes};
 use crate::utils::{self, Run, Workspace};
@@ -51,6 +51,7 @@ pub fn alt(args: AltArgs) -> Result<()> {
     }
 
     let mut run = Run::open("tmpl alt", args.dry_run, &home, &config)?;
+    drop(config);
 
     let mut outcomes: Vec<SyncOutcome> = Vec::new();
     for entry in &templates {

@@ -24,8 +24,8 @@ pub fn workspace(command: &str) -> Result<Workspace> {
 
 pub fn configured<'a>(command: &str, config: &'a Shared) -> Result<MutexGuard<'a, Config>> {
     config
-        .lock()
-        .map_err(|_| anyhow!("{command}: the configuration is still being changed"))
+        .try_lock()
+        .map_err(|_| anyhow!("{command}: the configuration is still being read"))
 }
 
 pub fn managed_root(

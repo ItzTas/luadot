@@ -3,12 +3,12 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::load::destination;
+use crate::lua::Shared;
 use crate::lua::constants::MODULES_DIR;
 use crate::lua::embed;
 use crate::lua::ld::{API, Paths, Surface, install, share};
 use crate::lua::runtime::{add_module_path, environment, runtime};
 use crate::lua::scope::{Content, Output};
-use crate::lua::Shared;
 use crate::state::Classes;
 use crate::utils;
 

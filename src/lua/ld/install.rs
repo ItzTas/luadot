@@ -40,7 +40,7 @@ pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) ->
     for (name, namespace) in namespaces {
         ld.set(name, namespace(lua)?)?;
     }
-    ld.set(class::NAMESPACE, class::table(lua, classes)?)?;
+    ld.set(class::NAMESPACE, class::table(lua)?)?;
     ld.set(git::NAMESPACE, git::table(lua, paths)?)?;
     ld.set(path::NAMESPACE, path::table(lua, paths)?)?;
     ld.set(setup::NAMESPACE, setup::table(lua, paths)?)?;
@@ -135,6 +135,36 @@ mod tests {
         exec(Surface::Setup, EVERY_CALL);
     }
 
+    fn undocumented(table: &Table, prefix: &str, found: &mut Vec<String>) {
+        for pair in table.clone().pairs::<String, mlua::Value>() {
+            let (name, value) = pair.unwrap();
+            let path = match prefix.is_empty() {
+                true => name,
+                false => format!("{prefix}.{name}"),
+            };
+
+            if let Some(table) = value.as_table() {
+                undocumented(table, &path, found);
+                continue;
+            }
+
+            if value.is_function() && !crate::cli::documented(&path) {
+                found.push(path);
+            }
+        }
+    }
+
+    #[test]
+    fn every_installed_call_is_written_down_in_the_documentation() {
+        let lua = runtime().unwrap();
+        install(&lua, Surface::Bootstrap, &paths(), &Classes::default()).unwrap();
+
+        let mut found = Vec::new();
+        undocumented(&lua.globals().get::<Table>(API).unwrap(), "", &mut found);
+
+        assert!(found.is_empty(), "undocumented: {found:?}");
+    }
+
     #[test]
     fn the_paths_of_the_run_are_the_ones_installed() {
         exec(
@@ -149,25 +179,27 @@ mod tests {
     }
 
     #[test]
-    fn a_configuration_call_away_from_the_configuration_does_nothing() {
-        exec(
-            Surface::Bootstrap,
+    fn a_configuration_call_outside_the_configuration_still_lands() {
+        let lua = runtime().unwrap();
+        install(&lua, Surface::Bootstrap, &paths(), &Classes::default()).unwrap();
+
+        lua.load(
             r#"
-            ld.opt.pkg_warn(false)
-            ld.rules({ { match = ".ssh/**", link = "symbolic" } })
-            ld.rules({ { match = "*.swp", ignore = true } })
             ld.opt.link("symbolic")
-            ld.opt({ link = "symbolic" })
-            ld.opt.conflict("skip")
-            ld.class({ name = "form-factor" })
-            ld.crypt.backend("gpg")
-            ld.crypt.lock({ recipients = "age1example", identity = "~/.keys/age.txt" })
-            ld.crypt.lock("passphrase")
-            ld.crypt({ backend = "age" })
-            ld.on.diff({ summary = false })
-            ld.on.status({ summary = false })
+            ld.rules({ { match = "*.swp", ignore = true } })
             "#,
+        )
+        .exec()
+        .unwrap();
+
+        let shared = Config::shared(&lua).unwrap();
+        let config = shared.lock().unwrap();
+
+        assert_eq!(
+            config.link_mode(Path::new(".bashrc")),
+            crate::files::LinkMode::Symbolic
         );
+        assert!(config.is_ignored(Path::new(".vimrc.swp")));
     }
 
     #[test]

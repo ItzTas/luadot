@@ -2,16 +2,11 @@ use mlua::{Lua, Value};
 
 use super::super::constants::API;
 use super::super::parse::external;
-use super::super::surface::{self, Surface};
 use super::super::value::span;
 use super::constants::{BACKUP, BACKUP_AGE, NAMESPACE, SPAN_KIND};
 use crate::lua::Config;
 
 pub fn set(lua: &Lua, value: Value) -> mlua::Result<()> {
-    if surface::inert(lua, &format!("{NAMESPACE}.{BACKUP_AGE}"), Surface::Config) {
-        return Ok(());
-    }
-
     let age = span(NAMESPACE, &value, BACKUP_AGE, SPAN_KIND)?;
     if age == 0 {
         return Err(external(format!(

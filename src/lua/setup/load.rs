@@ -162,7 +162,15 @@ fn run_path(
     }
     let roots: Vec<&Path> = own.into_iter().chain([modules]).collect();
 
-    run_script(command, Surface::Setup, path, &roots, &paths, classes, shared)
+    run_script(
+        command,
+        Surface::Setup,
+        path,
+        &roots,
+        &paths,
+        classes,
+        shared,
+    )
 }
 
 fn run_sh(command: &str, path: &Path) -> Result<()> {
@@ -314,7 +322,8 @@ mod tests {
             "ufw",
             &Classes::default(),
             &configuration(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(
             std::fs::read_to_string(repo.join("modules.txt")).unwrap(),
@@ -365,7 +374,8 @@ mod tests {
             "ufw",
             &Classes::default(),
             &configuration(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(
             std::fs::read_to_string(repo.join("lua-ran.txt")).unwrap(),
@@ -394,7 +404,8 @@ mod tests {
             "ufw",
             &Classes::default(),
             &configuration(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "done");
     }
@@ -408,14 +419,15 @@ mod tests {
         let err = format!(
             "{:#}",
             run_one(
-            "setup",
-            &home,
-            &config,
-            &repo,
-            "ufw",
-            &Classes::default(),
-            &configuration(),
-        ).unwrap_err()
+                "setup",
+                &home,
+                &config,
+                &repo,
+                "ufw",
+                &Classes::default(),
+                &configuration(),
+            )
+            .unwrap_err()
         );
 
         assert!(err.contains("exited with status 5"));
@@ -435,8 +447,8 @@ mod tests {
             &Classes::default(),
             &configuration(),
         )
-            .unwrap_err()
-            .to_string();
+        .unwrap_err()
+        .to_string();
 
         assert!(err.contains("setup: no setup named `ufw`"));
     }
@@ -463,7 +475,8 @@ mod tests {
             "outer",
             &Classes::default(),
             &configuration(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "nested");
     }
@@ -477,14 +490,15 @@ mod tests {
         let err = format!(
             "{:#}",
             run_one(
-            "setup",
-            &home,
-            &config,
-            &repo,
-            "loop",
-            &Classes::default(),
-            &configuration(),
-        ).unwrap_err()
+                "setup",
+                &home,
+                &config,
+                &repo,
+                "loop",
+                &Classes::default(),
+                &configuration(),
+            )
+            .unwrap_err()
         );
 
         assert!(err.contains("already running"));
