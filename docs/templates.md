@@ -76,9 +76,7 @@ ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 | `ld.alt.glob(pattern)` | a pattern | The names of the files it matches, sorted, named the way `ld.alt.read` takes them. |
 | `ld.alt.json(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. |
 
-The rest of the [ld interface](ld.md) is there too: `ld.sys`, `ld.class.get`,
-`ld.cmd`, `ld.git`, `ld.argv`, `ld.print`, `ld.path` (whose `dir` is the
-template's own directory).
+The rest of the [ld interface](ld.md) is there too.
 
 A declared file carries what it needs and nothing else:
 

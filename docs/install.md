@@ -16,9 +16,6 @@ curl -fLO https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/p
 sudo apt install ./luadot_0.2.0-1_amd64.deb
 ```
 
-There is no apt repository behind it: `apt upgrade` will not move it, the next
-version is another download.
-
 Nix, from the flake in the repository:
 
 ```
