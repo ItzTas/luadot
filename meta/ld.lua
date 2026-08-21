@@ -85,7 +85,7 @@
 ---@field mode? string Three or four octal digits, the permission bits a matching file is placed with, and put back when they drift. An encrypted file carries `600` without it.
 ---@field owner? string `"user"` or `"user:group"`, who owns a matching file once placed, set through `chown`.
 ---@field encrypt? boolean Whether `add` stores the matching files encrypted.
----@field lfs? boolean Whether the matching files are stored in Git LFS. Needs `match`, since `.gitattributes` has no regular expressions, and does not go with `encrypt`. luadot writes the patterns into the repository's `.gitattributes`, between the `# luadot:lfs` markers.
+---@field lfs? boolean Whether the matching files are stored in Git LFS. Needs `match`, since git attributes have no regular expressions, and does not go with `encrypt`. luadot writes the patterns into the repository's `.local/share/luadot/git/attributes`, between the `# luadot:lfs` markers, and copies that file into `.git/info/attributes`.
 ---@field autocommit? boolean Whether `add` and `rm` commit on their own once one of those files is staged.
 ---@field autopush? boolean Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back.
 
@@ -200,7 +200,7 @@
 ---@field backup_dir? string Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`.
 ---@field backup_keep? integer How many backups to keep, one or more; the oldest ones are dropped once there are more. Defaults to keeping every one of them.
 ---@field conflict? ld.Conflict Default answer when `apply` finds a differing file already on the system.
----@field lfs? boolean Whether luadot installs the Git LFS filters and writes the `.gitattributes` the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
+---@field lfs? boolean Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
 ---@field link? ld.LinkMode Default strategy used to link a managed file.
 ---@field passphrase_warn? boolean Whether passphrase mode says it is weaker than keys. Defaults to `true`.
 ---@field pkg_warn? boolean Whether a call is warned about where it is slow or has no effect. Defaults to `true`.
@@ -452,7 +452,7 @@ function ld.opt.backup_keep(count) end
 ---@param policy ld.Conflict
 function ld.opt.conflict(policy) end
 
----Whether luadot installs the Git LFS filters and writes the `.gitattributes` the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
+---Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
 ---@param enabled boolean
 function ld.opt.lfs(enabled) end
 

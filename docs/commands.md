@@ -24,7 +24,7 @@
 | `luadot git <args>...` | Runs git inside the repository. |
 | `luadot push [args]...` | Shorthand for `luadot git push`. |
 | `luadot doc <call>`, `luadot doc -l` | Describes a call of the `ld` interface, `-l` names every one. |
-| `luadot meta [install [dir]]` | Prints the editor definitions of `ld`; `install` writes them into the data directory and a `.luarc.json` loading them into the configuration directory and the repository, or into one directory. |
+| `luadot meta [install [dir]]` | Prints the editor definitions of `ld`; `install` writes them into the data directory and a `.luarc.json` loading them into the configuration directory, or into one directory. |
 | `luadot completions <shell>` | Prints a completion script for that shell. |
 | `luadot man` | Prints the manual page, the one the packages install. |
 

@@ -12,38 +12,56 @@ add: cannot manage /etc/pacman.conf: outside your home directory /home/u
 
 ## The repository's own files
 
-A few files at the top level belong to the repository rather than to your
-home directory, and are never applied: `.git/`, `.gitignore`,
-`.gitattributes`, `.gitmodules`, and the `.luarc.json` that `init`, `clone`
-and `meta install` write. Anything else at the top level is a dotfile, so a
-README or a license needs an `ignore` rule:
+The mirror goes all the way to the top, so the rules git needs for the
+repository do not sit there. They live in `~/.local/share/luadot/git/`, a
+directory managed like any other: `ignore` holds what a `.gitignore` would,
+`attributes` what a `.gitattributes` would, and `luadot add` on either puts it
+in the repository like any dotfile. Every command copies the repository's copy
+of each into `.git/info/exclude` and `.git/info/attributes`, between a
+`# luadot` and a `# /luadot` line, where git reads them for that clone with no
+file in the tree; whatever you wrote in those two files outside the markers
+stays. `add` keeps the `# luadot:lfs` block of `attributes` in step with the
+rules carrying `lfs = true` and stages it; the lines outside that block are
+yours too.
+
+`clone` copies both before anything else and pulls the LFS contents the
+attributes name, so a fresh clone needs nothing more. A clone made with plain
+`git` reads neither until a luadot command runs in it.
+
+A `.gitignore` or `.gitattributes` at the top of the repository is a dotfile
+like any other and lands in `~`; git reads it for the repository all the same,
+so keep the repository's rules in `~/.local/share/luadot/git/` instead.
+`.gitmodules` has no other place: git reads it at the top only, so a
+repository with submodules keeps it there and `apply` puts a copy in `~`,
+where git ignores it. Anything else at the top level, a README or a license,
+needs an `ignore` rule:
 
 ```lua
 ld.rules({ match = { "README.md", "LICENSE" }, ignore = true })
 ```
 
-`.gitattributes` is partly luadot's own: `add` keeps its `# luadot:lfs` block
-in step with the rules carrying `lfs = true`, and stages it along with what it
-mirrored. Lines outside that block are yours. See
-[the ld interface](ld.md#git-lfs).
+Only `.git/` stays out, whatever the rules say. luadot writes nothing of its
+own at the top level: the `.luarc.json` that `init`, `clone` and `meta
+install` produce goes to `~/.config/luadot/`, since one in the repository
+would land in `~` and make your whole home directory a Lua workspace.
 
 ## What git refuses to keep
 
-`add` reads the repository's `.gitignore` before it writes anything: a file
+`add` reads the repository's ignore rules before it writes anything: a file
 git would never track would sit outside every commit and be gone on the next
 clone. A path named on the command line that lands on an excluded destination
 stops the run:
 
 ```
 $ luadot add ~/.cache
-add: /home/u/.cache lands on .cache, which the repository's .gitignore excludes
+add: /home/u/.cache lands on .cache, which the repository's ignore rules exclude
 ```
 
 Walking a directory is quieter: the excluded files are left out and the rest
 is added, so `luadot add ~/.config/nvim` brings the configuration in and
-leaves the logs behind. Nested `.gitignore` files, negated patterns,
-`.git/info/exclude` and the global excludes file all count, exactly as git
-reads them; a repository git does not track excludes nothing.
+leaves the logs behind. The repository's `ignore`, nested `.gitignore` files,
+negated patterns, `.git/info/exclude` and the global excludes file all count,
+exactly as git reads them; a repository git does not track excludes nothing.
 
 ## Mode and owner
 
