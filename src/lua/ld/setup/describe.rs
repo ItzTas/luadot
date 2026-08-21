@@ -1,0 +1,17 @@
+use tealr::TypeWalker;
+
+use super::super::signature::{Collect, Describe, record};
+use super::constants::{
+    CALL, DOC, NAMESPACE_TYPENAME, OPTIONS_DOC, OPTIONS_FIELDS, OPTIONS_TYPENAME, SIGNATURES,
+};
+
+pub fn describe(walker: TypeWalker) -> TypeWalker {
+    walker
+        .instance(NAMESPACE_TYPENAME, DOC)
+        .record(
+            record(NAMESPACE_TYPENAME, DOC)
+                .functions(&SIGNATURES)
+                .call(&CALL),
+        )
+        .record(record(OPTIONS_TYPENAME, OPTIONS_DOC).fields(&OPTIONS_FIELDS))
+}

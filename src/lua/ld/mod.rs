@@ -17,13 +17,23 @@ mod regex;
 mod repo;
 mod root;
 mod setup;
+#[cfg(feature = "meta")]
+mod signature;
 mod surface;
 mod sys;
 mod table;
 mod value;
+#[cfg(feature = "meta")]
+mod walker;
 
 pub use alt::output;
 pub use constants::API;
+#[cfg(feature = "meta")]
+pub use constants::{CALL_METHOD, NIL};
 pub use install::{install, share};
 pub use path::Paths;
+#[cfg(all(test, feature = "meta"))]
+pub use signature::{Kind, Param};
 pub use surface::Surface;
+#[cfg(feature = "meta")]
+pub use walker::walker;
