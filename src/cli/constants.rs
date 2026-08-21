@@ -37,9 +37,6 @@ pub const MANAGED_FILES: &str = "managed";
 
 pub const GENERATED_FILES: &str = "generated";
 
-pub const META_NO_REPOSITORY: &str =
-    "no repository set; only the configuration directory gets the definitions";
-
 pub const DOC_PAGES: [(&str, &str, &str); 3] = [
     (
         "docs/ld.md",
