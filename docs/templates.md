@@ -74,7 +74,7 @@ ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 | `ld.alt.read(name)` | a path | What that file holds, as a string, never run. |
 | `ld.alt.exists(name)` | a path | Whether that file is there. |
 | `ld.alt.glob(pattern)` | a pattern | The names of the files it matches, sorted, named the way `ld.alt.read` takes them. |
-| `ld.alt.json(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. |
+| `ld.alt.json(value)` | a table or a scalar | That value as JSON, indented, with sorted keys; the same call as `ld.json.encode`. |
 
 The rest of the [ld interface](ld.md) is there too.
 

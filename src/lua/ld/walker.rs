@@ -6,13 +6,14 @@ use super::constants::{
 };
 use super::signature::Collect;
 use super::{
-    alt, argv, class, cmd, crypt, git, on, opt, path, pkg, print, regex, root, rtp, setup, sys,
+    alt, argv, class, cmd, crypt, git, json, on, opt, path, pkg, print, regex, root, rtp, setup,
+    sys,
 };
 
 type Describer = fn(TypeWalker) -> TypeWalker;
 
 pub fn walker() -> TypeWalker {
-    let describers: [Describer; 16] = [
+    let describers: [Describer; 17] = [
         root::describe,
         alt::describe,
         argv::describe,
@@ -20,6 +21,7 @@ pub fn walker() -> TypeWalker {
         cmd::describe,
         crypt::describe,
         git::describe,
+        json::describe,
         on::describe,
         opt::describe,
         path::describe,
@@ -62,7 +64,8 @@ mod tests {
     use tealr::{KindOfType, RecordGenerator, Type, TypeGenerator};
 
     use super::super::constants::{
-        API, BOOLEAN, CALL_METHOD, INTEGER, INTEGER_INDEX, NUMBER, STRING, STRING_INDEX,
+        API, BOOLEAN, CALL_METHOD, INTEGER, INTEGER_INDEX, LIGHT_USERDATA, NUMBER, STRING,
+        STRING_INDEX,
     };
     use super::super::{Paths, Surface, install};
     use super::*;
@@ -161,7 +164,9 @@ mod tests {
             }
             Type::Function(_) => (Shape::Function, false),
             Type::Single(single) => match single.name.0.as_ref() {
-                STRING | BOOLEAN => (Shape::Value(single.name.0.to_string()), false),
+                STRING | BOOLEAN | LIGHT_USERDATA => {
+                    (Shape::Value(single.name.0.to_string()), false)
+                }
                 INTEGER | NUMBER => (Shape::Value(NUMBER.to_string()), false),
                 _ => (plain, false),
             },

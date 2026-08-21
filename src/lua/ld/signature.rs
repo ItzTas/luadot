@@ -4,7 +4,7 @@ use tealr::{
     TypeGenerator, TypeWalker,
 };
 
-use super::constants::{ANY, BOOLEAN, FALSE, INTEGER, NIL, NUMBER, STRING, TABLE};
+use super::constants::{ANY, BOOLEAN, FALSE, INTEGER, LIGHT_USERDATA, NIL, NUMBER, STRING, TABLE};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Kind {
@@ -15,6 +15,7 @@ pub enum Kind {
     Table,
     Any,
     False,
+    LightUserData,
     Word(&'static str),
     Named(&'static str),
     List(&'static Kind),
@@ -63,6 +64,7 @@ impl Kind {
             Kind::Table => builtin(TABLE),
             Kind::Any => builtin(ANY),
             Kind::False => builtin(FALSE),
+            Kind::LightUserData => builtin(LIGHT_USERDATA),
             Kind::Word(word) => builtin(&format!("\"{word}\"")),
             Kind::Named(name) => named(name),
             Kind::List(item) => Type::Array(Box::new(item.to_type())),

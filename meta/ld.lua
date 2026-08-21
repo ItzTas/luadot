@@ -282,7 +282,7 @@ function ld.alt.exists(name) end
 ---@return string[]
 function ld.alt.glob(pattern) end
 
----That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both.
+---That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both. The same call as `ld.json.encode`.
 ---@param value any
 ---@return string
 function ld.alt.json(value) end
@@ -326,6 +326,21 @@ function ld.crypt.lock(lock) end
 ---@class ld.git
 ---@overload fun(...: string): string
 ld.git = {}
+
+---JSON in and out. A table is a list or a table of names, never both, and `null` has a value of its own, since `nil` cannot sit in a table.
+---@class ld.json
+---@field null lightuserdata What a JSON `null` decodes to, and what encodes back as one. `nil` encodes as `null` too, but cannot sit in a table.
+ld.json = {}
+
+---That value as JSON, indented, with sorted keys; `ld.alt.json` is the same call.
+---@param value any
+---@return string
+function ld.json.encode(value) end
+
+---The value the text holds: an object or a list as a table, a whole number as an integer, `null` as `ld.json.null`. A text that is not JSON stops the script.
+---@param text string
+---@return any
+function ld.json.decode(text) end
 
 ---One call per command, taking a table: functions to run `before` and `after` the command, and what `status` and `diff` print. Every function registered for a moment runs, in the order it was registered; what `status` and `diff` print is replaced by a later call, key by key. Every command is customized apart.
 ---@class ld.on

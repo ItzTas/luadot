@@ -4,7 +4,8 @@ use super::constants::API;
 use super::path::Paths;
 use super::surface::Surface;
 use super::{
-    alt, argv, class, cmd, crypt, git, on, opt, path, pkg, print, regex, root, rtp, setup, sys,
+    alt, argv, class, cmd, crypt, git, json, on, opt, path, pkg, print, regex, root, rtp, setup,
+    sys,
 };
 use std::sync::{Arc, Mutex};
 
@@ -15,11 +16,12 @@ use crate::state::Classes;
 type Namespace = fn(&Lua) -> mlua::Result<Table>;
 
 pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) -> mlua::Result<()> {
-    let namespaces: [(&str, Namespace); 11] = [
+    let namespaces: [(&str, Namespace); 12] = [
         (alt::NAMESPACE, alt::table),
         (argv::NAMESPACE, argv::table),
         (cmd::NAMESPACE, cmd::table),
         (crypt::NAMESPACE, crypt::table),
+        (json::NAMESPACE, json::table),
         (on::NAMESPACE, on::table),
         (opt::NAMESPACE, opt::table),
         (pkg::NAMESPACE, pkg::table),
@@ -78,6 +80,10 @@ mod tests {
         assert(type(getmetatable(ld.crypt).__call) == "function", "crypt is not callable")
         assert(type(ld.pkg.install) == "function", "pkg.install is missing")
         assert(type(ld.rtp.add) == "function", "rtp.add is missing")
+        for _, name in ipairs({ "encode", "decode" }) do
+          assert(type(ld.json[name]) == "function", "json." .. name .. " is missing")
+        end
+        assert(type(ld.json.null) == "userdata", "json.null is missing")
         for _, name in ipairs({ "list", "all" }) do
           assert(type(ld.setup[name]) == "function", "setup." .. name .. " is missing")
         end

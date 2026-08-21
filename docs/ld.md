@@ -713,6 +713,9 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.sys` | none | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
 | `ld.path` | none | `home`, `config`, `data`, `repo` and `dir`, where they exist. |
 | `ld.rtp.add(dir)` | a directory | Puts `<dir>/lua/` on the module path of this script and of every script the command runs after it, behind the configuration's own `lua/`. |
+| `ld.json.encode(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both. |
+| `ld.json.decode(text)` | a JSON text | The value the text holds: an object or a list as a table, a whole number as an integer, `null` as `ld.json.null`. |
+| `ld.json.null` | none | What a JSON `null` decodes to and encodes from, since `nil` cannot sit in a table. |
 | `ld.on.add(options)` | a table of `before` and `after` | Runs a function before and after `add`. |
 | `ld.on.apply(options)` | a table of `before` and `after` | Runs a function before and after `apply`. |
 | `ld.on.bootstrap(options)` | a table of `before` and `after` | Runs a function before and after `bootstrap`. |

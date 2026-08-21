@@ -9,6 +9,7 @@ mod exec;
 mod fixture;
 mod git;
 mod install;
+mod json;
 mod on;
 mod opt;
 mod parse;

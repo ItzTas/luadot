@@ -30,8 +30,6 @@ pub const CONTENT: &str = "content";
 pub const DEST_ALONE: &str =
     "needs a `dest`: only a template knows the file it stands for by itself";
 
-pub const JSON_DEPTH: usize = 64;
-
 #[cfg(feature = "meta")]
 pub const NAMESPACE_TYPENAME: &str = "ld.alt";
 
@@ -124,7 +122,7 @@ pub const SIGNATURES: [Signature; 8] = [
             kind: Kind::Any,
         }],
         returns: &[Kind::String],
-        doc: "That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both.",
+        doc: "That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both. The same call as `ld.json.encode`.",
     },
 ];
 
