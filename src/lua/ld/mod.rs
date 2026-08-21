@@ -7,6 +7,7 @@ mod crypt;
 mod exec;
 #[cfg(test)]
 mod fixture;
+mod fs;
 mod git;
 mod install;
 mod json;

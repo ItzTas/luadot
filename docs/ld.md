@@ -716,6 +716,13 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.json.encode(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both. |
 | `ld.json.decode(text)` | a JSON text | The value the text holds: an object or a list as a table, a whole number as an integer, `null` as `ld.json.null`. |
 | `ld.json.null` | none | What a JSON `null` decodes to and encodes from, since `nil` cannot sit in a table. |
+| `ld.fs.exists(path)` | a path | Whether something is there: a file, a directory, or a symlink whatever it points at. |
+| `ld.fs.is_dir(path)` | a path | Whether a directory is there. |
+| `ld.fs.mkdir(path)` | a path | Creates the directory and every one leading to it. |
+| `ld.fs.ls(path)` | a directory | The names inside it, sorted. |
+| `ld.fs.rm(path)` | a path | Removes a file, a symlink, or a directory with everything under it; `true` when something was there. |
+| `ld.fs.read(path)` | a path | What the file holds. |
+| `ld.fs.write(path, text)` | a path and a string | Writes the text over the file, creating the directories leading to it. |
 | `ld.on.add(options)` | a table of `before` and `after` | Runs a function before and after `add`. |
 | `ld.on.apply(options)` | a table of `before` and `after` | Runs a function before and after `apply`. |
 | `ld.on.bootstrap(options)` | a table of `before` and `after` | Runs a function before and after `bootstrap`. |

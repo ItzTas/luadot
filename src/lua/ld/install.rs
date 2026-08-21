@@ -4,8 +4,8 @@ use super::constants::API;
 use super::path::Paths;
 use super::surface::Surface;
 use super::{
-    alt, argv, class, cmd, crypt, git, json, on, opt, path, pkg, print, regex, root, rtp, setup,
-    sys,
+    alt, argv, class, cmd, crypt, fs, git, json, on, opt, path, pkg, print, regex, root, rtp,
+    setup, sys,
 };
 use std::sync::{Arc, Mutex};
 
@@ -16,11 +16,12 @@ use crate::state::Classes;
 type Namespace = fn(&Lua) -> mlua::Result<Table>;
 
 pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) -> mlua::Result<()> {
-    let namespaces: [(&str, Namespace); 12] = [
+    let namespaces: [(&str, Namespace); 13] = [
         (alt::NAMESPACE, alt::table),
         (argv::NAMESPACE, argv::table),
         (cmd::NAMESPACE, cmd::table),
         (crypt::NAMESPACE, crypt::table),
+        (fs::NAMESPACE, fs::table),
         (json::NAMESPACE, json::table),
         (on::NAMESPACE, on::table),
         (opt::NAMESPACE, opt::table),
@@ -84,6 +85,9 @@ mod tests {
           assert(type(ld.json[name]) == "function", "json." .. name .. " is missing")
         end
         assert(type(ld.json.null) == "userdata", "json.null is missing")
+        for _, name in ipairs({ "exists", "is_dir", "mkdir", "ls", "rm", "read", "write" }) do
+          assert(type(ld.fs[name]) == "function", "fs." .. name .. " is missing")
+        end
         for _, name in ipairs({ "list", "all" }) do
           assert(type(ld.setup[name]) == "function", "setup." .. name .. " is missing")
         end

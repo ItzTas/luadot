@@ -322,6 +322,44 @@ function ld.crypt.backend(name) end
 ---@param lock "passphrase"|ld.Keys
 function ld.crypt.lock(lock) end
 
+---The filesystem, with no directory of a template in the way: `~` and a relative path resolve against your home directory, an absolute one reaches anywhere. Nothing here takes a backup.
+---@class ld.fs
+ld.fs = {}
+
+---Whether something is there: a file, a directory, or a symlink whatever it points at.
+---@param path string
+---@return boolean
+function ld.fs.exists(path) end
+
+---Whether a directory is there, through a symlink too.
+---@param path string
+---@return boolean
+function ld.fs.is_dir(path) end
+
+---Creates the directory and every one leading to it; one already there is fine.
+---@param path string
+function ld.fs.mkdir(path) end
+
+---The names inside a directory, sorted, files and directories alike.
+---@param path string
+---@return string[]
+function ld.fs.ls(path) end
+
+---Removes a file, a symlink, or a directory with everything under it, and says whether something was there. Your home directory and what holds it are refused.
+---@param path string
+---@return boolean
+function ld.fs.rm(path) end
+
+---What the file holds.
+---@param path string
+---@return string
+function ld.fs.read(path) end
+
+---Writes the text over the file, creating the directories leading to it.
+---@param path string
+---@param text string
+function ld.fs.write(path, text) end
+
 ---Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
 ---@class ld.git
 ---@overload fun(...: string): string
