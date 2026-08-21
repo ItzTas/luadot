@@ -10,11 +10,11 @@ luadot: applied 12 file(s) (0 created, 1 replaced, 11 unchanged, 0 skipped)
 luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
 ```
 
-One directory per run, named after the millisecond it ran, holding the saved
-files under the same `home/` and `root/` layout the repository uses, so a
-replaced `/etc` file is saved and restored like any other. A symlink is kept
-as a symlink; nothing is written for a file that was created rather than
-replaced.
+One directory per run, named after the millisecond it ran, holding each saved
+file under its absolute path: `/home/u/.zshrc` is kept at
+`<run>/home/u/.zshrc`, and the repository entry `rm` deletes under the
+repository's own path, wherever it lives. A symlink is kept as a symlink;
+nothing is written for a file that was created rather than replaced.
 
 ## restore
 
@@ -29,7 +29,7 @@ $ luadot restore --list
 1786590012773  1 day ago      4 file(s)
 
 $ luadot restore
-  home/.zshrc
+  home/u/.zshrc
 Put 1 file(s) of backup 1786677956412 back? [y/N]
 ```
 

@@ -22,8 +22,8 @@ a private temporary mirror and hands the two directories to `git diff
 ## Backups and restore
 
 `apply`, `tmpl alt` and `rm` save every file they destroy, into
-`~/.local/share/luadot/backups/<unix-millisecond>/`, under the same `home/` and
-`root/` layout the repository uses; `ld.opt.backup(false)` turns it off,
+`~/.local/share/luadot/backups/<unix-millisecond>/`, under the file's absolute
+path; `ld.opt.backup(false)` turns it off,
 `ld.opt.backup_dir(path)` moves the directory elsewhere,
 `ld.opt.backup_keep(n)` keeps only the `n` most recent, `ld.opt.backup_age(span)`
 drops the ones older than the span, and `restore` puts a backup back. `add`
@@ -41,10 +41,8 @@ Encrypted files exist: an `encrypt` rule makes `add` store ciphertext under a
 `.age`/`.gpg` extension, `apply`, `status`, `edit` and `rm` decrypt through the
 `age` or `gpg` binary, configured by `ld.crypt.backend`, `ld.crypt.recipients`,
 `ld.crypt.identity`, `ld.crypt.identity_command` and `ld.crypt.passphrase`, and
-`luadot rekey` re-encrypts everything for the recipients set now. Files under
-`root/` are covered too: the plaintext
-reaches the backend and `sudo install` on their standard input, so escalation
-never puts it on disk. What was left out of that first pass:
+`luadot rekey` re-encrypts everything for the recipients set now. What was left
+out of that first pass:
 
 - **`diff` over an encrypted file.** It still compares the stored ciphertext;
   comparing the decrypted content means staging it into the same private mirror

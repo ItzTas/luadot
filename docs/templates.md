@@ -8,18 +8,15 @@ resolves both; `apply` walks past them.
 
 ```
 ~/dotfiles/
-├── home/
-│   ├── .zshrc.luadot/                 -- produces ~/.zshrc
-│   │   ├── luadot.lua
-│   │   ├── laptop.zsh
-│   │   └── desktop.zsh
-│   ├── .config/nvim/init.lua.luadot/  -- produces ~/.config/nvim/init.lua
-│   │   ├── luadot.lua
-│   │   └── init.tmpl.lua
-│   ├── .zprofile.luadot               -- a standalone template, produces ~/.zprofile
-│   └── .vimrc                         -- a plain managed file
-└── root/
-    └── etc/motd.luadot                -- produces /etc/motd
+├── .zshrc.luadot/                 -- produces ~/.zshrc
+│   ├── luadot.lua
+│   ├── laptop.zsh
+│   └── desktop.zsh
+├── .config/nvim/init.lua.luadot/  -- produces ~/.config/nvim/init.lua
+│   ├── luadot.lua
+│   └── init.tmpl.lua
+├── .zprofile.luadot               -- a standalone template, produces ~/.zprofile
+└── .vimrc                         -- a plain managed file
 ```
 
 The destination is the template's own path without the suffix, so the
@@ -39,10 +36,10 @@ luadot tmpl new -f ~/.zprofile         -- ~/.zprofile.luadot, a standalone templ
 ```
 
 The template stays where it was written and the repository links it, so
-`~/.zshrc.luadot/luadot.lua` and `~/dotfiles/home/.zshrc.luadot/luadot.lua`
+`~/.zshrc.luadot/luadot.lua` and `~/dotfiles/.zshrc.luadot/luadot.lua`
 are the same file. Files you put in a directory template afterwards are yours
 to `add`. A directory template also gets a `.luarc.json` pointing
-lua-language-server at `~/.config/luadot/meta`, the definitions
+lua-language-server at `~/.local/share/luadot/meta`, the definitions
 `luadot meta install` writes, so `luadot.lua` completes from either path; see
 [editor support](ld.md#editor-support). A relative path resolves against the current directory and has to
 land inside your home directory. Both forms resolve to an empty file until you
@@ -54,7 +51,7 @@ write them, and neither replaces anything already there.
 by returning the same table:
 
 ```lua
--- home/.zshrc.luadot/luadot.lua
+-- .zshrc.luadot/luadot.lua
 return {
   content = (ld.sys.host.name == "thinkpad") and ld.alt.file("laptop.zsh")
       or ld.alt.file("desktop.zsh"),
@@ -63,7 +60,7 @@ return {
 ```
 
 ```lua
--- home/.config/nvim/init.lua.luadot/luadot.lua
+-- .config/nvim/init.lua.luadot/luadot.lua
 ld.alt.out({ content = ld.alt.render("init.tmpl.lua", { leader = " " }) })
 ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 ```
@@ -86,10 +83,10 @@ A declared file carries what it needs and nothing else:
 | Key | Values | Effect |
 | --- | --- | --- |
 | `content` | a string or an `ld.alt.file` | What lands on the system: a string is written, a file is linked. Required. |
-| `dest` | a path | Where it lands; `~/` and a relative path both start at your home directory. Defaults to the mirrored path. |
-| `link` | `"hard"`, `"symbolic"`, `"copy"` | How an `ld.alt.file` is placed. Defaults to the configured mode. A destination under `/` is always a copy. |
+| `dest` | a path | Where it lands; `~/` and a relative path both start at your home directory, and it has to stay inside it. Defaults to the mirrored path. |
+| `link` | `"hard"`, `"symbolic"`, `"copy"` | How an `ld.alt.file` is placed. Defaults to the configured mode. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the destination already holds something else. Defaults to the configured policy. |
-| `mode` | three or four octal digits, as a string | The permissions of the generated file, `"600"` for one holding a secret. Defaults to what your umask gives. Only for generated content: an `ld.alt.file` keeps its own mode. |
+| `mode` | three or four octal digits, as a string | The permissions of the generated file, `"600"` for one holding a secret. Defaults to the `mode` rule covering the destination, then to what your umask gives. Only for generated content: an `ld.alt.file` keeps its own mode, or the one a rule sets. |
 | `on_change` | a command line | Runs through `sh -c` after the file is created or replaced, and only then. Wins over an `on_change` rule matching the same path. |
 
 Returning a string or an `ld.alt.file` is shorthand for a table carrying only
@@ -125,7 +122,7 @@ The template's own `lua/` directory is requirable, and so is
 bytes:
 
 ```lua
--- home/.zshrc.luadot/luadot.lua
+-- .zshrc.luadot/luadot.lua
 local parts = {}
 for _, name in ipairs(ld.alt.glob("conf.d/*.zsh")) do
   parts[#parts + 1] = ld.alt.read(name)
@@ -263,7 +260,7 @@ password store for a token has no business doing it on every `luadot status`.
 `repository/`, since what a template produces is not in the repository.
 
 `rm`, `edit`, `status` and `diff` reach a template through the path it
-produces (`luadot rm ~/.zshrc` takes out `home/.zshrc.luadot/`); the
+produces (`luadot rm ~/.zshrc` takes out `.zshrc.luadot/`); the
 template's own path works as well. `rm` backs up every file the template holds
 before removing it and leaves the system alone: a generated file stays where
 it is, and a symlink pointing into the template becomes a file of its own.

@@ -7,20 +7,20 @@ machine you clone it to. The configuration is a Lua script instead of a static
 file, so one repository answers for a laptop, a desktop and a server without a
 branch or a copy per machine.
 
-The repository mirrors your machines: `home/` for your home directory, `root/`
-for the rest of the filesystem. Rules decide how each file is placed: linked
-hard, symbolic or copied, ignored, encrypted, or generated per machine by a
-template.
+The repository mirrors your home directory, path for path: `.zshrc` in the
+repository is `~/.zshrc` on the machine. Rules decide how each file is placed:
+linked hard, symbolic or copied, ignored, encrypted, kept in Git LFS, or
+generated per machine by a template.
 
 ```lua
 ld.rules({
-  { match = "home/.ssh/id_*", encrypt = true },
-  { match = "home/.config/mako/**", on_change = "makoctl reload" },
-  { match = "home/.cache/**", ignore = true },
+  { match = ".ssh/id_*", encrypt = true },
+  { match = ".config/mako/**", on_change = "makoctl reload" },
+  { match = ".cache/**", ignore = true },
 })
 
 if ld.sys.has_battery() then
-  ld.rules({ { match = "home/.config/tlp/**", link = "symbolic" } })
+  ld.rules({ { match = ".config/tlp/**", link = "symbolic" } })
 end
 ```
 
@@ -51,7 +51,7 @@ has the details.
 
 - [Install](docs/install.md): AUR, deb, Nix, source.
 - [Commands](docs/commands.md): what each one does.
-- [The repository](docs/repository.md): layout, gitignore, system files.
+- [The repository](docs/repository.md): layout, gitignore, gitattributes, mode and owner.
 - [The ld interface](docs/ld.md): rules, options, classes, the Lua toolbox.
 - [Templates](docs/templates.md): files that differ per machine.
 - [Encrypted files](docs/secrets.md): age and gpg secrets.

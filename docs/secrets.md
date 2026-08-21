@@ -11,22 +11,23 @@ ld.crypt.lock({
 })
 
 ld.rules({
-  { match = "home/.ssh/id_*", encrypt = true },
-  { match = "home/.netrc", encrypt = true },
-  { match = "root/etc/wireguard/**", encrypt = true, owner = "root:root" },
+  { match = ".ssh/id_*", encrypt = true },
+  { match = ".netrc", encrypt = true },
+  { match = ".config/wireguard/**", encrypt = true, mode = "0640" },
 })
 ```
 
 Encryption runs through the `age` or `gpg` binary on your `PATH`; luadot ships
 no cryptography of its own. `age` is the default, `ld.crypt.backend("gpg")`
 switches. The stored file keeps its path and gains the backend's extension:
-`add ~/.netrc` lands in `home/.netrc.age`. The extension is what marks a file
+`add ~/.netrc` lands in `.netrc.age`. The extension is what marks a file
 as encrypted from then on, whatever the rules say later.
 
 - `add` encrypts into the repository and never writes the plaintext there.
 - `apply` decrypts to the system. Linking is bypassed (a link to ciphertext
-  would be useless): the file is a plain copy, mode `600`, whatever `link`
-  says.
+  would be useless): the file is a plain copy, whatever `link` says, with
+  mode `600` unless a `mode` rule says otherwise, and the `owner` a rule
+  names.
 - `status` compares the decrypted content against the system copy; a file it
   cannot decrypt is `unreadable`.
 - `edit` decrypts to a private temporary directory (`0700`, under
@@ -98,18 +99,8 @@ Changing the recipients does not reach the files already stored. `luadot
 rekey` decrypts each secret and encrypts it again for the recipients set now,
 in place, one staging file at a time so a failure never leaves a half-written
 secret. `-n` reports what it would touch. Switching `ld.crypt.backend` and
-running it moves each secret to the other extension (`home/.netrc.age` becomes
-`home/.netrc.gpg`); the repository is yours to commit afterwards.
-
-## Encrypted system files
-
-Files under `root/` can be encrypted too, and the plaintext never reaches the
-disk on the way. Reading on `add` and writing on `apply` are tried as you
-first; on "permission denied" the plaintext is handed to the backend and to
-`sudo install` on their standard input, so it exists only in the memory of the
-two processes that need it, with no temporary file and no repository copy. A
-`mode` rule sets the bits (`600` when there is none) and an `owner` rule sets
-who owns it, as for any system file.
+running it moves each secret to the other extension (`.netrc.age` becomes
+`.netrc.gpg`); the repository is yours to commit afterwards.
 
 ## The calls
 

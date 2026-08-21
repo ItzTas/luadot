@@ -23,22 +23,27 @@
 | `luadot sync [-m MSG] [--no-push]` | Stages what changed in the repository, commits it and pushes it. |
 | `luadot git <args>...` | Runs git inside the repository. |
 | `luadot push [args]...` | Shorthand for `luadot git push`. |
-| `luadot doc [-l] [call]` | Describes a call of the `ld` interface, `-l` names every one. |
-| `luadot meta [install [dir]]` | Prints the editor definitions of `ld`; `install` writes them and a `.luarc.json` into the configuration directory and the repository, or into one directory. |
+| `luadot doc <call>`, `luadot doc -l` | Describes a call of the `ld` interface, `-l` names every one. |
+| `luadot meta [install [dir]]` | Prints the editor definitions of `ld`; `install` writes them into the data directory and a `.luarc.json` loading them into the configuration directory and the repository, or into one directory. |
 | `luadot completions <shell>` | Prints a completion script for that shell. |
 | `luadot man` | Prints the manual page, the one the packages install. |
 
 `luadot --help` explains any command in place (`luadot rm --help`);
 `luadot --version` prints the version.
 
+`config.lua` can run a function before and after any command in the table but
+`doc`, `meta`, `completions` and `man`; see
+[customizing a command](ld.md#customizing-a-command).
+
 `luadot doc` answers for the `ld` interface instead: `luadot doc opt.link`
 writes what that call takes and does, `luadot doc opt` every call under the
-namespace, `luadot doc` all of them. The `ld.` prefix is optional and a piece
+namespace, `luadot doc ld` all of them. The `ld.` prefix is optional and a piece
 of a name is enough, so `luadot doc backup` finds the four calls carrying the
 word. The text is the one on the pages here, built into the binary.
 
-`luadot meta install` gives lua-language-server the same interface, for
-completion and hover text while editing `config.lua` and the scripts; see
+`luadot init` and `luadot clone` give lua-language-server the same interface,
+for completion and hover text while editing `config.lua` and the scripts;
+`luadot meta install` does it for a directory of your own. See
 [editor support](ld.md#editor-support).
 
 The bash, zsh and fish completions hand `luadot git` and `luadot push` over to
@@ -96,23 +101,24 @@ On repository /home/u/dotfiles
 
 Files not on the system:
   (use "luadot apply <path>..." to write them)
-        missing:     home/.bashrc
+        missing:     .bashrc
 
 Files not linked:
   (use "luadot apply <path>..." to link them)
-        unlinked:    home/.vimrc
+        unlinked:    .vimrc
 
 Files that differ:
   (use "luadot diff <path>..." to see what changed)
-        differs:     home/.zshrc
+        differs:     .zshrc
 ```
 
 - `missing`: the file is in the repository but not on the system.
 - `unlinked`: the contents match, but the system copy is not the link the
   configuration asks for.
-- `differs`: the system copy holds something else.
-- `unreadable`: a system file luadot may not read; `status` never asks for
-  privilege, `apply` does.
+- `differs`: the system copy holds something else, or other permission bits
+  than the `mode` rule asks for.
+- `unreadable`: a secret luadot could not decrypt; `apply` stops with the
+  backend's own error.
 
 With nothing left to apply, the sections go away and the line under the header
 says so. Every line is replaceable through `ld.on.status`; see
@@ -129,10 +135,10 @@ has nothing to show.
 
 ```
 $ luadot diff
-diff --git a/home/.vimrc b/home/.vimrc
+diff --git a/.vimrc b/.vimrc
 index 3f8a2b1..7c4d9e0 100644
---- a/home/.vimrc
-+++ b/home/.vimrc
+--- a/.vimrc
++++ b/.vimrc
 @@ -1,2 +1,2 @@
  set number
 -set ruler
@@ -147,7 +153,7 @@ reported as differing instead of printed. A file whose content matches but
 whose mode drifted gets a line of its own:
 
 ```
-mode       root/etc/sudoers.d/wheel 0644 -> 0440
+mode       .ssh/config 0644 -> 0600
 ```
 
 `ld.on.diff` replaces any of it, the compare program included; see
@@ -198,8 +204,8 @@ its own:
 
 ```lua
 ld.rules({
-  { match = "home/.config/nvim/**", autopush = true },
-  { match = "home/.ssh/**", autocommit = false },
+  { match = ".config/nvim/**", autopush = true },
+  { match = ".ssh/**", autocommit = false },
 })
 ```
 
@@ -219,14 +225,14 @@ unchanged ones included:
 
 ```
 $ luadot apply --dry-run
-create     home/.config/nvim/init.lua
-replace    home/.zshrc
+create     .config/nvim/init.lua
+replace    .zshrc
 luadot: would apply 12 file(s) (1 created, 1 replaced, 10 unchanged, 0 skipped)
 
 $ luadot apply
-created    home/.config/nvim/init.lua
-replaced   home/.zshrc
-unchanged  home/.gitconfig
+created    .config/nvim/init.lua
+replaced   .zshrc
+unchanged  .gitconfig
 luadot: applied 3 file(s) (1 created, 1 replaced, 1 unchanged, 0 skipped)
 ```
 
