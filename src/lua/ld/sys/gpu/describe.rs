@@ -7,11 +7,8 @@ use super::constants::{
 
 pub fn describe(walker: TypeWalker) -> TypeWalker {
     walker
-        .instance(NAMESPACE_TYPENAME, DOC)
-        .record(
-            record(NAMESPACE_TYPENAME, DOC)
-                .fields(&CARD_FIELDS)
-                .fields(&LIST_FIELDS),
-        )
+        .namespace(NAMESPACE_TYPENAME, DOC, |record| {
+            record.fields(&CARD_FIELDS).fields(&LIST_FIELDS)
+        })
         .record(record(CARD_TYPENAME, CARD_DOC).fields(&CARD_FIELDS))
 }

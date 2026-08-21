@@ -6,8 +6,9 @@ use super::constants::{API_DOC, FIELDS, RULE_DOC, RULE_FIELDS, RULE_TYPENAME, SI
 
 pub fn describe(walker: TypeWalker) -> TypeWalker {
     walker
-        .instance(API, API_DOC)
-        .record(record(API, API_DOC).fields(&FIELDS).functions(&SIGNATURES))
+        .namespace(API, API_DOC, |record| {
+            record.fields(&FIELDS).functions(&SIGNATURES)
+        })
         .record(record(RULE_TYPENAME, RULE_DOC).fields(&RULE_FIELDS))
 }
 
