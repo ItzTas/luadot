@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use super::constants::{DEFINITIONS, DEFINITIONS_DIR, DEFINITIONS_FILE, LUARC_FILE};
-use super::luarc::merged;
+use super::luarc::{library, merged};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Placed {
@@ -19,14 +19,18 @@ pub fn install(command: &str, dir: &Path) -> Result<Vec<Placed>> {
 
     Ok(vec![
         Placed::Written(definitions),
-        settings(command, &dir.join(LUARC_FILE))?,
+        settings(command, &dir.join(LUARC_FILE), DEFINITIONS_DIR)?,
     ])
 }
 
-fn settings(command: &str, path: &Path) -> Result<Placed> {
+pub fn point(command: &str, dir: &Path, home: &Path, config: &Path) -> Result<Placed> {
+    settings(command, &dir.join(LUARC_FILE), &library(home, config))
+}
+
+fn settings(command: &str, path: &Path, library: &str) -> Result<Placed> {
     let existing = read(command, path)?;
-    let Ok(text) = merged(existing.as_deref()) else {
-        return Ok(Placed::Kept(path.to_path_buf(), merged(None)?));
+    let Ok(text) = merged(existing.as_deref(), library) else {
+        return Ok(Placed::Kept(path.to_path_buf(), merged(None, library)?));
     };
     write(command, path, &text)?;
 

@@ -21,7 +21,7 @@ pub const PATHS: [&str; 4] = ["?.lua", "?/init.lua", "lua/?.lua", "lua/?/init.lu
 
 pub const LIBRARY_KEY: &str = "workspace.library";
 
-pub const LIBRARIES: [&str; 1] = [DEFINITIONS_DIR];
+pub const TILDE: &str = "~";
 
 pub const NOT_AN_OBJECT: &str = "the settings are not a JSON object";
 
