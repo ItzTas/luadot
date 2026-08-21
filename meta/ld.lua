@@ -125,14 +125,14 @@
 
 ---A function to run before the command and one after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.Around
----@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.
----@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.
+---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
+---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 
 ---What `diff` prints and which program compares the two sides, and a function to run before and after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.DiffOptions
----@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.
+---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
 ---@field args? string|string[] Extra arguments for whichever program compares the two sides; right after `diff` when git runs.
----@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.
+---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 ---@field entry? (fun(file: ld.DiffFile): string?)|false Runs for every drifted file, in place of the line the command would have written. `false` silences the line.
 ---@field render? (fun(files: ld.DiffFile[]): string?)|false Runs once, with every drifted file, and takes the whole report over; nothing is compared afterwards. `false` reports the files without diffing them.
 ---@field summary? (fun(counts: ld.DiffCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
@@ -140,8 +140,8 @@
 
 ---What `status` prints, and a function to run before and after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.StatusOptions
----@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.
----@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.
+---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
+---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 ---@field entry? (fun(file: ld.StatusFile): string?)|false Runs for every inspected file, synced ones included, in place of the line and the sections the command would have written. `false` silences them.
 ---@field render? (fun(files: ld.StatusFile[]): string?)|false Runs once, with every inspected file, and takes the whole report over.
 ---@field summary? (fun(counts: ld.StatusCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
@@ -327,7 +327,7 @@ function ld.crypt.lock(lock) end
 ---@overload fun(...: string): string
 ld.git = {}
 
----One call per command, taking a table: a function to run `before` and one `after` for every command, and what `status` and `diff` print. A second call replaces only the keys it carries, and every command is customized apart.
+---One call per command, taking a table: functions to run `before` and `after` the command, and what `status` and `diff` print. Every function registered for a moment runs, in the order it was registered; what `status` and `diff` print is replaced by a later call, key by key. Every command is customized apart.
 ---@class ld.on
 ld.on = {}
 

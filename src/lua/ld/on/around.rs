@@ -25,11 +25,7 @@ mod tests {
         )
         .unwrap();
 
-        let shown = config
-            .around(Command::Apply)
-            .unwrap()
-            .get(Moment::Before)
-            .unwrap()
+        let shown = config.around(Command::Apply).unwrap().all(Moment::Before)[0]
             .shown("a function", ())
             .unwrap()
             .unwrap();
@@ -39,10 +35,31 @@ mod tests {
     }
 
     #[test]
+    fn every_function_registered_for_a_moment_is_kept_in_order() {
+        let config = from_source(
+            r#"
+            ld.on.apply({ before = function() return "first" end })
+            ld.on.apply({ before = function() return "second" end, after = function() end })
+            "#,
+        )
+        .unwrap();
+
+        let chain = config.around(Command::Apply).unwrap();
+        let shown: Vec<String> = chain
+            .all(Moment::Before)
+            .iter()
+            .map(|custom| custom.shown("a function", ()).unwrap().unwrap())
+            .collect();
+
+        assert_eq!(shown, ["first", "second"]);
+        assert_eq!(chain.all(Moment::After).len(), 1);
+    }
+
+    #[test]
     fn the_tmpl_actions_are_customized_apart() {
         let config = from_source(
             r#"
-            ld.on.tmpl.alt({ after = false })
+            ld.on.tmpl.alt({ after = function() end })
             ld.on.tmpl.new({ before = function() end })
             "#,
         )
@@ -51,9 +68,9 @@ mod tests {
         let alt = config.around(Command::TmplAlt).unwrap();
         let new = config.around(Command::TmplNew).unwrap();
 
-        assert!(matches!(alt.get(Moment::After), Some(Custom::Silent)));
-        assert!(alt.get(Moment::Before).is_none());
-        assert!(matches!(new.get(Moment::Before), Some(Custom::Call(_))));
-        assert!(new.get(Moment::After).is_none());
+        assert!(matches!(alt.all(Moment::After), [Custom::Call(_)]));
+        assert!(alt.all(Moment::Before).is_empty());
+        assert!(matches!(new.all(Moment::Before), [Custom::Call(_)]));
+        assert!(new.all(Moment::After).is_empty());
     }
 }

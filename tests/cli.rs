@@ -653,12 +653,14 @@ fn a_command_runs_the_functions_the_configuration_sets_before_and_after_it() {
           before = function() return "before " .. ld.argv.name end,
           after = function() ld.print("after " .. ld.argv.name) end,
         })
+        ld.on.apply({ before = function() return "and again" end })
         "#,
     );
     write_state(&home, &repo);
 
     luadot(&home).arg("apply").assert().success().stdout(
-        predicate::str::is_match("(?s)^before apply\n.*\\.bashrc.*\nafter apply\n$").unwrap(),
+        predicate::str::is_match("(?s)^before apply\nand again\n.*\\.bashrc.*\nafter apply\n$")
+            .unwrap(),
     );
 }
 

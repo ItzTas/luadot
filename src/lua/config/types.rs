@@ -7,7 +7,7 @@ use glob::Pattern;
 use mlua::Lua;
 use regex::Regex;
 
-use super::around::Around;
+use super::around::{Around, Chain};
 use super::constants::{CLASS_QUESTION, GIT_DIR, LOCKED, MATCH, MISSING};
 use super::diff::Diff;
 use super::report::Report;
@@ -38,7 +38,7 @@ pub struct Config {
     crypt_secrets: Secrets,
     diff: Diff,
     status: Report,
-    around: BTreeMap<Command, Around>,
+    around: BTreeMap<Command, Chain>,
     runtimes: Vec<Lua>,
 }
 
@@ -137,10 +137,10 @@ impl Config {
     }
 
     pub fn set_around(&mut self, command: Command, around: Around) {
-        self.around.entry(command).or_default().merge(around);
+        self.around.entry(command).or_default().add(around);
     }
 
-    pub fn around(&self, command: Command) -> Option<&Around> {
+    pub fn around(&self, command: Command) -> Option<&Chain> {
         self.around.get(&command)
     }
 

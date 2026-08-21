@@ -8,7 +8,7 @@ mod report;
 mod status;
 mod types;
 
-pub use around::{Around, Moment};
+pub use around::{Around, Chain, Moment};
 pub use custom::{Call, Custom};
 pub use diff::{Diff, DiffCounts, DiffFile, DiffState, Tool};
 #[cfg(test)]

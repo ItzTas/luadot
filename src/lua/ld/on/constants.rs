@@ -111,7 +111,7 @@ pub const STATUS_KEYS: [&str; 5] = [AFTER, BEFORE, ENTRY, RENDER, SUMMARY];
 pub const NAMESPACE_TYPENAME: &str = "ld.on";
 
 #[cfg(feature = "meta")]
-pub const DOC: &str = "One call per command, taking a table: a function to run `before` and one `after` for every command, and what `status` and `diff` print. A second call replaces only the keys it carries, and every command is customized apart.";
+pub const DOC: &str = "One call per command, taking a table: functions to run `before` and `after` the command, and what `status` and `diff` print. Every function registered for a moment runs, in the order it was registered; what `status` and `diff` print is replaced by a later call, key by key. Every command is customized apart.";
 
 #[cfg(feature = "meta")]
 pub const TMPL_TYPENAME: &str = "ld.on.tmpl";
@@ -357,14 +357,14 @@ pub const TMPL_SIGNATURES: [Signature; 2] = [
 const AFTER_FIELD: Field = Field {
     name: AFTER,
     kind: MOMENT,
-    doc: "Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.",
+    doc: "Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.",
 };
 
 #[cfg(feature = "meta")]
 const BEFORE_FIELD: Field = Field {
     name: BEFORE,
     kind: MOMENT,
-    doc: "Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.",
+    doc: "Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.",
 };
 
 #[cfg(feature = "meta")]

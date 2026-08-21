@@ -415,9 +415,11 @@ ld.on.apply({
 
 Whatever a function returns is written as a line; a function returning nothing
 writes nothing, which suits one printing for itself with `ld.print` or running
-a command with `ld.cmd`. `false` takes back a function set earlier. A second
-call replaces only the keys it carries, and every command is customized apart.
-A dry run runs them too; `ld.argv.args` carries the flag. A call outside
+a command with `ld.cmd`. Calls add up: every function registered for a moment
+runs, in the order it was registered, and the first one that fails stops the
+command there. `false` drops the functions registered so far, so a module can
+take back what an earlier one set. Every command is customized apart. A dry
+run runs them too; `ld.argv.args` carries the flag. A call outside
 `config.lua` lands on the run in progress: `before` has passed by then,
 `after` still runs.
 
@@ -441,7 +443,8 @@ ld.on.status({
 ```
 
 `false` silences its piece: `ld.on.status({ summary = false })` leaves each
-side with its header alone.
+side with its header alone. A second call replaces only the keys it carries,
+so the last one to set `entry`, `summary` or `render` owns it.
 
 `entry` and `render` are handed the same table, one file at a time or every
 one at once:
