@@ -2,8 +2,8 @@ use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
     AddArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs, DocArgs,
-    EditArgs, ExecArgs, GitArgs, InitArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs, SetupArgs,
-    StatusArgs, SyncArgs, TmplArgs,
+    EditArgs, ExecArgs, GitArgs, InitArgs, MetaArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs,
+    SetupArgs, StatusArgs, SyncArgs, TmplArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -77,6 +77,10 @@ pub enum Cmd {
     Push(PushArgs),
     #[command(about = "Describe the calls the configuration and the scripts have")]
     Doc(DocArgs),
+    #[command(
+        about = "Print the editor definitions of ld, or write them where the configuration is edited"
+    )]
+    Meta(MetaArgs),
     #[command(about = "Print a completion script for a shell")]
     Completions(CompletionsArgs),
     #[command(about = "Print the manual page")]

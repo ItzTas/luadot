@@ -37,6 +37,15 @@ pub const MANAGED_FILES: &str = "managed";
 
 pub const GENERATED_FILES: &str = "generated";
 
+pub const META_WROTE: &str = "wrote";
+
+pub const META_MERGED: &str = "merged";
+
+pub const META_KEPT: &str = "could not be parsed and was left alone; add this to it:";
+
+pub const META_NO_REPOSITORY: &str =
+    "no repository set; only the configuration directory gets the definitions";
+
 pub const DOC_PAGES: [(&str, &str, &str); 3] = [
     (
         "docs/ld.md",
