@@ -6,7 +6,7 @@ use super::load::destination;
 use crate::lua::Shared;
 use crate::lua::constants::MODULES_DIR;
 use crate::lua::embed;
-use crate::lua::ld::{API, Paths, Surface, install, share};
+use crate::lua::ld::{API, Paths, Surface, extend_module_path, install, share};
 use crate::lua::runtime::{add_module_path, environment, runtime};
 use crate::lua::scope::{Content, Output};
 use crate::state::Classes;
@@ -51,6 +51,8 @@ fn render(
     install(&lua, Surface::Standalone, &paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
     share(&lua, shared);
+    extend_module_path(&lua)
+        .with_context(|| format!("{command}: failed to reach the registered modules"))?;
     add_module_path(&lua, config)
         .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
 

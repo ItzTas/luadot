@@ -575,6 +575,14 @@ function ld.regex.split(text, pattern, limit) end
 ---@return string
 function ld.regex.escape(text) end
 
+---The directories `require` searches besides the configuration's own `lua/`: what a plugin manager registers, carried to every script the command runs.
+---@class ld.rtp
+ld.rtp = {}
+
+---Puts `<dir>/lua/` on the module path of this script and of every script the command runs after it, behind the configuration's own `lua/` and in the order registered. `~` and a relative path resolve against your home directory; a directory added twice is kept once.
+---@param dir string
+function ld.rtp.add(dir) end
+
 ---The setup scripts of the repository, under `.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`, and warns elsewhere.
 ---@class ld.setup
 ---@overload fun(name: string)

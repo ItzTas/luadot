@@ -709,6 +709,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.argv` | none | `name` and `args` of the command being run. |
 | `ld.sys` | none | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
 | `ld.path` | none | `home`, `config`, `repo` and `dir`, where they exist. |
+| `ld.rtp.add(dir)` | a directory | Puts `<dir>/lua/` on the module path of this script and of every script the command runs after it, behind the configuration's own `lua/`. |
 | `ld.on.add(options)` | a table of `before` and `after` | Runs a function before and after `add`. |
 | `ld.on.apply(options)` | a table of `before` and `after` | Runs a function before and after `apply`. |
 | `ld.on.bootstrap(options)` | a table of `before` and `after` | Runs a function before and after `bootstrap`. |

@@ -4,7 +4,7 @@ use std::sync::MutexGuard;
 use anyhow::{Context, Result, anyhow};
 
 use super::constants::MODULES_DIR;
-use super::ld::{API, Paths, Surface, install, share};
+use super::ld::{API, Paths, Surface, extend_module_path, install, share};
 use super::runtime::{add_module_path, runtime};
 use super::{Config, Shared};
 use crate::state::Classes;
@@ -48,6 +48,8 @@ pub fn run_source(
     install(&lua, surface, paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
     share(&lua, config);
+    extend_module_path(&lua)
+        .with_context(|| format!("{command}: failed to reach the registered modules"))?;
 
     for dir in modules.iter().rev() {
         add_module_path(&lua, dir)
@@ -69,4 +71,40 @@ fn kept<'a>(command: &str, config: &'a Shared) -> Result<MutexGuard<'a, Config>>
     config
         .lock()
         .map_err(|_| anyhow!("{command}: the configuration is still being changed"))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+    use crate::files::LinkMode;
+    use crate::lua::from_source;
+    use crate::lua::ld::plugin;
+
+    #[test]
+    fn a_directory_the_configuration_registered_is_requirable_from_a_setup_script() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = plugin(root.path(), "links", r#"ld.opt.link("symbolic")"#);
+        let config = from_source(&format!(r#"ld.rtp.add("{}")"#, dir.display())).unwrap();
+        let shared = Arc::new(Mutex::new(config));
+        let paths = Paths::new(root.path(), &root.path().join(".config/luadot"));
+
+        run_source(
+            "setup",
+            Surface::Setup,
+            r#"require("links")"#,
+            "setup.lua",
+            &[],
+            &paths,
+            &Classes::default(),
+            &shared,
+        )
+        .unwrap();
+
+        assert_eq!(
+            shared.lock().unwrap().link_mode(Path::new(".bashrc")),
+            LinkMode::Symbolic
+        );
+    }
 }

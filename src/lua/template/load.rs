@@ -7,7 +7,7 @@ use super::constants::TEMPLATE_FILE;
 use crate::files::template_target;
 use crate::lua::Shared;
 use crate::lua::constants::MODULES_DIR;
-use crate::lua::ld::{API, Paths, Surface, install, output, share};
+use crate::lua::ld::{API, Paths, Surface, extend_module_path, install, output, share};
 use crate::lua::runtime::{add_module_path, runtime};
 use crate::lua::scope::{Output, Scope};
 use crate::state::Classes;
@@ -101,6 +101,8 @@ fn run(
     install(&lua, Surface::Template, &paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
     share(&lua, shared);
+    extend_module_path(&lua)
+        .with_context(|| format!("{command}: failed to reach the registered modules"))?;
     lua.set_app_data(scope);
     for modules in [dir.as_path(), config].into_iter().rev() {
         add_module_path(&lua, modules)
@@ -157,6 +159,30 @@ mod tests {
 
     fn write(dir: &Path, name: &str, contents: &str) {
         std::fs::write(dir.join(name), contents).unwrap();
+    }
+
+    #[test]
+    fn a_directory_the_configuration_registered_is_requirable_from_a_template() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = template_dir(root.path(), ".zshrc.luadot");
+        let plugin = crate::lua::ld::plugin(root.path(), "greeting", r#"return "hello""#);
+        let config =
+            crate::lua::from_source(&format!(r#"ld.rtp.add("{}")"#, plugin.display())).unwrap();
+
+        let outputs = run(
+            "test",
+            r#"return require("greeting")"#,
+            &dir.join(TEMPLATE_FILE),
+            root.path(),
+            &root.path().join(".config/luadot"),
+            Scope::new(dir.clone(), root.path().to_path_buf())
+                .with_dest(root.path().join(".zshrc")),
+            &Classes::default(),
+            &Arc::new(Mutex::new(config)),
+        )
+        .unwrap();
+
+        assert_eq!(outputs[0].content(), &Content::Text("hello".to_string()));
     }
 
     #[test]

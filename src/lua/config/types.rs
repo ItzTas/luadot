@@ -39,6 +39,7 @@ pub struct Config {
     diff: Diff,
     status: Report,
     around: BTreeMap<Command, Chain>,
+    runtime_paths: Vec<PathBuf>,
     runtimes: Vec<Lua>,
 }
 
@@ -64,6 +65,7 @@ impl Default for Config {
             diff: Diff::default(),
             status: Report::default(),
             around: BTreeMap::new(),
+            runtime_paths: Vec::new(),
             runtimes: Vec::new(),
         }
     }
@@ -118,6 +120,18 @@ impl Config {
 
     pub fn keep_runtime(&mut self, runtime: Lua) {
         self.runtimes.push(runtime);
+    }
+
+    pub fn add_runtime_path(&mut self, dir: PathBuf) {
+        if self.runtime_paths.contains(&dir) {
+            return;
+        }
+
+        self.runtime_paths.push(dir);
+    }
+
+    pub fn runtime_paths(&self) -> &[PathBuf] {
+        &self.runtime_paths
     }
 
     pub fn set_diff(&mut self, diff: Diff) {
