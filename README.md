@@ -27,7 +27,7 @@ end
 ## Quick start
 
 ```
-luadot init ~/dotfiles       # or: luadot clone git@github.com:me/dotfiles.git
+luadot init                 # or: luadot clone git@github.com:me/dotfiles.git
 luadot add ~/.bashrc
 luadot git commit -m "first"
 ```
