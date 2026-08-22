@@ -2,7 +2,8 @@
 
 `~/.config/luadot/config.lua` (or `$XDG_CONFIG_HOME/luadot/config.lua`) runs
 before every command and configures luadot through the global `ld`. Without
-the file, the defaults apply.
+the file, the defaults apply. `luadot init` and `luadot config edit` write a
+commented starter there when it is missing.
 
 ```lua
 ld.opt.link("hard")
@@ -18,8 +19,7 @@ ld.rules({
 })
 ```
 
-It is a normal Lua script: conditionals per machine, loops building pattern
-lists, local helper functions. Options also take a table form, which sets only
+Options also take a table form, which sets only
 the keys it carries: `ld.opt({ link = "symbolic" })`. The full list of calls
 is [at the end of this page](#every-call).
 
@@ -54,7 +54,7 @@ ld.rules({
 })
 ```
 
-The other ten keys, all optional:
+All the keys:
 
 | Key | Values | Effect |
 | --- | --- | --- |
@@ -69,7 +69,7 @@ The other ten keys, all optional:
 | `autocommit` | `true`, `false` | Whether `add` and `rm` commit on their own once one of those files is staged. |
 | `autopush` | `true`, `false` | Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back. |
 
-Any other key is refused, so a typo does not pass as a rule that sets nothing.
+Any other key is an error.
 
 Either syntax also matches a directory on behalf of everything under it:
 `{ match = ".ssh" }` and `{ regex = "^\\.ssh$" }` both cover
@@ -133,7 +133,7 @@ they are.
 Files already committed keep the contents they went in with until `git add
 --renormalize .` rewrites them as pointers.
 
-## One interface everywhere
+## Scripts and surfaces
 
 Every script luadot runs carries the same `ld`: `config.lua`, `bootstrap.lua`,
 the setup scripts, a template's `luadot.lua` and `luadot exec`. A call does the
@@ -142,7 +142,7 @@ a setup script that `config.lua` invokes and a template that `tmpl alt`
 resolves both write into it. `ld.surface` says which of them is running:
 `"config"`, `"bootstrap"`, `"setup"`, `"template"`, `"standalone"` for a
 `.luadot` file, or `"exec"`. `config.lua` runs before every command, so a
-script deciding whether it may do something slow reads it first.
+script that must avoid slow work reads `ld.surface` first.
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
@@ -202,8 +202,8 @@ end
 | --- | --- |
 | `ld.sys.host` | `name`, `os` and `arch` of the machine. |
 | `ld.sys.gpu` | `vendor`, `name` and `driver` of the first card, and every card as a list. |
-| `ld.sys.ram` | The memory of the machine, in bytes, exactly as the kernel reports it. |
-| `ld.sys.has_battery()` | `true` on a machine with a battery of its own, `false` on one without. |
+| `ld.sys.ram` | The memory of the machine, in bytes. |
+| `ld.sys.has_battery()` | `true` on a machine with a battery of its own. |
 
 `ld.sys.gpu.vendor` is a short name (`nvidia`, `amd`, `intel`), or the PCI
 identifier when the vendor is not a known one. `ld.sys.gpu.name` is the model
@@ -216,15 +216,14 @@ for _, card in ipairs(ld.sys.gpu) do
 end
 ```
 
-`ld.sys.has_battery()` tells a laptop from a desktop and ignores the battery
-of a mouse or a keyboard. `ld.sys.ram` is the kernel's raw `MemTotal`, a
-little under the installed memory (the firmware keeps a slice); rounding is up
-to the configuration: `math.ceil(ld.sys.ram / 1024 ^ 3)`.
+`ld.sys.has_battery()` ignores the battery of a mouse or a keyboard.
+`ld.sys.ram` is the kernel's `MemTotal`, a little under the installed memory;
+round it in the configuration: `math.ceil(ld.sys.ram / 1024 ^ 3)`.
 
 ## Classes
 
-A class is a question the machine answers once: which of two setups this one
-is, what mail address its git commits carry. The configuration declares it,
+A class is a question the machine answers once, such as which setup it runs or
+which mail address its git commits carry. The configuration declares it,
 `luadot class` answers it, every script reads the answer back.
 
 ```lua
@@ -304,8 +303,8 @@ end
 
 `ld.cmd` runs a command and returns its standard output, trailing newline
 removed. Called directly it hands the whole line to `sh`, so pipes, globs and
-redirection work. Indexed by a program name it runs the program itself with
-no shell in the way, so every argument stays literal:
+redirection work. Indexed by a program name it runs the program directly,
+with no shell, so every argument stays literal:
 
 ```lua
 local branch = ld.cmd("git -C " .. ld.path.repo .. " branch --show-current")
@@ -320,9 +319,9 @@ luadot: `ld.cmd` `chsh -s /usr/bin/zsh` exited with status 1
 ```
 
 Only standard output is captured; standard error and standard input stay on
-the terminal, so diagnostics show up and a password prompt still works. When a
-non-zero status is an answer rather than a failure, handle it in the shell
-form: `ld.cmd("systemctl is-enabled ufw || true")`.
+the terminal, so a password prompt still works. When a non-zero status is an
+answer rather than a failure, handle it in the shell form:
+`ld.cmd("systemctl is-enabled ufw || true")`.
 
 ## Running git
 
@@ -435,8 +434,7 @@ ld.on.apply({
 ```
 
 Whatever a function returns is written as a line; a function returning nothing
-writes nothing, which suits one printing for itself with `ld.print` or running
-a command with `ld.cmd`. Calls add up: every function registered for a moment
+writes nothing. Calls add up: every function registered for a moment
 runs, in the order it was registered, and the first one that fails stops the
 command there. `false` drops the functions registered so far, so a module can
 take back what an earlier one set. Every command is customized apart. A dry
@@ -482,7 +480,7 @@ one at once:
 `state` is `"synced"`, `"missing"`, `"unlinked"`, `"differs"` or
 `"unreadable"`. Every inspected file reaches `entry` and `render`, synced ones
 included: the built-in report leaves those out and groups the rest into
-sections, a customized one gets a flat list and decides for itself.
+sections; a customized one gets a flat list.
 
 ```lua
 ld.on.status({
@@ -574,14 +572,14 @@ end)
 
 `ld.regex.split` cuts a text on every match; `ld.regex.escape` turns a literal
 into an expression matching itself. The syntax is documented at
-<https://docs.rs/regex/latest/regex/#syntax>: leading `\\` because Lua strings
-eat one of them, linear time on any input, no backreferences or lookaround as
-the price.
+<https://docs.rs/regex/latest/regex/#syntax>. A backslash is written `\\`
+because Lua strings consume one, and matching is linear in the length of the
+input, with no backreferences and no lookaround.
 
 ## Parsing with LPeg
 
 LPeg 1.1.0 is compiled into the binary, so `require("lpeg")` and its `re`
-companion work everywhere the configuration runs, nothing to install:
+companion work everywhere the configuration runs:
 
 ```lua
 local lpeg = require("lpeg")
@@ -600,8 +598,8 @@ local name = re.match("neovim@0.11.2", "{%a+}")
 ```
 
 `ld.lpeg` and `ld.re` are the same two modules for a file without the
-`require` lines. Neither is loaded until first reached, so a configuration
-that never mentions them pays nothing. Both are the upstream modules,
+`require` lines. Neither is loaded until first reached. Both are the upstream
+modules,
 documented at <https://www.inf.puc-rio.br/~roberto/lpeg/> and
 <https://www.inf.puc-rio.br/~roberto/lpeg/re.html>.
 
@@ -649,15 +647,14 @@ module path of every template, so a helper written once is reached from both.
 
 ## Plugins
 
-luadot ships no plugin manager and reads no plugin spec. What it has is
-enough for one to be written in Lua, the way `lazy.nvim` is written against
-Neovim, and for the plugins it installs to reach every script luadot runs.
+luadot ships no plugin manager and reads no plugin spec. The calls below are
+what a manager written in Lua needs, and what its plugins reach from every
+script luadot runs.
 
 A plugin is a directory. `lua/` holds what `require` finds once the directory
 is registered, `meta/` an optional `---@meta` file for the editor, `docs/` an
 optional page for `luadot doc`. Nothing else is read and nothing is
-discovered: how a plugin is fetched, named, pinned and ordered is the
-manager's business.
+discovered: fetching, naming, pinning and ordering are left to the manager.
 
 | Call | Gives a manager |
 | --- | --- |
@@ -670,8 +667,7 @@ manager's business.
 | `ld.doc.page(path)` | A page `luadot doc` answers from. |
 | `ld.surface` | Which script is running, so network work waits for `bootstrap.lua`. |
 
-The bootstrap a manager ends up with looks like the one Neovim users already
-have in hand:
+A manager's bootstrap then looks like this:
 
 ```lua
 local root = ld.path.data .. "/plugins"
@@ -688,8 +684,8 @@ require("lazyld").setup({
 })
 ```
 
-One `stat` per command on a machine that already has the manager, a clone on
-one that does not. A lockfile the manager keeps next to `config.lua` is
+That costs one `stat` per command once the manager is installed, and a clone
+on a machine without it. A lockfile the manager keeps next to `config.lua` is
 versioned by `luadot add` like everything else under `~/.config/luadot/`, so
 every other machine checks out the same pinned revisions.
 
@@ -699,14 +695,13 @@ effect from `config.lua`, and say so elsewhere. `completions`, `man` and a
 bare `meta` describe luadot itself, never read the configuration, and see no
 plugin.
 
-A plugin is Lua and nothing else: `package.loadlib` and the C module searchers
-are closed, so it cannot load a shared library. It is still arbitrary code
-running inside `config.lua`, before every command, beside the calls that
-decrypt secrets and write into your home directory, with `io` and `os` at
-hand. luadot does not sandbox it, and a sandbox would break the plugins it
-protects. A manager pinning every plugin to a revision in its lockfile, and
-updating only when asked, is the whole mitigation; read what a plugin does
-before letting a manager install it.
+A plugin is Lua only: `package.loadlib` and the C module searchers are closed,
+so it cannot load a shared library. It is still arbitrary code running inside
+`config.lua`, before every command, with `io` and `os` in reach and beside the
+calls that decrypt secrets and write into your home directory. luadot does not
+sandbox it. Pinning every plugin to a revision in the manager's lockfile and
+updating only when asked is the only mitigation; read what a plugin does
+before installing it.
 
 ## exec
 
@@ -723,8 +718,7 @@ The argument is a `.lua` path when it names an existing file or ends in
 through `ld.argv.args`. A file requires modules from the `lua/` directory next
 to it, a source string from the one in your configuration directory.
 `config.lua` runs first either way, as before every command, so `ld.on.exec`
-reaches both. `exec` itself is a scratchpad: what the script sets goes no
-further than that run.
+reaches both. What an `exec` script sets goes no further than that run.
 
 ## Editor support
 
@@ -751,8 +745,8 @@ registered lands in `workspace.library` too, so the `lua/` of a plugin
 resolves its `require` and a `meta/` it ships completes its own calls. One that does not parse is left
 alone, and the settings are printed for you to merge by hand. The definitions
 come out of the binary, and every command rewrites the file when the binary
-carries different ones, so an upgrade needs nothing from you; `luadot meta`
-prints them alone.
+carries different ones, so an upgrade needs no action; `luadot meta` prints
+them alone.
 
 `ld.cmd.<program>` completes for any name, since the program is only known at
 the call.

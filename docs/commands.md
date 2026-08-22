@@ -24,7 +24,7 @@
 | `luadot sync [-m MSG] [--no-push]` | Stages what changed in the repository, commits it and pushes it. |
 | `luadot git <args>...` | Runs git inside the repository. |
 | `luadot push [args]...` | Shorthand for `luadot git push`. |
-| `luadot doc <call>`, `luadot doc -l` | Describes a call of the `ld` interface, `-l` names every one. |
+| `luadot doc [call]`, `luadot doc -l` | Describes a call of the `ld` interface; with no call, and with `-l`, names every one. |
 | `luadot meta [install [dir]]` | Prints the editor definitions of `ld`; `install` writes them into the data directory and a `.luarc.json` loading them into the configuration directory, or into one directory. |
 | `luadot completions <shell>` | Prints a completion script for that shell. |
 | `luadot man` | Prints the manual page, the one the packages install. |
@@ -38,9 +38,14 @@
 
 `luadot doc` answers for the `ld` interface instead: `luadot doc opt.link`
 writes what that call takes and does, `luadot doc opt` every call under the
-namespace, `luadot doc ld` all of them. The `ld.` prefix is optional and a piece
-of a name is enough, so `luadot doc backup` finds the four calls carrying the
-word. The text is the one on the pages here, built into the binary.
+namespace, `luadot doc ld` all of them. On its own it names every call, one per
+line, which is what `-l` prints for a script. The `ld.` prefix is optional and a
+piece of a name is enough, so `luadot doc backup` finds the four calls carrying
+the word. The text is the one on the pages here, built into the binary.
+
+`luadot init` writes a `config.lua` of commented examples when the
+configuration directory has none, and `luadot config edit` writes the same one
+before opening it. Neither touches a file already there.
 
 `luadot init` and `luadot clone` give lua-language-server the same interface,
 for completion and hover text while editing `config.lua` and the scripts;
@@ -55,8 +60,7 @@ are in. `luadot setup <Tab>` answers with the setups the repository declares,
 <Tab>` with the calls of the interface.
 
 `man luadot` opens the same reference after any of the packages. The page is
-built from the commands themselves, so `luadot man` prints it wherever the
-binary came from:
+built from the commands themselves; `luadot man` prints it:
 
 ```
 luadot man >~/.local/share/man/man1/luadot.1
@@ -74,8 +78,7 @@ luadot clone git@github.com:me/dotfiles.git ~/dotfiles
 
 `init` creates an empty git repository in the same default place or in the
 directory you name, and remembers it too. The directory has to be empty or
-not exist yet. Nothing is committed for you: `add` stages what it wrote, so
-the commit is one command away:
+not exist yet. Nothing is committed: `add` stages what it wrote.
 
 ```
 luadot init ~/dotfiles
@@ -94,7 +97,7 @@ ld.opt.repo_dir("~/dotfiles")
 ## status
 
 `status` reads like `git status`: one section per state, each naming the
-command that settles it. Files already in sync are left out.
+command that resolves it. Files already in sync are left out.
 
 ```
 $ luadot status
@@ -150,7 +153,7 @@ luadot: 1 of 12 managed file(s) differ
 
 The diff itself is `git diff`, run over a private repository holding the two
 sides, so the output is the diff git always prints: the same `a/` and `b/`
-paths, your pager, your colors, your `diff.*` settings. Binary files are
+paths, your pager and your `diff.*` settings. Binary files are
 reported as differing instead of printed. A file whose content matches but
 whose mode drifted gets a line of its own:
 
@@ -174,13 +177,12 @@ is replaced by the content it pointed at; a hard link or a plain file is left
 alone. Directories that become empty are pruned from the repository.
 
 Removing more than one file asks first, listing what is about to go. `-y` (or
-`--yes`) answers upfront; without a terminal, `rm` refuses rather than
-assuming an answer.
+`--yes`) answers upfront; without a terminal, `rm` refuses.
 
 ## sync
 
-`add` and `rm` stage what they changed, so the repository is always one commit
-away. `sync` is that commit and the push behind it:
+`add` and `rm` stage what they changed. `sync` commits what is staged and
+pushes it:
 
 ```
 $ luadot sync
@@ -201,8 +203,8 @@ luadot sync
 
 `ld.opt.autocommit` makes `add` and `rm` commit on their own, and
 `ld.opt.autopush` pushes that commit (it implies the commit, so it stands
-alone). Both are rule keys too, so one part of the repository can travel on
-its own:
+alone). Both are rule keys too, so they can be set for one part of the
+repository:
 
 ```lua
 ld.rules({
@@ -213,10 +215,10 @@ ld.rules({
 
 The rules answer per file, and a run commits as soon as one file it touched
 asks for it. `autocommit = false` holds both back; `autopush = false` keeps
-the commit and leaves the pushing to you. A repository with no commit yet is
-left alone rather than pushed. A rule decides whether a file
-*starts* a commit, not what the commit carries: git commits the whole index,
-so a file staged earlier travels with the next commit something else triggers.
+the commit and skips the push. A repository with no commit yet is not pushed.
+A rule decides whether a file *starts* a commit, not what the commit carries:
+git commits the whole index, so a file staged earlier goes in with the next
+commit.
 
 ## Dry runs
 
