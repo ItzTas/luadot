@@ -2,10 +2,31 @@
 name = "luadot"
 version = "0.1.0-nightly.7"
 edition = "2024"
+rust-version = "1.87"
 description = "A dotfiles manager configured in Lua"
 build = "build/main.rs"
 repository = "https://github.com/ItzTas/luadot"
+documentation = "https://github.com/ItzTas/luadot/tree/main/docs"
+readme = "README.md"
 license = "MIT"
+keywords = ["dotfiles", "lua", "cli", "config", "dotfile-manager"]
+categories = ["command-line-utilities", "config"]
+exclude = [
+  "/.cargo",
+  "/.claude",
+  "/.githooks",
+  "/.github",
+  "/.gitlab",
+  "/CLAUDE.md",
+  "/ROADMAP.md",
+  "/cog.toml",
+  "/deny.toml",
+  "/flake.lock",
+  "/flake.nix",
+  "/internal",
+  "/nix",
+  "/packaging",
+]
 
 [lib]
 bench = false
