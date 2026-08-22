@@ -1,8 +1,7 @@
 # Encrypted files
 
-An `encrypt` rule keeps a secret managed without its plaintext ever reaching
-the repository: the repository stores ciphertext, the plaintext only exists
-where the file is meant to live.
+An `encrypt` rule stores the file as ciphertext in the repository. The
+plaintext only exists at the path the file is placed on.
 
 ```lua
 ld.crypt.lock({
@@ -24,8 +23,7 @@ switches. The stored file keeps its path and gains the backend's extension:
 as encrypted from then on, whatever the rules say later.
 
 - `add` encrypts into the repository and never writes the plaintext there.
-- `apply` decrypts to the system. Linking is bypassed (a link to ciphertext
-  would be useless): the file is a plain copy, whatever `link` says, with
+- `apply` decrypts to the system as a plain copy, whatever `link` says, with
   mode `600` unless a `mode` rule says otherwise, and the `owner` a rule
   names.
 - `status` compares the decrypted content against the system copy; a file it
@@ -33,7 +31,7 @@ as encrypted from then on, whatever the rules say later.
 - `edit` decrypts to a private temporary directory (`0700`, under
   `$XDG_RUNTIME_DIR` when it exists), opens the editor, re-encrypts and
   removes the plaintext, even when the editor exits badly. An unchanged file
-  is left alone, so the ciphertext only churns when the content changed.
+  is left alone.
 - `rm` deletes the ciphertext; when the system copy is missing it decrypts one
   last time to leave the plaintext behind.
 - Conflict policies compare the decrypted content against the system.
@@ -51,7 +49,7 @@ file, and the key is written to a `600` file in the same private temporary
 directory `edit` uses, removed when the command ends.
 
 A written identity is read as a command when it carries a space, as a path
-when it does not. A `type` says it outright, and several words are a program
+when it does not. A `type` sets it explicitly, and several words are a program
 and its arguments, run without a shell:
 
 ```lua
@@ -62,13 +60,12 @@ ld.crypt.lock({ identity = { type = "command", "unlock-key" } })
 ld.crypt.lock({ identity = { "op", "read", "op://vault/age/key" } })
 ```
 
-`type` is one slot: a lock names a file or a command, never both.
+`type` is `"file"` or `"command"`, one per lock, never both.
 
 age plugins work as for age itself: point `identity` at the plugin identity
 and use the plugin's recipients. luadot only checks that the plugin binary a
 key names is on your `PATH` (`AGE-PLUGIN-YUBIKEY-1…` and `age1yubikey1…` both
-need `age-plugin-yubikey`) and says which one is missing instead of letting
-age fail obscurely.
+need `age-plugin-yubikey`) and reports the missing one.
 
 ## Locking with a passphrase
 
@@ -77,13 +74,12 @@ age fail obscurely.
 about the passphrase passes through luadot. **It is weaker than keys**: one
 passphrase opens every secret, everyone sharing the repository shares it, and
 changing it means re-encrypting everything. Every command touching a secret
-says so once; `ld.opt.passphrase_warn(false)` silences that line and nothing
-else. age asks per file, and only gpg's agent caches the answer, so expect one
-prompt per secret with age.
+says so once; `ld.opt.passphrase_warn(false)` silences that line. age asks per
+file, and only gpg's agent caches the answer, so expect one prompt per secret
+with age.
 
-A lock is one answer: the word `"passphrase"` is the whole of it, the table
-form carries keys only. A configuration that computes the answer picks between
-the two where it writes the call:
+The call takes one form or the other, the string `"passphrase"` or a table of
+keys. A configuration that computes it picks between the two at the call:
 
 ```lua
 ld.crypt.lock(ld.class.get("profile") == "personal" and "passphrase" or {
@@ -91,7 +87,7 @@ ld.crypt.lock(ld.class.get("profile") == "personal" and "passphrase" or {
 })
 ```
 
-`ld.crypt.backend` is a separate question and combines with either lock.
+`ld.crypt.backend` is independent and combines with either lock.
 
 ## rekey
 
@@ -100,14 +96,14 @@ rekey` decrypts each secret and encrypts it again for the recipients set now,
 in place, one staging file at a time so a failure never leaves a half-written
 secret. `-n` reports what it would touch. Switching `ld.crypt.backend` and
 running it moves each secret to the other extension (`.netrc.age` becomes
-`.netrc.gpg`); the repository is yours to commit afterwards.
+`.netrc.gpg`). `rekey` commits nothing.
 
 ## The calls
 
 | Call | Arguments | Effect |
 | --- | --- | --- |
 | `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
-| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked. One call, one answer: the word locks with a passphrase, the table with keys. Defaults to keys with none set. |
+| `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked: the word locks with a passphrase, the table with keys. Defaults to keys with none set. |
 | `ld.crypt.lock`'s `recipients` | a key or a list of them | Public keys or key ids the files are encrypted to. |
 | `ld.crypt.lock`'s `identity` | a path, a command line, or a table carrying `type` and its value | Private key used to decrypt with age; gpg uses its keyring. A path resolves `~` and a relative path against your home directory; a command prints the key instead. |
 | `ld.opt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |

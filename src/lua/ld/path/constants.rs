@@ -7,6 +7,8 @@ pub const HOME: &str = "home";
 
 pub const CONFIG: &str = "config";
 
+pub const DATA: &str = "data";
+
 pub const REPO: &str = "repo";
 
 pub const DIR: &str = "dir";
@@ -18,7 +20,7 @@ pub const NAMESPACE_TYPENAME: &str = "ld.path";
 pub const DOC: &str = "The directories of the run.";
 
 #[cfg(feature = "meta")]
-pub const FIELDS: [Field; 4] = [
+pub const FIELDS: [Field; 5] = [
     Field {
         name: HOME,
         kind: Kind::String,
@@ -28,6 +30,11 @@ pub const FIELDS: [Field; 4] = [
         name: CONFIG,
         kind: Kind::String,
         doc: "The configuration directory, `~/.config/luadot`.",
+    },
+    Field {
+        name: DATA,
+        kind: Kind::String,
+        doc: "The data directory, `~/.local/share/luadot`, where the state, the backups and the default repository live. luadot owns no subdirectory a plugin manager might pick there.",
     },
     Field {
         name: REPO,

@@ -31,7 +31,6 @@ declare -A completion_files=(
 host=$(uname -m)
 [ -n "${rust_targets[$host]+set}" ] || die "$host is not a released architecture"
 
-export RUSTUP_TOOLCHAIN=stable
 export RUSTFLAGS="${RUSTFLAGS:-} -C strip=symbols"
 export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
 export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc

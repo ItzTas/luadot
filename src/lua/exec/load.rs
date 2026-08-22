@@ -20,13 +20,14 @@ pub fn run_exec(command: &str, target: &str, shared: &Shared) -> Result<()> {
         utils::home_dir().with_context(|| format!("{command}: failed to locate your home"))?;
     let config = utils::config_dir()
         .with_context(|| format!("{command}: failed to locate the configuration"))?;
+    let data = utils::data_dir()
+        .with_context(|| format!("{command}: failed to locate the data directory"))?;
     let state = state::load()?;
-    let paths = Paths::new(&home, &config).with_repo(state.repo());
+    let paths = Paths::new(&home, &config, &data).with_repo(state.repo());
 
     run(
         command,
         &classify(target, Path::new(target).is_file()),
-        &config,
         &paths,
         state.classes(),
         shared,
@@ -47,7 +48,6 @@ fn classify(target: &str, is_file: bool) -> Target {
 fn run(
     command: &str,
     target: &Target,
-    config: &Path,
     paths: &Paths,
     classes: &Classes,
     shared: &Shared,
@@ -59,7 +59,7 @@ fn run(
             Surface::Exec,
             source,
             SOURCE_NAME,
-            &[config],
+            &[paths.config()],
             &paths.clone().with_dir(Path::new(CURRENT_DIR)),
             classes,
             shared,
@@ -105,14 +105,17 @@ mod tests {
     use crate::lua::constants::MODULES_DIR;
 
     fn paths(home: &Path) -> Paths {
-        Paths::new(home, &home.join(".config/luadot"))
+        Paths::new(
+            home,
+            &home.join(".config/luadot"),
+            &home.join(".local/share/luadot"),
+        )
     }
 
     fn exec(target: &Target, home: &Path) -> Result<()> {
         run(
             "exec",
             target,
-            &home.join(".config/luadot"),
             &paths(home),
             &Classes::default(),
             &Arc::new(Mutex::new(Config::default())),

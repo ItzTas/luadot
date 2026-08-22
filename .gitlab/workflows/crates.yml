@@ -1,0 +1,28 @@
+crates-io:
+  stage: publish
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  image: rust:latest
+  resource_group: crates-io
+  needs:
+    - job: bump
+      artifacts: true
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+    GIT_DEPTH: 0
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - .cargo/
+    policy: pull
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends cmake
+    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
+    - git fetch origin --tags --force
+    - git checkout "$LUADOT_TAG"
+  script:
+    - ./packaging/release/crates.sh "$LUADOT_TAG"

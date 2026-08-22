@@ -33,6 +33,8 @@ Anywhere else, from source:
 cargo install --git https://github.com/ItzTas/luadot luadot
 ```
 
+The build compiles Lua 5.4 and lpeg from C, so the machine needs a C compiler.
+
 A source install has no packaged completions and no manual page;
 `luadot completions <shell>` prints the script for your shell, and `luadot man`
 prints the page for `~/.local/share/man/man1/luadot.1`.

@@ -6,7 +6,7 @@ use super::load::destination;
 use crate::lua::Shared;
 use crate::lua::constants::MODULES_DIR;
 use crate::lua::embed;
-use crate::lua::ld::{API, Paths, Surface, install, share};
+use crate::lua::ld::{API, Paths, Surface, extend_module_path, install, share};
 use crate::lua::runtime::{add_module_path, environment, runtime};
 use crate::lua::scope::{Content, Output};
 use crate::state::Classes;
@@ -24,8 +24,11 @@ pub fn load_template_file(
         .with_context(|| format!("{command}: failed to read {}", path.display()))?;
     let dirs = utils::config_dir()
         .with_context(|| format!("{command}: failed to locate the configuration"))?;
+    let data = utils::data_dir()
+        .with_context(|| format!("{command}: failed to locate the data directory"))?;
+    let paths = Paths::new(home, &dirs, &data).with_repo(Some(repo));
 
-    render(command, home, repo, &dirs, path, &source, classes, config)
+    render(command, home, repo, &paths, path, &source, classes, config)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -33,7 +36,7 @@ fn render(
     command: &str,
     home: &Path,
     repo: &Path,
-    config: &Path,
+    paths: &Paths,
     path: &Path,
     source: &str,
     classes: &Classes,
@@ -44,14 +47,16 @@ fn render(
         .with_context(|| format!("{command}: failed to compile {}", path.display()))?;
 
     let lua = runtime().with_context(|| format!("{command}: failed to start the Lua runtime"))?;
-    let mut paths = Paths::new(home, config).with_repo(Some(repo));
+    let mut paths = paths.clone();
     if let Some(dir) = path.parent() {
         paths = paths.with_dir(dir);
     }
     install(&lua, Surface::Standalone, &paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
     share(&lua, shared);
-    add_module_path(&lua, config)
+    extend_module_path(&lua)
+        .with_context(|| format!("{command}: failed to reach the registered modules"))?;
+    add_module_path(&lua, paths.config())
         .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
 
     let rendered = environment(&lua, None)

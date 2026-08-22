@@ -21,6 +21,7 @@ mod rm_cmd;
 mod setup_cmd;
 mod status_cmd;
 mod sync_cmd;
+mod task_cmd;
 mod tmpl_cmd;
 
 pub use add_cmd::{AddArgs, add_cmd};
@@ -48,4 +49,5 @@ pub use rm_cmd::{RmArgs, rm_cmd};
 pub use setup_cmd::{SetupArgs, setup_cmd};
 pub use status_cmd::{StatusArgs, status_cmd};
 pub use sync_cmd::{SyncArgs, sync_cmd};
+pub use task_cmd::{TaskArgs, external_cmd, task_cmd};
 pub use tmpl_cmd::{TmplArgs, tmpl_cmd};

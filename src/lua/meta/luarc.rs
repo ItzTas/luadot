@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::de::Error;
 use serde_json::{Map, Value, json};
@@ -8,12 +8,12 @@ use super::constants::{
     VERSION, VERSION_KEY,
 };
 
-pub fn merged(existing: Option<&str>, library: &str) -> serde_json::Result<String> {
+pub fn merged(existing: Option<&str>, libraries: &[String]) -> serde_json::Result<String> {
     let mut settings = match existing {
         Some(text) => parsed(text)?,
         None => Map::new(),
     };
-    for (key, value) in wanted(library) {
+    for (key, value) in wanted(libraries) {
         merge(&mut settings, key, value);
     }
 
@@ -23,12 +23,17 @@ pub fn merged(existing: Option<&str>, library: &str) -> serde_json::Result<Strin
     Ok(text)
 }
 
-pub fn library(home: &Path, data: &Path) -> String {
-    let definitions = data.join(DEFINITIONS_DIR);
+pub fn libraries(home: &Path, data: &Path, registered: &[PathBuf]) -> Vec<String> {
+    std::iter::once(data.join(DEFINITIONS_DIR))
+        .chain(registered.iter().cloned())
+        .map(|dir| shortened(home, &dir))
+        .collect()
+}
 
-    match definitions.strip_prefix(home) {
+fn shortened(home: &Path, dir: &Path) -> String {
+    match dir.strip_prefix(home) {
         Ok(relative) => Path::new(TILDE).join(relative).display().to_string(),
-        Err(_) => definitions.display().to_string(),
+        Err(_) => dir.display().to_string(),
     }
 }
 
@@ -39,12 +44,12 @@ fn parsed(text: &str) -> serde_json::Result<Map<String, Value>> {
     }
 }
 
-fn wanted(library: &str) -> [(&'static str, Value); 4] {
+fn wanted(libraries: &[String]) -> [(&'static str, Value); 4] {
     [
         (SCHEMA_KEY, json!(SCHEMA)),
         (VERSION_KEY, json!(VERSION)),
         (PATH_KEY, json!(PATHS)),
-        (LIBRARY_KEY, json!([library])),
+        (LIBRARY_KEY, json!(libraries)),
     ]
 }
 
@@ -77,11 +82,41 @@ mod tests {
             "workspace.library": ["/usr/share/lua", "meta"]
         }"#;
 
-        let settings = settings(&merged(Some(existing), DEFINITIONS_DIR).unwrap());
+        let settings = settings(
+            &merged(
+                Some(existing),
+                &[DEFINITIONS_DIR.to_string(), "~/plugins/lazyld".to_string()],
+            )
+            .unwrap(),
+        );
 
         assert_eq!(settings["diagnostics.globals"], json!(["vim"]));
         assert_eq!(settings[VERSION_KEY], VERSION);
-        assert_eq!(settings[LIBRARY_KEY], json!(["/usr/share/lua", "meta"]));
+        assert_eq!(
+            settings[LIBRARY_KEY],
+            json!(["/usr/share/lua", "meta", "~/plugins/lazyld"])
+        );
         assert_eq!(settings[PATH_KEY], json!(PATHS));
+    }
+
+    #[test]
+    fn the_registered_directories_follow_the_definitions_named_through_the_home_directory() {
+        let home = Path::new("/home/u");
+
+        assert_eq!(
+            libraries(
+                home,
+                Path::new("/home/u/.local/share/luadot"),
+                &[
+                    PathBuf::from("/home/u/.local/share/luadot/plugins/lazyld"),
+                    PathBuf::from("/opt/lazyld"),
+                ],
+            ),
+            [
+                "~/.local/share/luadot/meta",
+                "~/.local/share/luadot/plugins/lazyld",
+                "/opt/lazyld",
+            ]
+        );
     }
 }

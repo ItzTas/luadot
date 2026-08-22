@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::Command;
 
 use mlua::{Function, Lua, Table, Variadic};
@@ -14,18 +15,23 @@ pub fn function(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
     let command = format!("`{API}.{NAMESPACE}`");
 
     lua.create_function(move |lua, (_, args): (Table, Variadic<String>)| {
-        if args.is_empty() {
-            return Err(external(format!(
-                "{command} takes the arguments of the git command to run"
-            )));
-        }
-
         let repo = require(paths.repo(), &command)?;
-        let mut git = Command::new(PROGRAM);
-        git.current_dir(repo).args(args.iter());
 
-        run(lua, git, NAMESPACE, &display(PROGRAM, &args))
+        run_in(lua, repo, &args, &command)
     })
+}
+
+pub fn run_in(lua: &Lua, dir: &Path, args: &[String], command: &str) -> mlua::Result<String> {
+    if args.is_empty() {
+        return Err(external(format!(
+            "{command} takes the arguments of the git command to run"
+        )));
+    }
+
+    let mut git = Command::new(PROGRAM);
+    git.current_dir(dir).args(args);
+
+    run(lua, git, NAMESPACE, &display(PROGRAM, args))
 }
 
 #[cfg(test)]
@@ -43,7 +49,12 @@ mod tests {
     }
 
     fn paths(repo: Option<&Path>) -> Paths {
-        Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot")).with_repo(repo)
+        Paths::new(
+            Path::new("/home/u"),
+            Path::new("/home/u/.config/luadot"),
+            Path::new("/home/u/.local/share/luadot"),
+        )
+        .with_repo(repo)
     }
 
     #[test]

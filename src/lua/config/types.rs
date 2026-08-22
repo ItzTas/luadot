@@ -7,10 +7,11 @@ use glob::Pattern;
 use mlua::Lua;
 use regex::Regex;
 
-use super::around::Around;
+use super::around::{Around, Chain};
 use super::constants::{CLASS_QUESTION, GIT_DIR, LOCKED, MATCH, MISSING};
 use super::diff::Diff;
 use super::report::Report;
+use super::task::Task;
 use crate::backup::Retention;
 use crate::crypt::{Backend, Identity, Lock, Secrets};
 use crate::files::{ConflictPolicy, LinkMode, Placement};
@@ -38,7 +39,10 @@ pub struct Config {
     crypt_secrets: Secrets,
     diff: Diff,
     status: Report,
-    around: BTreeMap<Command, Around>,
+    around: BTreeMap<Command, Chain>,
+    runtime_paths: Vec<PathBuf>,
+    tasks: BTreeMap<String, Task>,
+    doc_pages: Vec<PathBuf>,
     runtimes: Vec<Lua>,
 }
 
@@ -64,6 +68,9 @@ impl Default for Config {
             diff: Diff::default(),
             status: Report::default(),
             around: BTreeMap::new(),
+            runtime_paths: Vec::new(),
+            tasks: BTreeMap::new(),
+            doc_pages: Vec::new(),
             runtimes: Vec::new(),
         }
     }
@@ -106,18 +113,41 @@ impl Config {
             .ok_or_else(|| mlua::Error::external(MISSING))
     }
 
-    pub fn building(lua: &Lua, edit: impl FnOnce(&mut Config)) -> mlua::Result<()> {
+    pub fn building<T>(lua: &Lua, edit: impl FnOnce(&mut Config) -> T) -> mlua::Result<T> {
         let shared = Self::shared(lua)?;
         let mut config = shared
             .try_lock()
             .map_err(|_| mlua::Error::external(LOCKED))?;
-        edit(&mut config);
 
-        Ok(())
+        Ok(edit(&mut config))
     }
 
     pub fn keep_runtime(&mut self, runtime: Lua) {
         self.runtimes.push(runtime);
+    }
+
+    pub fn add_runtime_path(&mut self, dir: PathBuf) {
+        if self.runtime_paths.contains(&dir) {
+            return;
+        }
+
+        self.runtime_paths.push(dir);
+    }
+
+    pub fn runtime_paths(&self) -> &[PathBuf] {
+        &self.runtime_paths
+    }
+
+    pub fn add_doc_page(&mut self, page: PathBuf) {
+        if self.doc_pages.contains(&page) {
+            return;
+        }
+
+        self.doc_pages.push(page);
+    }
+
+    pub fn doc_pages(&self) -> &[PathBuf] {
+        &self.doc_pages
     }
 
     pub fn set_diff(&mut self, diff: Diff) {
@@ -137,10 +167,10 @@ impl Config {
     }
 
     pub fn set_around(&mut self, command: Command, around: Around) {
-        self.around.entry(command).or_default().merge(around);
+        self.around.entry(command).or_default().add(around);
     }
 
-    pub fn around(&self, command: Command) -> Option<&Around> {
+    pub fn around(&self, command: Command) -> Option<&Chain> {
         self.around.get(&command)
     }
 
@@ -154,6 +184,23 @@ impl Config {
 
     pub fn add_rules(&mut self, rules: Vec<Rule>) {
         self.rules.extend(rules);
+    }
+
+    pub fn add_task(&mut self, name: String, task: Task) -> bool {
+        if self.tasks.contains_key(&name) {
+            return false;
+        }
+
+        self.tasks.insert(name, task);
+        true
+    }
+
+    pub fn task(&self, name: &str) -> Option<&Task> {
+        self.tasks.get(name)
+    }
+
+    pub fn tasks(&self) -> impl Iterator<Item = (&str, &Task)> {
+        self.tasks.iter().map(|(name, task)| (name.as_str(), task))
     }
 
     pub fn add_class(&mut self, class: Class) {

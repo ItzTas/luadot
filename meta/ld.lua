@@ -17,6 +17,15 @@
 ---| "age"
 ---| "gpg"
 
+---Which script is running: `config.lua`, `bootstrap.lua`, a setup script, a template's `luadot.lua`, a standalone `.luadot` file, or `luadot exec`.
+---@alias ld.Surface
+---| "config"
+---| "bootstrap"
+---| "setup"
+---| "template"
+---| "standalone"
+---| "exec"
+
 ---Whether an identity names a file or a command.
 ---@alias ld.IdentityType
 ---| "command"
@@ -89,6 +98,11 @@
 ---@field autocommit? boolean Whether `add` and `rm` commit on their own once one of those files is staged.
 ---@field autopush? boolean Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back.
 
+---A command of the configuration's own, as `ld.task` takes it.
+---@class ld.Task
+---@field about? string One line saying what the task does, shown by `luadot task --list`.
+---@field run fun(argv: string[]): string? What runs, handed everything after the task name. Whatever it returns is written as a line; an error stops the command. Required.
+
 ---A file a template produces, as `ld.alt.out` takes it or `luadot.lua` returns it.
 ---@class ld.Output
 ---@field content string|ld.File What lands on the system: a string is written, a file is linked. Required.
@@ -123,16 +137,21 @@
 ---@field type? ld.IdentityType Says outright whether the words name a file or a command.
 ---@field [integer] string The path, or the program and its arguments.
 
+---What `ld.git.clone` takes besides the url and the directory.
+---@class ld.CloneOptions
+---@field branch? string The branch to check out. Defaults to the remote's `HEAD`.
+---@field depth? integer How many commits of history to fetch, one or more; `1` is the commit the branch points at alone. Defaults to all of it.
+
 ---A function to run before the command and one after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.Around
----@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.
----@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.
+---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
+---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 
 ---What `diff` prints and which program compares the two sides, and a function to run before and after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.DiffOptions
----@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.
+---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
 ---@field args? string|string[] Extra arguments for whichever program compares the two sides; right after `diff` when git runs.
----@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.
+---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 ---@field entry? (fun(file: ld.DiffFile): string?)|false Runs for every drifted file, in place of the line the command would have written. `false` silences the line.
 ---@field render? (fun(files: ld.DiffFile[]): string?)|false Runs once, with every drifted file, and takes the whole report over; nothing is compared afterwards. `false` reports the files without diffing them.
 ---@field summary? (fun(counts: ld.DiffCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
@@ -140,8 +159,8 @@
 
 ---What `status` prints, and a function to run before and after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.StatusOptions
----@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. `false` takes back one set earlier.
----@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. `false` takes back one set earlier.
+---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
+---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 ---@field entry? (fun(file: ld.StatusFile): string?)|false Runs for every inspected file, synced ones included, in place of the line and the sections the command would have written. `false` silences them.
 ---@field render? (fun(files: ld.StatusFile[]): string?)|false Runs once, with every inspected file, and takes the whole report over.
 ---@field summary? (fun(counts: ld.StatusCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
@@ -234,6 +253,7 @@
 
 ---The interface luadot installs in every script it runs: `config.lua`, `bootstrap.lua`, the setup scripts, the templates and `luadot exec`. A call does the same thing wherever it runs, on the one configuration the command is using.
 ---@class ld
+---@field surface ld.Surface Which script is running. `config.lua` runs before every command, so expensive work belongs elsewhere; `bootstrap.lua` runs once.
 ---@field lpeg table The LPeg module, the table `require("lpeg")` returns, loaded when first reached.
 ---@field re table LPeg's `re` module, the table `require("re")` returns, loaded when first reached.
 ld = {}
@@ -241,6 +261,11 @@ ld = {}
 ---Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.
 ---@param rules ld.Rule|ld.Rule[]
 function ld.rules(rules) end
+
+---Registers a command of the configuration's own: `luadot <name>` and `luadot task <name>` run its function with the arguments that follow. The name of a command luadot already has is refused, and so is one registered twice. Only `config.lua` registers; elsewhere the call does nothing and says so.
+---@param name string
+---@param task ld.Task
+function ld.task(name, task) end
 
 ---The files of a template, resolved against the directory the running script lives in: the template directory inside a template, `ld.path.dir` anywhere else. A relative name starts there; an absolute one, or one climbing out with `..`, reaches anywhere.
 ---@class ld.alt
@@ -282,7 +307,7 @@ function ld.alt.exists(name) end
 ---@return string[]
 function ld.alt.glob(pattern) end
 
----That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both.
+---That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both. The same call as `ld.json.encode`.
 ---@param value any
 ---@return string
 function ld.alt.json(value) end
@@ -322,12 +347,84 @@ function ld.crypt.backend(name) end
 ---@param lock "passphrase"|ld.Keys
 function ld.crypt.lock(lock) end
 
----Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
+---The pages `luadot doc` answers from besides luadot's own.
+---@class ld.doc
+ld.doc = {}
+
+---Registers a markdown page for `luadot doc`. Every table row whose first cell is a namespaced call in backticks, like `lazyld.sync(names)`, is answered the way the calls of the interface are: the second cell is what it takes, the third what it does. `~` and a relative path resolve against your home directory. Only `config.lua` registers; elsewhere the call does nothing and says so.
+---@param path string
+function ld.doc.page(path) end
+
+---The filesystem, with no directory of a template in the way: `~` and a relative path resolve against your home directory, an absolute one reaches anywhere. Nothing here takes a backup.
+---@class ld.fs
+ld.fs = {}
+
+---Whether something is there: a file, a directory, or a symlink whatever it points at.
+---@param path string
+---@return boolean
+function ld.fs.exists(path) end
+
+---Whether a directory is there, through a symlink too.
+---@param path string
+---@return boolean
+function ld.fs.is_dir(path) end
+
+---Creates the directory and every one leading to it; one already there is fine.
+---@param path string
+function ld.fs.mkdir(path) end
+
+---The names inside a directory, sorted, files and directories alike.
+---@param path string
+---@return string[]
+function ld.fs.ls(path) end
+
+---Removes a file, a symlink, or a directory with everything under it, and says whether something was there. Your home directory and what holds it are refused.
+---@param path string
+---@return boolean
+function ld.fs.rm(path) end
+
+---What the file holds.
+---@param path string
+---@return string
+function ld.fs.read(path) end
+
+---Writes the text over the file, creating the directories leading to it.
+---@param path string
+---@param text string
+function ld.fs.write(path, text) end
+
+---Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else; `ld.git.clone` and `ld.git.at` reach other repositories. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
 ---@class ld.git
 ---@overload fun(...: string): string
 ld.git = {}
 
----One call per command, taking a table: a function to run `before` and one `after` for every command, and what `status` and `diff` print. A second call replaces only the keys it carries, and every command is customized apart.
+---Clones a repository into that directory, which has to be empty or missing, without the `git` binary. `~` and a relative directory resolve against your home directory.
+---@param url string
+---@param dir string
+---@param options? ld.CloneOptions
+function ld.git.clone(url, dir, options) end
+
+---A function running git inside that directory the way `ld.git` runs it inside the managed repository: `ld.git.at(dir)("fetch", "--tags")`.
+---@param dir string
+---@return fun(...: string): string
+function ld.git.at(dir) end
+
+---JSON in and out. A table is a list or a table of names, never both, and `null` has a value of its own, since `nil` cannot sit in a table.
+---@class ld.json
+---@field null lightuserdata What a JSON `null` decodes to, and what encodes back as one. `nil` encodes as `null` too, but cannot sit in a table.
+ld.json = {}
+
+---That value as JSON, indented, with sorted keys; `ld.alt.json` is the same call.
+---@param value any
+---@return string
+function ld.json.encode(value) end
+
+---The value the text holds: an object or a list as a table, a whole number as an integer, `null` as `ld.json.null`. A text that is not JSON stops the script.
+---@param text string
+---@return any
+function ld.json.decode(text) end
+
+---One call per command, taking a table: functions to run `before` and `after` the command, and what `status` and `diff` print. Every function registered for a moment runs, in the order it was registered; what `status` and `diff` print is replaced by a later call, key by key. Every command is customized apart.
 ---@class ld.on
 ld.on = {}
 
@@ -476,6 +573,7 @@ function ld.opt.repo_dir(path) end
 ---@class ld.path
 ---@field home string Your home directory.
 ---@field config string The configuration directory, `~/.config/luadot`.
+---@field data string The data directory, `~/.local/share/luadot`, where the state, the backups and the default repository live. luadot owns no subdirectory a plugin manager might pick there.
 ---@field repo? string The managed repository, once one is set. Inside `config.lua` it is the one known before the file ran, so it does not answer for an `ld.opt.repo_dir` set in that same file.
 ---@field dir? string The directory of the script that is running, the template directory inside a template.
 ld.path = {}
@@ -574,6 +672,14 @@ function ld.regex.split(text, pattern, limit) end
 ---@param text string
 ---@return string
 function ld.regex.escape(text) end
+
+---The directories `require` searches besides the configuration's own `lua/`: what a plugin manager registers, carried to every script the command runs.
+---@class ld.rtp
+ld.rtp = {}
+
+---Puts `<dir>/lua/` on the module path of this script and of every script the command runs after it, behind the configuration's own `lua/` and in the order registered. `~` and a relative path resolve against your home directory; a directory added twice is kept once.
+---@param dir string
+function ld.rtp.add(dir) end
 
 ---The setup scripts of the repository, under `.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`, and warns elsewhere.
 ---@class ld.setup

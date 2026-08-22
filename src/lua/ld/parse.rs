@@ -2,7 +2,7 @@ use glob::Pattern;
 use mlua::{Table, Value};
 use regex::Regex;
 
-use super::constants::{CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX};
+use super::constants::{API, CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX};
 use crate::files::{ConflictPolicy, LinkMode};
 use crate::lua::Matcher;
 
@@ -106,6 +106,22 @@ pub fn owner_name(raw: &str, what: &str) -> mlua::Result<String> {
     }
 
     Ok(raw.to_string())
+}
+
+pub fn known(call: &str, options: &Table, keys: &[&str]) -> mlua::Result<()> {
+    for pair in options.clone().pairs::<String, Value>() {
+        let (key, _) =
+            pair.map_err(|_| external(format!("`{API}.{call}` takes a table of options")))?;
+
+        if !keys.contains(&key.as_str()) {
+            return Err(external(format!(
+                "`{API}.{call}`: unknown key `{key}` (available: {})",
+                keys.join(", ")
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 pub fn lookup<T: Copy>(entries: &[(&str, T)], name: &str, field: &str) -> mlua::Result<T> {

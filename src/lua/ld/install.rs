@@ -4,7 +4,8 @@ use super::constants::API;
 use super::path::Paths;
 use super::surface::Surface;
 use super::{
-    alt, argv, class, cmd, crypt, git, on, opt, path, pkg, print, regex, root, setup, sys,
+    alt, argv, class, cmd, crypt, doc, fs, git, json, on, opt, path, pkg, print, regex, root, rtp,
+    setup, sys,
 };
 use std::sync::{Arc, Mutex};
 
@@ -15,16 +16,20 @@ use crate::state::Classes;
 type Namespace = fn(&Lua) -> mlua::Result<Table>;
 
 pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) -> mlua::Result<()> {
-    let namespaces: [(&str, Namespace); 10] = [
+    let namespaces: [(&str, Namespace); 14] = [
         (alt::NAMESPACE, alt::table),
         (argv::NAMESPACE, argv::table),
         (cmd::NAMESPACE, cmd::table),
         (crypt::NAMESPACE, crypt::table),
+        (doc::NAMESPACE, doc::table),
+        (fs::NAMESPACE, fs::table),
+        (json::NAMESPACE, json::table),
         (on::NAMESPACE, on::table),
         (opt::NAMESPACE, opt::table),
         (pkg::NAMESPACE, pkg::table),
         (print::NAMESPACE, print::table),
         (regex::NAMESPACE, regex::table),
+        (rtp::NAMESPACE, rtp::table),
         (sys::NAMESPACE, sys::table),
     ];
 
@@ -36,7 +41,7 @@ pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) ->
         paths.home().to_path_buf(),
     ));
 
-    let ld = root::table(lua)?;
+    let ld = root::table(lua, surface)?;
     for (name, namespace) in namespaces {
         ld.set(name, namespace(lua)?)?;
     }
@@ -63,10 +68,15 @@ mod tests {
 
     const EVERY_CALL: &str = r#"
         assert(type(ld.rules) == "function", "rules is missing")
+        assert(type(ld.task) == "function", "task is missing")
+        assert(ld.surface == "bootstrap", "surface is wrong: " .. tostring(ld.surface))
         for _, name in ipairs({ "out", "file", "render", "expand", "read", "exists", "glob", "json" }) do
           assert(type(ld.alt[name]) == "function", "alt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.git).__call) == "function", "git is not callable")
+        for _, name in ipairs({ "clone", "at" }) do
+          assert(type(ld.git[name]) == "function", "git." .. name .. " is missing")
+        end
         for _, name in ipairs({ "backup", "backup_age", "backup_dir", "backup_keep", "conflict", "link", "passphrase_warn", "pkg_warn", "repo_dir" }) do
           assert(type(ld.opt[name]) == "function", "opt." .. name .. " is missing")
         end
@@ -76,6 +86,15 @@ mod tests {
         end
         assert(type(getmetatable(ld.crypt).__call) == "function", "crypt is not callable")
         assert(type(ld.pkg.install) == "function", "pkg.install is missing")
+        assert(type(ld.rtp.add) == "function", "rtp.add is missing")
+        assert(type(ld.doc.page) == "function", "doc.page is missing")
+        for _, name in ipairs({ "encode", "decode" }) do
+          assert(type(ld.json[name]) == "function", "json." .. name .. " is missing")
+        end
+        assert(type(ld.json.null) == "userdata", "json.null is missing")
+        for _, name in ipairs({ "exists", "is_dir", "mkdir", "ls", "rm", "read", "write" }) do
+          assert(type(ld.fs[name]) == "function", "fs." .. name .. " is missing")
+        end
         for _, name in ipairs({ "list", "all" }) do
           assert(type(ld.setup[name]) == "function", "setup." .. name .. " is missing")
         end
@@ -107,6 +126,7 @@ mod tests {
         assert(type(ld.sys.has_battery()) == "boolean", "sys.has_battery is missing")
         assert(type(ld.path.home) == "string", "path.home is missing")
         assert(type(ld.path.config) == "string", "path.config is missing")
+        assert(type(ld.path.data) == "string", "path.data is missing")
         for _, name in ipairs({ "test", "match", "find", "gmatch", "gsub", "split", "escape" }) do
           assert(type(ld.regex[name]) == "function", "regex." .. name .. " is missing")
         end
@@ -115,8 +135,12 @@ mod tests {
     "#;
 
     fn paths() -> Paths {
-        Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot"))
-            .with_repo(Some(Path::new("/data/repo")))
+        Paths::new(
+            Path::new("/home/u"),
+            Path::new("/home/u/.config/luadot"),
+            Path::new("/home/u/.local/share/luadot"),
+        )
+        .with_repo(Some(Path::new("/data/repo")))
     }
 
     fn exec(surface: Surface, source: &str) {

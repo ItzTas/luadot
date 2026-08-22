@@ -112,7 +112,9 @@ fn add_then_apply_manage_a_file_end_to_end() {
     luadot(&home)
         .args(["add", home.join(".vimrc").to_str().unwrap()])
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("added      .vimrc"))
+        .stdout(predicate::str::contains("added 1 file(s)"));
     assert_eq!(
         std::fs::read_to_string(repo.join(".vimrc")).unwrap(),
         "set number\n"
@@ -336,13 +338,28 @@ fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_i
     assert_eq!(read(&home.join(".bashrc")), "managed\n");
     assert!(!home.join(".local/share/luadot/backups").exists());
 
+    let stamp = saved.file_name().unwrap().to_str().unwrap().to_string();
+    let dest = home.join(".bashrc").display().to_string();
+
     luadot(&home)
         .args(["restore", "--list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("1 file(s)"));
 
-    luadot(&home).args(["restore", "--yes"]).assert().success();
+    luadot(&home)
+        .args(["restore", "--list", &stamp])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(dest.clone()));
+
+    luadot(&home)
+        .args(["restore", "--yes"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains(dest).and(predicate::str::contains("(0 created, 1 replaced)")),
+        );
     assert_eq!(read(&home.join(".bashrc")), "handwritten\n");
 }
 
@@ -358,6 +375,9 @@ fn init_creates_a_repository_and_makes_it_the_managed_one() {
         .assert()
         .success();
     assert!(repo.join(".git").is_dir());
+    assert!(
+        read(&home.join(".config/luadot/config.lua")).starts_with("-- The luadot configuration")
+    );
 
     luadot(&home)
         .args(["add", home.join(".vimrc").to_str().unwrap()])
@@ -653,13 +673,148 @@ fn a_command_runs_the_functions_the_configuration_sets_before_and_after_it() {
           before = function() return "before " .. ld.argv.name end,
           after = function() ld.print("after " .. ld.argv.name) end,
         })
+        ld.on.apply({ before = function() return "and again" end })
         "#,
     );
     write_state(&home, &repo);
 
     luadot(&home).arg("apply").assert().success().stdout(
-        predicate::str::is_match("(?s)^before apply\n.*\\.bashrc.*\nafter apply\n$").unwrap(),
+        predicate::str::is_match("(?s)^before apply\nand again\n.*\\.bashrc.*\nafter apply\n$")
+            .unwrap(),
     );
+}
+
+#[test]
+fn a_task_the_configuration_registers_runs_under_its_own_name() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        ld.task("plug", {
+          about = "Manage plugins",
+          run = function(argv) return "plug " .. table.concat(argv, " ") end,
+        })
+        "#,
+    );
+
+    luadot(&home)
+        .args(["plug", "sync", "--all"])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("plug sync --all\n"));
+    luadot(&home)
+        .args(["task", "plug", "sync"])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("plug sync\n"));
+    luadot(&home)
+        .args(["task", "--list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("plug\n"));
+    luadot(&home).arg("stauts").assert().code(2).stderr(
+        predicate::str::contains("unrecognized subcommand 'stauts'")
+            .and(predicate::str::contains("'status'")),
+    );
+    luadot(&home)
+        .arg("plugg")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("'plug'"));
+    luadot(&home)
+        .args(["task", "plugg"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "task: `plugg` is not a task the configuration registers (registered: plug)",
+        ));
+}
+
+#[test]
+fn doc_answers_for_a_page_the_configuration_registers_and_survives_a_broken_configuration() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    write(
+        &home.join("plugins/lazyld/docs/lazyld.md"),
+        "| Call | Arguments | Effect |\n| --- | --- | --- |\n\
+         | `lazyld.sync(names)` | plugin names | Clones what is missing. |\n",
+    );
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.doc.page("plugins/lazyld/docs/lazyld.md")"#,
+    );
+
+    luadot(&home)
+        .args(["doc", "lazyld.sync"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("lazyld.sync(names)")
+                .and(predicate::str::contains("Clones what is missing."))
+                .and(predicate::str::contains("plugins/lazyld/docs/lazyld.md")),
+        );
+
+    write(&home.join(".config/luadot/config.lua"), "ld.opt.link(");
+    luadot(&home)
+        .args(["doc", "opt.link"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ld.opt.link(mode)"))
+        .stderr(predicate::str::contains("config: failed to run"));
+}
+
+#[test]
+fn a_plugin_registered_from_the_configuration_is_required_described_and_run() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let plugin = home.join(".local/share/luadot/plugins/lazyld");
+    write(
+        &plugin.join("lua/lazyld.lua"),
+        r#"
+        local lazyld = {}
+
+        function lazyld.setup()
+          ld.task("plug", { run = function(argv) return "plug " .. table.concat(argv, " ") end })
+        end
+
+        function lazyld.greet()
+          return "hello from lazyld"
+        end
+
+        return lazyld
+        "#,
+    );
+    write(
+        &plugin.join("docs/lazyld.md"),
+        "| Call | Arguments | Effect |\n| --- | --- | --- |\n\
+         | `lazyld.greet()` | none | Says hello. |\n",
+    );
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        local dir = ld.path.data .. "/plugins/lazyld"
+        ld.rtp.add(dir)
+        ld.doc.page(dir .. "/docs/lazyld.md")
+        require("lazyld").setup()
+        "#,
+    );
+
+    luadot(&home)
+        .args(["exec", r#"print(require("lazyld").greet())"#])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("hello from lazyld\n"));
+    luadot(&home)
+        .args(["plug", "sync"])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("plug sync\n"));
+    luadot(&home)
+        .args(["doc", "lazyld.greet"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Says hello."));
 }
 
 #[test]
@@ -751,7 +906,7 @@ done
 if [ "$op" = encrypt ]; then
   {
     echo FAKEAGE
-    if [ -n "$src" ]; then base64 "$src"; else base64; fi
+    if [ -n "$src" ]; then base64 < "$src"; else base64; fi
   } > "${out:-/dev/stdout}"
 elif [ "$op" = decrypt ]; then
   [ -n "$src" ] || { echo "fake age: no input" >&2; exit 1; }
@@ -1029,6 +1184,10 @@ fn meta_install_writes_the_definitions_once_and_points_the_settings_at_them() {
         &home.join(".config/luadot/.luarc.json"),
         "{\n  \"diagnostics.globals\": [\"vim\"]\n}\n",
     );
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.rtp.add(".local/share/luadot/plugins/lazyld")"#,
+    );
     write_state(&home, &repo);
 
     luadot(&home)
@@ -1045,10 +1204,25 @@ fn meta_install_writes_the_definitions_once_and_points_the_settings_at_them() {
     let merged = read(&home.join(".config/luadot/.luarc.json"));
     assert!(merged.contains("\"diagnostics.globals\""));
     assert!(merged.contains("\"~/.local/share/luadot/meta\""));
+    assert!(merged.contains("\"~/.local/share/luadot/plugins/lazyld\""));
 
     luadot(&home)
         .arg("meta")
         .assert()
         .success()
         .stdout(predicate::str::diff(definitions));
+}
+
+#[test]
+fn doc_without_a_call_names_every_call_and_says_how_to_read_one() {
+    let home = tempfile::tempdir().unwrap();
+
+    luadot(home.path())
+        .arg("doc")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("opt.link\n"))
+        .stdout(predicate::str::contains(
+            "\"luadot doc <call>\" to describe one",
+        ));
 }

@@ -140,7 +140,7 @@ mod tests {
 
     fn script(dir: &Path, source: &str) -> mlua::Result<()> {
         let lua = runtime().unwrap();
-        let paths = Paths::new(dir, dir).with_dir(dir);
+        let paths = Paths::new(dir, dir, dir).with_dir(dir);
         install(&lua, Surface::Bootstrap, &paths, &Classes::default()).unwrap();
 
         lua.load(source).exec()

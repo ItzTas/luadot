@@ -57,6 +57,9 @@ pub const NIL: &str = "nil";
 pub const FALSE: &str = "false";
 
 #[cfg(feature = "meta")]
+pub const LIGHT_USERDATA: &str = "lightuserdata";
+
+#[cfg(feature = "meta")]
 pub const STRING_INDEX: &str = "[string]";
 
 #[cfg(feature = "meta")]

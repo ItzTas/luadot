@@ -8,8 +8,10 @@ use crate::crypt;
 use crate::files;
 use crate::git;
 use crate::lua::Config;
-use crate::output;
+use crate::output::{self, Tone};
 use crate::utils::{self, Workspace};
+
+use super::super::constants::ADD_LABEL;
 
 #[derive(Debug, Args)]
 pub struct AddArgs {
@@ -32,14 +34,29 @@ pub fn add_cmd(args: AddArgs) -> Result<()> {
     let mut added = Vec::with_capacity(pairs.len());
     for (source, dest) in pairs {
         link_into_repo(&config, lock, &repo, &source, &dest)?;
+        output::entry(
+            Tone::Good,
+            ADD_LABEL,
+            utils::relative(&repo, &dest).display(),
+        );
         added.push(dest);
     }
 
     track_in_lfs(&config, &repo)?;
     git::stage("add", &repo, &added)?;
+    report(&added);
 
     let automatic = utils::automatic(&config, &repo, &added);
     git::auto("add", &repo, automatic.commits, automatic.pushes)
+}
+
+fn report(added: &[PathBuf]) {
+    if added.is_empty() {
+        output::note("nothing to add, the rules leave every path out");
+        return;
+    }
+
+    output::note(format!("added {} file(s)", added.len()));
 }
 
 fn track_in_lfs(config: &Config, repo: &Path) -> Result<()> {

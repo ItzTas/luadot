@@ -18,12 +18,15 @@ thread_local! {
 }
 
 pub fn run_setups(command: &str, repo: &Path, names: &[String], shared: &Shared) -> Result<()> {
-    let home = utils::home_dir()?;
-    let config = utils::config_dir()?;
+    let paths = Paths::new(
+        &utils::home_dir()?,
+        &utils::config_dir()?,
+        &utils::data_dir()?,
+    );
     let classes = state::load()?.classes().clone();
 
     for name in names {
-        run_one(command, &home, &config, repo, name, &classes, shared)?;
+        run_one(command, &paths, repo, name, &classes, shared)?;
     }
     Ok(())
 }
@@ -36,20 +39,19 @@ pub fn list_setups(command: &str, repo: &Path) -> Result<Vec<String>> {
 
 pub fn run_one(
     command: &str,
-    home: &Path,
-    config: &Path,
+    paths: &Paths,
     repo: &Path,
     name: &str,
     classes: &Classes,
     shared: &Shared,
 ) -> Result<()> {
-    let dir = setup_dir(command, home, config, repo)?;
+    let dir = setup_dir(command, paths.home(), paths.config(), repo)?;
     let Some(path) = find(&dir, name) else {
         bail!("{command}: no setup named `{name}` in {}", dir.display());
     };
 
     enter(command, name)?;
-    let result = run_path(command, &dir, &path, home, config, repo, classes, shared);
+    let result = run_path(command, &dir, &path, paths, repo, classes, shared);
     leave(name);
     result
 }
@@ -137,13 +139,11 @@ fn known_extension(path: &Path) -> bool {
         .is_some_and(|ext| [LUA_EXT, SH_EXT].contains(&ext))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_path(
     command: &str,
     root: &Path,
     path: &Path,
-    home: &Path,
-    config: &Path,
+    paths: &Paths,
     repo: &Path,
     classes: &Classes,
     shared: &Shared,
@@ -156,7 +156,7 @@ fn run_path(
         .parent()
         .with_context(|| format!("{command}: {} has no parent directory", root.display()))?;
     let own = path.parent().filter(|parent| *parent != root);
-    let mut paths = Paths::new(home, config).with_repo(Some(repo));
+    let mut paths = paths.clone().with_repo(Some(repo));
     if let Some(dir) = path.parent() {
         paths = paths.with_dir(dir);
     }
@@ -231,6 +231,10 @@ mod tests {
         (home, config, repo)
     }
 
+    fn paths(home: &Path, config: &Path) -> Paths {
+        Paths::new(home, config, &home.join(".local/share/luadot"))
+    }
+
     fn write_setup(home: &Path, config: &Path, repo: &Path, file: &str, source: &str) -> PathBuf {
         let dir = setup_dir("test", home, config, repo).unwrap();
         let path = dir.join(file);
@@ -290,8 +294,7 @@ mod tests {
 
         run_one(
             "setup",
-            &home,
-            &config,
+            &paths(&home, &config),
             &repo,
             "ufw",
             &Classes::default(),
@@ -320,8 +323,7 @@ mod tests {
 
         run_one(
             "setup",
-            &home,
-            &config,
+            &paths(&home, &config),
             &repo,
             "ufw",
             &Classes::default(),
@@ -342,8 +344,7 @@ mod tests {
             "{:#}",
             run_one(
                 "setup",
-                &home,
-                &config,
+                &paths(&home, &config),
                 &repo,
                 "loop",
                 &Classes::default(),

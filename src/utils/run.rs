@@ -8,7 +8,7 @@ use super::workspace::configured;
 use crate::backup::Backup;
 use crate::files::SyncOutcome;
 use crate::hook::Hooks;
-use crate::lua::{Command, Config, Moment, Shared};
+use crate::lua::{Command, Config, Custom, Moment, Shared};
 use crate::output;
 
 static DRY_RUN: OnceLock<bool> = OnceLock::new();
@@ -49,18 +49,15 @@ pub fn finished() -> Result<()> {
 }
 
 fn fire(command: Command, shared: &Shared, moment: Moment) -> Result<()> {
-    let custom = configured(command.name(), shared)?
+    let registered: Vec<Custom> = configured(command.name(), shared)?
         .around(command)
-        .and_then(|around| around.get(moment))
-        .cloned();
-    let Some(custom) = custom else {
-        return Ok(());
-    };
+        .map(|chain| chain.all(moment).to_vec())
+        .unwrap_or_default();
+    let what = customized(command.name(), &command.call(), moment.key());
 
-    said(custom.shown(
-        &customized(command.name(), &command.call(), moment.key()),
-        (),
-    )?);
+    for custom in registered {
+        said(custom.shown(&what, ())?);
+    }
 
     Ok(())
 }

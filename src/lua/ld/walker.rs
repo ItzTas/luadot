@@ -6,26 +6,31 @@ use super::constants::{
 };
 use super::signature::Collect;
 use super::{
-    alt, argv, class, cmd, crypt, git, on, opt, path, pkg, print, regex, root, setup, sys,
+    alt, argv, class, cmd, crypt, doc, fs, git, json, on, opt, path, pkg, print, regex, root, rtp,
+    setup, sys,
 };
 
 type Describer = fn(TypeWalker) -> TypeWalker;
 
 pub fn walker() -> TypeWalker {
-    let describers: [Describer; 15] = [
+    let describers: [Describer; 19] = [
         root::describe,
         alt::describe,
         argv::describe,
         class::describe,
         cmd::describe,
         crypt::describe,
+        doc::describe,
+        fs::describe,
         git::describe,
+        json::describe,
         on::describe,
         opt::describe,
         path::describe,
         pkg::describe,
         print::describe,
         regex::describe,
+        rtp::describe,
         setup::describe,
         sys::describe,
     ];
@@ -54,14 +59,15 @@ pub fn walker() -> TypeWalker {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::path::Path;
 
     use mlua::{Table, Value};
     use tealr::{KindOfType, RecordGenerator, Type, TypeGenerator};
 
     use super::super::constants::{
-        API, BOOLEAN, CALL_METHOD, INTEGER, INTEGER_INDEX, NUMBER, STRING, STRING_INDEX,
+        API, BOOLEAN, CALL_METHOD, INTEGER, INTEGER_INDEX, LIGHT_USERDATA, NUMBER, STRING,
+        STRING_INDEX,
     };
     use super::super::{Paths, Surface, install};
     use super::*;
@@ -77,8 +83,12 @@ mod tests {
 
     fn installed() -> Table {
         let lua = runtime().unwrap();
-        let paths = Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot"))
-            .with_repo(Some(Path::new("/data/repo")));
+        let paths = Paths::new(
+            Path::new("/home/u"),
+            Path::new("/home/u/.config/luadot"),
+            Path::new("/home/u/.local/share/luadot"),
+        )
+        .with_repo(Some(Path::new("/data/repo")));
         install(&lua, Surface::Bootstrap, &paths, &Classes::default()).unwrap();
 
         let ld: Table = lua.globals().get(API).unwrap();
@@ -141,7 +151,7 @@ mod tests {
             .is_some_and(|single| single.name.0 == "nil" && single.kind == KindOfType::Builtin)
     }
 
-    fn shape_of_type(ty: &Type) -> (Shape, bool) {
+    fn shape_of_type(ty: &Type, aliases: &BTreeSet<String>) -> (Shape, bool) {
         let plain = Shape::Table { callable: false };
 
         match ty {
@@ -150,18 +160,32 @@ mod tests {
                 let shape = parts
                     .iter()
                     .find(|part| !is_nil(part))
-                    .map_or(plain, |part| shape_of_type(part).0);
+                    .map_or(plain, |part| shape_of_type(part, aliases).0);
 
                 (shape, optional)
             }
             Type::Function(_) => (Shape::Function, false),
             Type::Single(single) => match single.name.0.as_ref() {
-                STRING | BOOLEAN => (Shape::Value(single.name.0.to_string()), false),
+                STRING | BOOLEAN | LIGHT_USERDATA => {
+                    (Shape::Value(single.name.0.to_string()), false)
+                }
                 INTEGER | NUMBER => (Shape::Value(NUMBER.to_string()), false),
+                name if aliases.contains(name) => (Shape::Value(STRING.to_string()), false),
                 _ => (plain, false),
             },
             _ => (plain, false),
         }
+    }
+
+    fn aliases(walker: &TypeWalker) -> BTreeSet<String> {
+        walker
+            .given_types
+            .iter()
+            .filter_map(|generator| match generator {
+                TypeGenerator::Enum(choices) => Some(choices.name.clone()),
+                TypeGenerator::Record(_) => None,
+            })
+            .collect()
     }
 
     fn record<'a>(walker: &'a TypeWalker, ty: &Type) -> &'a RecordGenerator {
@@ -177,6 +201,7 @@ mod tests {
 
     fn described(walker: &TypeWalker) -> BTreeMap<String, (Shape, bool)> {
         let mut found = BTreeMap::new();
+        let aliases = aliases(walker);
 
         for instance in &walker.global_instances_off {
             let record = record(walker, &instance.ty);
@@ -195,7 +220,7 @@ mod tests {
                 }
                 found.insert(
                     format!("{}.{}", instance.name, field.name),
-                    shape_of_type(&field.ty),
+                    shape_of_type(&field.ty, &aliases),
                 );
             }
         }

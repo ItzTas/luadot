@@ -19,9 +19,13 @@ pub struct CloneArgs {
 pub fn clone_cmd(args: CloneArgs) -> Result<()> {
     let home = utils::home_dir()?;
     let config = lua::load_config()?;
-    let (configured, lfs) = {
+    let (configured, lfs, registered) = {
         let loaded = utils::configured("clone", &config)?;
-        (loaded.repo_dir().map(Path::to_path_buf), loaded.lfs())
+        (
+            loaded.repo_dir().map(Path::to_path_buf),
+            loaded.lfs(),
+            loaded.runtime_paths().to_vec(),
+        )
     };
 
     let dir = utils::destination("clone", &home, args.dir.as_deref(), configured.as_deref())?;
@@ -38,7 +42,7 @@ pub fn clone_cmd(args: CloneArgs) -> Result<()> {
     }
 
     output::note(format!("cloned {}", dir.display()));
-    utils::offer_definitions("clone");
+    utils::offer_definitions("clone", &registered);
 
     offer_bootstrap(&dir)
 }

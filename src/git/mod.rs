@@ -20,7 +20,7 @@ mod stage;
 
 pub use attributes::{path as attributes_path, sync as sync_attributes};
 pub use auto::auto;
-pub use clone::{Cloned, clone};
+pub use clone::{Cloned, clone, clone_plain};
 pub use commit::{commit, committed, message, staged};
 pub use ignore::{Excludes, Kind};
 pub use info::refresh as refresh_info;

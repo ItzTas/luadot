@@ -31,8 +31,8 @@ mod tests {
 
         assert!(matches!(config.status().summary(), Some(Custom::Silent)));
         assert!(matches!(
-            config.around(Command::Status).unwrap().get(Moment::After),
-            Some(Custom::Call(_))
+            config.around(Command::Status).unwrap().all(Moment::After),
+            [Custom::Call(_)]
         ));
     }
 
