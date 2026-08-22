@@ -8,16 +8,15 @@ use crate::output::{self, GAP};
 use crate::utils;
 
 use super::super::constants::{
-    DOC_API, DOC_CELLS, DOC_HEADING, DOC_NO_ARGUMENTS, DOC_PAGES, DOC_REGISTERED_ROW, DOC_ROOT,
-    DOC_ROW, DOC_TAKES, DOC_WRITTEN_IN,
+    DOC_API, DOC_CELLS, DOC_DESCRIBES, DOC_HEADING, DOC_NO_ARGUMENTS, DOC_PAGES,
+    DOC_REGISTERED_ROW, DOC_ROOT, DOC_ROW, DOC_TAKES, DOC_WRITTEN_IN,
 };
 
 #[derive(Debug, Args)]
 pub struct DocArgs {
     #[arg(
         value_name = "CALL",
-        required_unless_present = "list",
-        help = "The call to describe, `ld.` optional; a namespace answers with everything under it, `ld` with every call"
+        help = "The call to describe, `ld.` optional; a namespace answers with everything under it, `ld` with every call, none names every one"
     )]
     pub call: Option<String>,
     #[arg(short, long, help = "Print the name of every call, one per line")]
@@ -39,16 +38,28 @@ pub fn doc_cmd(args: DocArgs) -> Result<()> {
     let entries = entries_with(&registered());
 
     if args.list {
-        for name in listed(&entries) {
-            output::line(name);
-        }
+        listing(&entries, false);
         return Ok(());
     }
+    let Some(call) = args.call.as_deref() else {
+        listing(&entries, true);
+        return Ok(());
+    };
 
-    let found = found(&entries, args.call.as_deref().unwrap_or_default())?;
+    let found = found(&entries, call)?;
     describe(&found, found.len() == 1);
 
     Ok(())
+}
+
+fn listing(entries: &[Entry], describes: bool) {
+    for name in listed(entries) {
+        output::line(name);
+    }
+
+    if describes {
+        output::hint(DOC_DESCRIBES);
+    }
 }
 
 fn describe(entries: &[&Entry], pages: bool) {
