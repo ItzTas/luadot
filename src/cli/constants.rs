@@ -39,7 +39,7 @@ pub const GENERATED_FILES: &str = "generated";
 
 pub const TASK_NONE: &str = "task: no task named";
 
-pub const TASK_UNKNOWN: &str = "is not a command of luadot nor a task the configuration registers; `luadot --help` lists the commands";
+pub const TASK_UNKNOWN: &str = "is not a task the configuration registers";
 
 pub const DOC_PAGES: [(&str, &str, &str); 3] = [
     (

@@ -28,7 +28,7 @@ meta = ["dep:tealr"]
 anstream = "1.0.0"
 anstyle = "1.0.14"
 anyhow = "1.0.104"
-clap = { version = "4.6.6", features = ["derive"] }
+clap = { version = "4.6.6", features = ["derive", "string"] }
 clap_complete = "4.6.9"
 clap_mangen = "0.3.3"
 etcetera = "0.11.0"

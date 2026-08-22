@@ -693,12 +693,21 @@ fn a_task_the_configuration_registers_runs_under_its_own_name() {
         .assert()
         .success()
         .stdout(predicate::str::diff("plug\n"));
+    luadot(&home).arg("stauts").assert().code(2).stderr(
+        predicate::str::contains("unrecognized subcommand 'stauts'")
+            .and(predicate::str::contains("'status'")),
+    );
     luadot(&home)
-        .arg("stauts")
+        .arg("plugg")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("'plug'"));
+    luadot(&home)
+        .args(["task", "plugg"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "`stauts` is not a command of luadot nor a task",
+            "task: `plugg` is not a task the configuration registers (registered: plug)",
         ));
 }
 
