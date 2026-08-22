@@ -1,3 +1,4 @@
+#[cfg(any(test, feature = "meta"))]
 use super::types::Surface;
 
 pub const CONFIG_NAME: &str = "config";
@@ -12,6 +13,7 @@ pub const STANDALONE_NAME: &str = "standalone";
 
 pub const EXEC_NAME: &str = "exec";
 
+#[cfg(any(test, feature = "meta"))]
 pub const SURFACES: [Surface; 6] = [
     Surface::Config,
     Surface::Bootstrap,
