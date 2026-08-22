@@ -18,12 +18,43 @@ fn catch_panics() {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Command;
+
     use gix::tempfile::{AutoRemove, ContainingDirectory};
 
     use super::*;
 
+    const ALONE: &str = "LUADOT_TEST_PANIC_HOOK";
+    const TEST: &str = "git::locks::tests::a_panic_takes_the_lock_files_still_registered_with_it";
+
+    fn ran_in_its_own_process() -> bool {
+        if std::env::var_os(ALONE).is_some() {
+            return false;
+        }
+
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([TEST, "--exact", "--test-threads", "1"])
+            .env(ALONE, "1")
+            .output()
+            .unwrap();
+
+        let report = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success(),
+            "{report}{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(report.contains("1 passed"), "{report}");
+
+        true
+    }
+
     #[test]
     fn a_panic_takes_the_lock_files_still_registered_with_it() {
+        if ran_in_its_own_process() {
+            return;
+        }
+
         let dir = tempfile::tempdir().unwrap();
         catch_panics();
 
