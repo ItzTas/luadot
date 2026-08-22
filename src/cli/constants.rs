@@ -13,6 +13,10 @@ pub const TRACE_FILTER: &str = "luadot=trace";
 
 pub const UNSET: &str = "(none)";
 
+pub const CONFIG_WROTE: &str = "wrote";
+
+pub const ADD_LABEL: &str = "added";
+
 pub const UNDECLARED: &str = "(not declared)";
 
 pub const DEFAULT_SHELL: &str = "/bin/sh";
@@ -76,6 +80,9 @@ pub const DOC_NO_ARGUMENTS: &str = "none";
 pub const DOC_TAKES: &str = "takes ";
 
 pub const DOC_WRITTEN_IN: &str = "written in ";
+
+pub const DOC_DESCRIBES: &str =
+    "(use \"luadot doc <call>\" to describe one, \"luadot doc ld\" to describe every one)";
 
 pub const MAN_TITLE: &str = "LUADOT";
 

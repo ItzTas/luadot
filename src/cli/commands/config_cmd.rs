@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{Args, Subcommand};
 
 use crate::lua::{self, Config, Rule};
@@ -104,10 +104,7 @@ fn repo() -> Result<()> {
 
 fn edit() -> Result<()> {
     let file = lua::config_path()?;
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("config: failed to create {}", parent.display()))?;
-    }
+    lua::place_starter("config", &file)?;
 
     utils::open("config", &file)
 }
