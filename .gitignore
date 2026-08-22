@@ -34,3 +34,6 @@ target
 # Build results linked by nix build
 /result
 /result-*
+
+# Local CARGO_HOME: registry cache, and credentials.toml if cargo login runs here
+/.cargo/
