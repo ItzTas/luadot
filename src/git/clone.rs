@@ -1,7 +1,10 @@
+use std::num::NonZeroU32;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context, Result};
+use gix::clone::PrepareFetch;
+use gix::remote::fetch::Shallow;
 use gix::sec::Trust;
 use gix::sec::trust::DefaultForLevel;
 use tracing::debug;
@@ -19,35 +22,8 @@ pub enum Cloned {
 
 pub fn clone(dir: &Path, url: &str, lfs: bool) -> Result<Cloned> {
     debug!(url, dir = %dir.display(), lfs, "cloning");
-    require_empty("clone", dir)?;
-
-    if let Some(parent) = dir.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("clone: failed to create {}", parent.display()))?;
-    }
-
-    let url = gix::url::parse(url.into()).context("clone: invalid repository url")?;
-    let should_interrupt = AtomicBool::new(false);
-
-    let mut fetch = gix::clone::PrepareFetch::new(
-        url,
-        dir,
-        gix::create::Kind::WithWorktree,
-        gix::create::Options::default(),
-        options(lfs),
-    )
-    .context("clone: failed to prepare clone")?;
-    let progress = Progress::new();
-
-    let (mut checkout, _outcome) = fetch
-        .fetch_then_checkout(progress.task(FETCH_TASK), &should_interrupt)
-        .context("clone: failed to fetch repository")?;
-
-    let (repo, _outcome) = checkout
-        .main_worktree(progress.task(CHECKOUT_TASK), &should_interrupt)
-        .context("clone: failed to checkout worktree")?;
-
-    drop(progress);
+    let fetch = prepare("clone", dir, url, options(lfs))?;
+    let repo = checkout("clone", fetch)?;
 
     let head = repo.head().context("clone: failed to read HEAD")?;
     let cloned = match head.is_unborn() {
@@ -62,6 +38,70 @@ pub fn clone(dir: &Path, url: &str, lfs: bool) -> Result<Cloned> {
 
     debug!(dir = %dir.display(), ?cloned, "cloned");
     Ok(cloned)
+}
+
+pub fn clone_plain(
+    command: &str,
+    dir: &Path,
+    url: &str,
+    branch: Option<&str>,
+    depth: Option<NonZeroU32>,
+) -> Result<()> {
+    debug!(url, dir = %dir.display(), branch, depth, "cloning");
+    let mut fetch = prepare(command, dir, url, options(false))?
+        .with_ref_name(branch)
+        .with_context(|| format!("{command}: invalid branch name"))?;
+    if let Some(depth) = depth {
+        fetch = fetch.with_shallow(Shallow::DepthAtRemote(depth));
+    }
+
+    checkout(command, fetch)?;
+
+    debug!(dir = %dir.display(), "cloned");
+    Ok(())
+}
+
+fn prepare(
+    command: &str,
+    dir: &Path,
+    url: &str,
+    options: gix::open::Options,
+) -> Result<PrepareFetch> {
+    require_empty(command, dir)?;
+
+    if let Some(parent) = dir.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("{command}: failed to create {}", parent.display()))?;
+    }
+
+    let url = gix::url::parse(url.into())
+        .with_context(|| format!("{command}: invalid repository url"))?;
+
+    PrepareFetch::new(
+        url,
+        dir,
+        gix::create::Kind::WithWorktree,
+        gix::create::Options::default(),
+        options,
+    )
+    .with_context(|| format!("{command}: failed to prepare clone"))
+}
+
+fn checkout(command: &str, mut fetch: PrepareFetch) -> Result<gix::Repository> {
+    let should_interrupt = AtomicBool::new(false);
+    let progress = Progress::new();
+
+    let (mut checkout, _outcome) = fetch
+        .fetch_then_checkout(progress.task(FETCH_TASK), &should_interrupt)
+        .with_context(|| format!("{command}: failed to fetch repository"))?;
+
+    let (repo, _outcome) = checkout
+        .main_worktree(progress.task(CHECKOUT_TASK), &should_interrupt)
+        .with_context(|| format!("{command}: failed to checkout worktree"))?;
+
+    drop(progress);
+
+    Ok(repo)
 }
 
 fn options(lfs: bool) -> gix::open::Options {
@@ -102,6 +142,23 @@ mod tests {
         repo
     }
 
+    fn commit(repo: &Path, name: &str) {
+        std::fs::write(repo.join(name), name).unwrap();
+        for args in [vec!["add", "-A"], vec!["commit", "--quiet", "-m", name]] {
+            super::super::run::quiet("test", repo, args).unwrap();
+        }
+    }
+
+    fn commits(repo: &Path) -> String {
+        let output = std::process::Command::new("git")
+            .current_dir(repo)
+            .args(["rev-list", "--count", "HEAD"])
+            .output()
+            .unwrap();
+
+        String::from_utf8(output.stdout).unwrap().trim().to_string()
+    }
+
     #[test]
     fn cloning_pulls_a_file_the_attributes_of_the_repository_send_through_lfs() {
         if !lfs::available() {
@@ -128,5 +185,56 @@ mod tests {
                 .unwrap()
                 .contains("filter-process")
         );
+    }
+
+    #[test]
+    fn a_plain_clone_takes_the_branch_and_the_depth_asked_for() {
+        let origin = repository();
+        commit(origin.path(), "first");
+        super::super::run::quiet(
+            "test",
+            origin.path(),
+            ["checkout", "--quiet", "-b", "feature"],
+        )
+        .unwrap();
+        commit(origin.path(), "second");
+        let dir = tempfile::tempdir().unwrap();
+        let into = dir.path().join("plugins/feature");
+
+        clone_plain(
+            "test",
+            &into,
+            &origin.path().to_string_lossy(),
+            Some("feature"),
+            NonZeroU32::new(1),
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(into.join("second")).unwrap(),
+            "second"
+        );
+        assert_eq!(commits(&into), "1");
+        assert!(!into.join(".git/info/attributes").exists());
+    }
+
+    #[test]
+    fn a_plain_clone_refuses_a_directory_holding_something() {
+        let origin = repository();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("kept"), "").unwrap();
+
+        let err = clone_plain(
+            "test",
+            dir.path(),
+            &origin.path().to_string_lossy(),
+            None,
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("test: destination"));
+        assert!(err.contains("is not empty"));
     }
 }

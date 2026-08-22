@@ -709,6 +709,8 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.cmd(line)` | a command line | Runs it through `sh` and returns what it printed. |
 | `ld.cmd.<program>(args...)` | the arguments of that program | Runs the program itself and returns what it printed. |
 | `ld.git(args...)` | the arguments of a git command | Runs git inside the repository and returns what it printed. |
+| `ld.git.clone(url, dir, options)` | a url, a directory, and an optional table of `branch` and `depth` | Clones a repository into that directory, outside the managed one, without the `git` binary. |
+| `ld.git.at(dir)(args...)` | a directory, then the arguments of a git command | Runs git inside that directory and returns what it printed. |
 | `ld.argv` | none | `name` and `args` of the command being run. |
 | `ld.sys` | none | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
 | `ld.path` | none | `home`, `config`, `data`, `repo` and `dir`, where they exist. |

@@ -123,6 +123,11 @@
 ---@field type? ld.IdentityType Says outright whether the words name a file or a command.
 ---@field [integer] string The path, or the program and its arguments.
 
+---What `ld.git.clone` takes besides the url and the directory.
+---@class ld.CloneOptions
+---@field branch? string The branch to check out. Defaults to the remote's `HEAD`.
+---@field depth? integer How many commits of history to fetch, one or more; `1` is the commit the branch points at alone. Defaults to all of it.
+
 ---A function to run before the command and one after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.Around
 ---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
@@ -360,10 +365,21 @@ function ld.fs.read(path) end
 ---@param text string
 function ld.fs.write(path, text) end
 
----Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
+---Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else; `ld.git.clone` and `ld.git.at` reach other repositories. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
 ---@class ld.git
 ---@overload fun(...: string): string
 ld.git = {}
+
+---Clones a repository into that directory, which has to be empty or missing, without the `git` binary. `~` and a relative directory resolve against your home directory.
+---@param url string
+---@param dir string
+---@param options? ld.CloneOptions
+function ld.git.clone(url, dir, options) end
+
+---A function running git inside that directory the way `ld.git` runs it inside the managed repository: `ld.git.at(dir)("fetch", "--tags")`.
+---@param dir string
+---@return fun(...: string): string
+function ld.git.at(dir) end
 
 ---JSON in and out. A table is a list or a table of names, never both, and `null` has a value of its own, since `nil` cannot sit in a table.
 ---@class ld.json

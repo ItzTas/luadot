@@ -71,6 +71,9 @@ mod tests {
           assert(type(ld.alt[name]) == "function", "alt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.git).__call) == "function", "git is not callable")
+        for _, name in ipairs({ "clone", "at" }) do
+          assert(type(ld.git[name]) == "function", "git." .. name .. " is missing")
+        end
         for _, name in ipairs({ "backup", "backup_age", "backup_dir", "backup_keep", "conflict", "link", "passphrase_warn", "pkg_warn", "repo_dir" }) do
           assert(type(ld.opt[name]) == "function", "opt." .. name .. " is missing")
         end
