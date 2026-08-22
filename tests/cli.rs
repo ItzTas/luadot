@@ -112,7 +112,9 @@ fn add_then_apply_manage_a_file_end_to_end() {
     luadot(&home)
         .args(["add", home.join(".vimrc").to_str().unwrap()])
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("added      .vimrc"))
+        .stdout(predicate::str::contains("added 1 file(s)"));
     assert_eq!(
         std::fs::read_to_string(repo.join(".vimrc")).unwrap(),
         "set number\n"
@@ -336,13 +338,28 @@ fn apply_backs_up_into_the_directory_the_configuration_names_and_restore_finds_i
     assert_eq!(read(&home.join(".bashrc")), "managed\n");
     assert!(!home.join(".local/share/luadot/backups").exists());
 
+    let stamp = saved.file_name().unwrap().to_str().unwrap().to_string();
+    let dest = home.join(".bashrc").display().to_string();
+
     luadot(&home)
         .args(["restore", "--list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("1 file(s)"));
 
-    luadot(&home).args(["restore", "--yes"]).assert().success();
+    luadot(&home)
+        .args(["restore", "--list", &stamp])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(dest.clone()));
+
+    luadot(&home)
+        .args(["restore", "--yes"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains(dest).and(predicate::str::contains("(0 created, 1 replaced)")),
+        );
     assert_eq!(read(&home.join(".bashrc")), "handwritten\n");
 }
 
@@ -358,6 +375,9 @@ fn init_creates_a_repository_and_makes_it_the_managed_one() {
         .assert()
         .success();
     assert!(repo.join(".git").is_dir());
+    assert!(
+        read(&home.join(".config/luadot/config.lua")).starts_with("-- The luadot configuration")
+    );
 
     luadot(&home)
         .args(["add", home.join(".vimrc").to_str().unwrap()])
@@ -886,7 +906,7 @@ done
 if [ "$op" = encrypt ]; then
   {
     echo FAKEAGE
-    if [ -n "$src" ]; then base64 "$src"; else base64; fi
+    if [ -n "$src" ]; then base64 < "$src"; else base64; fi
   } > "${out:-/dev/stdout}"
 elif [ "$op" = decrypt ]; then
   [ -n "$src" ] || { echo "fake age: no input" >&2; exit 1; }
@@ -1191,4 +1211,18 @@ fn meta_install_writes_the_definitions_once_and_points_the_settings_at_them() {
         .assert()
         .success()
         .stdout(predicate::str::diff(definitions));
+}
+
+#[test]
+fn doc_without_a_call_names_every_call_and_says_how_to_read_one() {
+    let home = tempfile::tempdir().unwrap();
+
+    luadot(home.path())
+        .arg("doc")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("opt.link\n"))
+        .stdout(predicate::str::contains(
+            "\"luadot doc <call>\" to describe one",
+        ));
 }
