@@ -736,6 +736,59 @@ fn doc_answers_for_a_page_the_configuration_registers_and_survives_a_broken_conf
 }
 
 #[test]
+fn a_plugin_registered_from_the_configuration_is_required_described_and_run() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let plugin = home.join(".local/share/luadot/plugins/lazyld");
+    write(
+        &plugin.join("lua/lazyld.lua"),
+        r#"
+        local lazyld = {}
+
+        function lazyld.setup()
+          ld.task("plug", { run = function(argv) return "plug " .. table.concat(argv, " ") end })
+        end
+
+        function lazyld.greet()
+          return "hello from lazyld"
+        end
+
+        return lazyld
+        "#,
+    );
+    write(
+        &plugin.join("docs/lazyld.md"),
+        "| Call | Arguments | Effect |\n| --- | --- | --- |\n\
+         | `lazyld.greet()` | none | Says hello. |\n",
+    );
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        local dir = ld.path.data .. "/plugins/lazyld"
+        ld.rtp.add(dir)
+        ld.doc.page(dir .. "/docs/lazyld.md")
+        require("lazyld").setup()
+        "#,
+    );
+
+    luadot(&home)
+        .args(["exec", r#"print(require("lazyld").greet())"#])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("hello from lazyld\n"));
+    luadot(&home)
+        .args(["plug", "sync"])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("plug sync\n"));
+    luadot(&home)
+        .args(["doc", "lazyld.greet"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Says hello."));
+}
+
+#[test]
 fn print_writes_the_line_the_way_the_script_asks_for_it() {
     let home = tempfile::tempdir().unwrap();
 
