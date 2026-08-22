@@ -74,7 +74,7 @@ impl<'a> Placement<'a> {
         };
 
         let mut invocation = Command::new(CHOWN);
-        invocation.arg(owner).arg("--").arg(dest);
+        invocation.arg("--").arg(owner).arg(dest);
         debug!(?invocation, "setting the owner");
 
         let output = invocation
