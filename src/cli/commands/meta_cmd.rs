@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 
-use crate::lua::DEFINITIONS;
+use crate::lua::{self, DEFINITIONS};
 use crate::utils;
 
 #[derive(Debug, Args)]
@@ -42,7 +42,10 @@ fn print() -> Result<()> {
 }
 
 fn install(args: MetaInstallArgs) -> Result<()> {
-    utils::place_definitions("meta", &root(args.dir)?)
+    let config = lua::load_config()?;
+    let registered = utils::configured("meta", &config)?.runtime_paths().to_vec();
+
+    utils::place_definitions("meta", &root(args.dir)?, &registered)
 }
 
 fn root(dir: Option<PathBuf>) -> Result<PathBuf> {

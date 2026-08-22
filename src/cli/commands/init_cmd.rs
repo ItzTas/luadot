@@ -17,9 +17,13 @@ pub struct InitArgs {
 pub fn init_cmd(args: InitArgs) -> Result<()> {
     let home = utils::home_dir()?;
     let config = lua::load_config()?;
-    let (configured, lfs) = {
+    let (configured, lfs, registered) = {
         let loaded = utils::configured("init", &config)?;
-        (loaded.repo_dir().map(Path::to_path_buf), loaded.lfs())
+        (
+            loaded.repo_dir().map(Path::to_path_buf),
+            loaded.lfs(),
+            loaded.runtime_paths().to_vec(),
+        )
     };
 
     let dir = utils::destination("init", &home, args.dir.as_deref(), configured.as_deref())?;
@@ -30,7 +34,7 @@ pub fn init_cmd(args: InitArgs) -> Result<()> {
     state::save(&current)?;
 
     output::note(format!("created {}", dir.display()));
-    utils::offer_definitions("init");
+    utils::offer_definitions("init", &registered);
 
     Ok(())
 }

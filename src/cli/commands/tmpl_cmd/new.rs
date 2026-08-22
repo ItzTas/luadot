@@ -23,7 +23,7 @@ pub struct NewArgs {
 }
 
 pub fn new(args: NewArgs) -> Result<()> {
-    let Workspace { home, repo, .. } = utils::workspace("tmpl new")?;
+    let Workspace { config, home, repo } = utils::workspace("tmpl new")?;
 
     let template = destination(&home, &args.path)?;
     let managed = utils::repo_path(&home, &repo, &template)
@@ -32,7 +32,10 @@ pub fn new(args: NewArgs) -> Result<()> {
     create(&template, &managed, args.file)?;
     output::note(format!("created {}", template.display()));
     if !args.file {
-        settings(&home, &template)?;
+        let registered = utils::configured("tmpl new", &config)?
+            .runtime_paths()
+            .to_vec();
+        settings(&home, &template, &registered)?;
     }
 
     add_cmd(AddArgs {
@@ -41,8 +44,8 @@ pub fn new(args: NewArgs) -> Result<()> {
     report(&repo, &managed)
 }
 
-fn settings(home: &Path, template: &Path) -> Result<()> {
-    match lua::point_at_definitions("tmpl new", template, home, &utils::data_dir()?)? {
+fn settings(home: &Path, template: &Path, registered: &[PathBuf]) -> Result<()> {
+    match lua::point_at_definitions("tmpl new", template, home, &utils::data_dir()?, registered)? {
         Placed::Written(path) => output::note(format!("created {}", path.display())),
         Placed::Merged(path) => output::note(format!("updated {}", path.display())),
         Placed::Kept(path, _) => output::warn(format!(

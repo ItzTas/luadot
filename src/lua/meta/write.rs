@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use super::constants::{DEFINITIONS, DEFINITIONS_DIR, DEFINITIONS_FILE, LUARC_FILE, STAGED_SUFFIX};
-use super::luarc::{library, merged};
+use super::luarc::{libraries, merged};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Placed {
@@ -21,8 +21,18 @@ pub fn install(command: &str, data: &Path) -> Result<Placed> {
     Ok(Placed::Written(definitions))
 }
 
-pub fn point(command: &str, dir: &Path, home: &Path, data: &Path) -> Result<Placed> {
-    settings(command, &dir.join(LUARC_FILE), &library(home, data))
+pub fn point(
+    command: &str,
+    dir: &Path,
+    home: &Path,
+    data: &Path,
+    registered: &[PathBuf],
+) -> Result<Placed> {
+    settings(
+        command,
+        &dir.join(LUARC_FILE),
+        &libraries(home, data, registered),
+    )
 }
 
 pub fn refresh(command: &str, data: &Path) -> Result<()> {
@@ -38,10 +48,10 @@ pub fn refresh(command: &str, data: &Path) -> Result<()> {
     replace(command, &definitions, DEFINITIONS)
 }
 
-fn settings(command: &str, path: &Path, library: &str) -> Result<Placed> {
+fn settings(command: &str, path: &Path, libraries: &[String]) -> Result<Placed> {
     let existing = read(command, path)?;
-    let Ok(text) = merged(existing.as_deref(), library) else {
-        return Ok(Placed::Kept(path.to_path_buf(), merged(None, library)?));
+    let Ok(text) = merged(existing.as_deref(), libraries) else {
+        return Ok(Placed::Kept(path.to_path_buf(), merged(None, libraries)?));
     };
     write(command, path, &text)?;
 
@@ -89,7 +99,7 @@ mod tests {
         let luarc = dir.path().join(LUARC_FILE);
         std::fs::write(&luarc, "{ // a comment\n}\n").unwrap();
 
-        let placed = point("meta", dir.path(), dir.path(), dir.path()).unwrap();
+        let placed = point("meta", dir.path(), dir.path(), dir.path(), &[]).unwrap();
 
         assert_eq!(
             std::fs::read_to_string(&luarc).unwrap(),

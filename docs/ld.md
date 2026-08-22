@@ -669,7 +669,9 @@ luadot meta install ~/scripts
 A directory of your own takes the settings instead of the configuration
 directory; the definitions stay where they are. An existing `.luarc.json`
 keeps its keys: `workspace.library` and `runtime.path` gain the entries they
-lack, `runtime.version` becomes `Lua 5.4`. One that does not parse is left
+lack, `runtime.version` becomes `Lua 5.4`. Every directory `ld.rtp.add`
+registered lands in `workspace.library` too, so the `lua/` of a plugin
+resolves its `require` and a `meta/` it ships completes its own calls. One that does not parse is left
 alone, and the settings are printed for you to merge by hand. The definitions
 come out of the binary, and every command rewrites the file when the binary
 carries different ones, so an upgrade needs nothing from you; `luadot meta`

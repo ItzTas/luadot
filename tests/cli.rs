@@ -1102,6 +1102,10 @@ fn meta_install_writes_the_definitions_once_and_points_the_settings_at_them() {
         &home.join(".config/luadot/.luarc.json"),
         "{\n  \"diagnostics.globals\": [\"vim\"]\n}\n",
     );
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.rtp.add(".local/share/luadot/plugins/lazyld")"#,
+    );
     write_state(&home, &repo);
 
     luadot(&home)
@@ -1118,6 +1122,7 @@ fn meta_install_writes_the_definitions_once_and_points_the_settings_at_them() {
     let merged = read(&home.join(".config/luadot/.luarc.json"));
     assert!(merged.contains("\"diagnostics.globals\""));
     assert!(merged.contains("\"~/.local/share/luadot/meta\""));
+    assert!(merged.contains("\"~/.local/share/luadot/plugins/lazyld\""));
 
     luadot(&home)
         .arg("meta")
