@@ -40,7 +40,7 @@ pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) ->
         paths.home().to_path_buf(),
     ));
 
-    let ld = root::table(lua)?;
+    let ld = root::table(lua, surface)?;
     for (name, namespace) in namespaces {
         ld.set(name, namespace(lua)?)?;
     }
@@ -68,6 +68,7 @@ mod tests {
     const EVERY_CALL: &str = r#"
         assert(type(ld.rules) == "function", "rules is missing")
         assert(type(ld.task) == "function", "task is missing")
+        assert(ld.surface == "bootstrap", "surface is wrong: " .. tostring(ld.surface))
         for _, name in ipairs({ "out", "file", "render", "expand", "read", "exists", "glob", "json" }) do
           assert(type(ld.alt[name]) == "function", "alt." .. name .. " is missing")
         end

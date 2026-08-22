@@ -2,13 +2,15 @@ use tealr::TypeWalker;
 
 use super::super::constants::API;
 use super::super::signature::{Collect, Describe, record};
+use super::super::surface::{SURFACES, Surface};
 use super::constants::{
-    API_DOC, FIELDS, RULE_DOC, RULE_FIELDS, RULE_TYPENAME, SIGNATURES, TASK_DOC, TASK_FIELDS,
-    TASK_TYPENAME,
+    API_DOC, FIELDS, RULE_DOC, RULE_FIELDS, RULE_TYPENAME, SIGNATURES, SURFACE_DOC,
+    SURFACE_TYPENAME, TASK_DOC, TASK_FIELDS, TASK_TYPENAME,
 };
 
 pub fn describe(walker: TypeWalker) -> TypeWalker {
     walker
+        .choices(SURFACE_TYPENAME, SURFACE_DOC, SURFACES.map(Surface::name))
         .namespace(API, API_DOC, |record| {
             record.fields(&FIELDS).functions(&SIGNATURES)
         })

@@ -139,7 +139,10 @@ Every script luadot runs carries the same `ld`: `config.lua`, `bootstrap.lua`,
 the setup scripts, a template's `luadot.lua` and `luadot exec`. A call does the
 same thing wherever it runs, on the one configuration the command is using, so
 a setup script that `config.lua` invokes and a template that `tmpl alt`
-resolves both write into it.
+resolves both write into it. `ld.surface` says which of them is running:
+`"config"`, `"bootstrap"`, `"setup"`, `"template"`, `"standalone"` for a
+`.luadot` file, or `"exec"`. `config.lua` runs before every command, so a
+script deciding whether it may do something slow reads it first.
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
@@ -713,6 +716,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.git.clone(url, dir, options)` | a url, a directory, and an optional table of `branch` and `depth` | Clones a repository into that directory, outside the managed one, without the `git` binary. |
 | `ld.git.at(dir)(args...)` | a directory, then the arguments of a git command | Runs git inside that directory and returns what it printed. |
 | `ld.argv` | none | `name` and `args` of the command being run. |
+| `ld.surface` | none | Which script is running: `"config"`, `"bootstrap"`, `"setup"`, `"template"`, `"standalone"` or `"exec"`. |
 | `ld.sys` | none | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
 | `ld.path` | none | `home`, `config`, `data`, `repo` and `dir`, where they exist. |
 | `ld.rtp.add(dir)` | a directory | Puts `<dir>/lua/` on the module path of this script and of every script the command runs after it, behind the configuration's own `lua/`. |

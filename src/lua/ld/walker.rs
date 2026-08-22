@@ -58,7 +58,7 @@ pub fn walker() -> TypeWalker {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::path::Path;
 
     use mlua::{Table, Value};
@@ -150,7 +150,7 @@ mod tests {
             .is_some_and(|single| single.name.0 == "nil" && single.kind == KindOfType::Builtin)
     }
 
-    fn shape_of_type(ty: &Type) -> (Shape, bool) {
+    fn shape_of_type(ty: &Type, aliases: &BTreeSet<String>) -> (Shape, bool) {
         let plain = Shape::Table { callable: false };
 
         match ty {
@@ -159,7 +159,7 @@ mod tests {
                 let shape = parts
                     .iter()
                     .find(|part| !is_nil(part))
-                    .map_or(plain, |part| shape_of_type(part).0);
+                    .map_or(plain, |part| shape_of_type(part, aliases).0);
 
                 (shape, optional)
             }
@@ -169,10 +169,22 @@ mod tests {
                     (Shape::Value(single.name.0.to_string()), false)
                 }
                 INTEGER | NUMBER => (Shape::Value(NUMBER.to_string()), false),
+                name if aliases.contains(name) => (Shape::Value(STRING.to_string()), false),
                 _ => (plain, false),
             },
             _ => (plain, false),
         }
+    }
+
+    fn aliases(walker: &TypeWalker) -> BTreeSet<String> {
+        walker
+            .given_types
+            .iter()
+            .filter_map(|generator| match generator {
+                TypeGenerator::Enum(choices) => Some(choices.name.clone()),
+                TypeGenerator::Record(_) => None,
+            })
+            .collect()
     }
 
     fn record<'a>(walker: &'a TypeWalker, ty: &Type) -> &'a RecordGenerator {
@@ -188,6 +200,7 @@ mod tests {
 
     fn described(walker: &TypeWalker) -> BTreeMap<String, (Shape, bool)> {
         let mut found = BTreeMap::new();
+        let aliases = aliases(walker);
 
         for instance in &walker.global_instances_off {
             let record = record(walker, &instance.ty);
@@ -206,7 +219,7 @@ mod tests {
                 }
                 found.insert(
                     format!("{}.{}", instance.name, field.name),
-                    shape_of_type(&field.ty),
+                    shape_of_type(&field.ty, &aliases),
                 );
             }
         }

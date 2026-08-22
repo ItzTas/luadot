@@ -17,6 +17,15 @@
 ---| "age"
 ---| "gpg"
 
+---Which script is running: `config.lua`, `bootstrap.lua`, a setup script, a template's `luadot.lua`, a standalone `.luadot` file, or `luadot exec`.
+---@alias ld.Surface
+---| "config"
+---| "bootstrap"
+---| "setup"
+---| "template"
+---| "standalone"
+---| "exec"
+
 ---Whether an identity names a file or a command.
 ---@alias ld.IdentityType
 ---| "command"
@@ -244,6 +253,7 @@
 
 ---The interface luadot installs in every script it runs: `config.lua`, `bootstrap.lua`, the setup scripts, the templates and `luadot exec`. A call does the same thing wherever it runs, on the one configuration the command is using.
 ---@class ld
+---@field surface ld.Surface Which script is running. `config.lua` runs before every command, so expensive work belongs elsewhere; `bootstrap.lua` runs once.
 ---@field lpeg table The LPeg module, the table `require("lpeg")` returns, loaded when first reached.
 ---@field re table LPeg's `re` module, the table `require("re")` returns, loaded when first reached.
 ld = {}

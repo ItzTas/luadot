@@ -74,8 +74,21 @@ pub const RULE_DOC: &str = "A rule: the files it covers through `match` or `rege
 #[cfg(feature = "meta")]
 const PATTERNS: Kind = Kind::Optional(&Kind::Or(&[Kind::String, Kind::List(&Kind::String)]));
 
+pub const SURFACE: &str = "surface";
+
 #[cfg(feature = "meta")]
-pub const FIELDS: [Field; 2] = [
+pub const SURFACE_TYPENAME: &str = "ld.Surface";
+
+#[cfg(feature = "meta")]
+pub const SURFACE_DOC: &str = "Which script is running: `config.lua`, `bootstrap.lua`, a setup script, a template's `luadot.lua`, a standalone `.luadot` file, or `luadot exec`.";
+
+#[cfg(feature = "meta")]
+pub const FIELDS: [Field; 3] = [
+    Field {
+        name: SURFACE,
+        kind: Kind::Named(SURFACE_TYPENAME),
+        doc: "Which script is running. `config.lua` runs before every command, so expensive work belongs elsewhere; `bootstrap.lua` runs once.",
+    },
     Field {
         name: LPEG_MODULE,
         kind: Kind::Table,
