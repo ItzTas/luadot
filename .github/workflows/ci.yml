@@ -35,6 +35,25 @@ jobs:
       - name: Test
         run: cargo test --locked --verbose
 
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked --verbose
+
+      - name: Test
+        run: cargo test --locked --verbose
+
   deny:
     name: Dependencies
     runs-on: ubuntu-latest
