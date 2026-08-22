@@ -4,6 +4,7 @@ mod class;
 mod cmd;
 mod constants;
 mod crypt;
+mod doc;
 mod exec;
 #[cfg(test)]
 mod fixture;

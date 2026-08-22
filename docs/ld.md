@@ -730,6 +730,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.fs.rm(path)` | a path | Removes a file, a symlink, or a directory with everything under it; `true` when something was there. |
 | `ld.fs.read(path)` | a path | What the file holds. |
 | `ld.fs.write(path, text)` | a path and a string | Writes the text over the file, creating the directories leading to it. |
+| `ld.doc.page(path)` | a markdown page | Registers a page `luadot doc` answers from: every table row whose first cell is a namespaced call in backticks. |
 | `ld.on.add(options)` | a table of `before` and `after` | Runs a function before and after `add`. |
 | `ld.on.apply(options)` | a table of `before` and `after` | Runs a function before and after `apply`. |
 | `ld.on.bootstrap(options)` | a table of `before` and `after` | Runs a function before and after `bootstrap`. |

@@ -703,6 +703,39 @@ fn a_task_the_configuration_registers_runs_under_its_own_name() {
 }
 
 #[test]
+fn doc_answers_for_a_page_the_configuration_registers_and_survives_a_broken_configuration() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    write(
+        &home.join("plugins/lazyld/docs/lazyld.md"),
+        "| Call | Arguments | Effect |\n| --- | --- | --- |\n\
+         | `lazyld.sync(names)` | plugin names | Clones what is missing. |\n",
+    );
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.doc.page("plugins/lazyld/docs/lazyld.md")"#,
+    );
+
+    luadot(&home)
+        .args(["doc", "lazyld.sync"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("lazyld.sync(names)")
+                .and(predicate::str::contains("Clones what is missing."))
+                .and(predicate::str::contains("plugins/lazyld/docs/lazyld.md")),
+        );
+
+    write(&home.join(".config/luadot/config.lua"), "ld.opt.link(");
+    luadot(&home)
+        .args(["doc", "opt.link"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ld.opt.link(mode)"))
+        .stderr(predicate::str::contains("config: failed to run"));
+}
+
+#[test]
 fn print_writes_the_line_the_way_the_script_asks_for_it() {
     let home = tempfile::tempdir().unwrap();
 

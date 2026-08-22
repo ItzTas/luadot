@@ -67,6 +67,8 @@ pub const DOC_API: &str = "ld.";
 
 pub const DOC_ROW: &str = "| `ld.";
 
+pub const DOC_REGISTERED_ROW: &str = "| `";
+
 pub const DOC_CELLS: usize = 3;
 
 pub const DOC_NO_ARGUMENTS: &str = "none";

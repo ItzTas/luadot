@@ -347,6 +347,14 @@ function ld.crypt.backend(name) end
 ---@param lock "passphrase"|ld.Keys
 function ld.crypt.lock(lock) end
 
+---The pages `luadot doc` answers from besides luadot's own.
+---@class ld.doc
+ld.doc = {}
+
+---Registers a markdown page for `luadot doc`. Every table row whose first cell is a namespaced call in backticks, like `lazyld.sync(names)`, is answered the way the calls of the interface are: the second cell is what it takes, the third what it does. `~` and a relative path resolve against your home directory. Only `config.lua` registers; elsewhere the call does nothing and says so.
+---@param path string
+function ld.doc.page(path) end
+
 ---The filesystem, with no directory of a template in the way: `~` and a relative path resolve against your home directory, an absolute one reaches anywhere. Nothing here takes a backup.
 ---@class ld.fs
 ld.fs = {}

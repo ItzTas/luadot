@@ -1,11 +1,15 @@
+use std::path::PathBuf;
+
 use anyhow::{Result, bail};
 use clap::Args;
 
+use crate::lua;
 use crate::output::{self, GAP};
+use crate::utils;
 
 use super::super::constants::{
-    DOC_API, DOC_CELLS, DOC_HEADING, DOC_NO_ARGUMENTS, DOC_PAGES, DOC_ROOT, DOC_ROW, DOC_TAKES,
-    DOC_WRITTEN_IN,
+    DOC_API, DOC_CELLS, DOC_HEADING, DOC_NO_ARGUMENTS, DOC_PAGES, DOC_REGISTERED_ROW, DOC_ROOT,
+    DOC_ROW, DOC_TAKES, DOC_WRITTEN_IN,
 };
 
 #[derive(Debug, Args)]
@@ -26,13 +30,13 @@ struct Entry {
     arguments: String,
     effect: String,
     names: Vec<String>,
-    pages: Vec<&'static str>,
+    pages: Vec<String>,
 }
 
 type Finder = fn(&Entry, &str, &str) -> bool;
 
 pub fn doc_cmd(args: DocArgs) -> Result<()> {
-    let entries = entries();
+    let entries = entries_with(&registered());
 
     if args.list {
         for name in listed(&entries) {
@@ -118,27 +122,73 @@ fn listed(entries: &[Entry]) -> Vec<String> {
     names
 }
 
-fn entries() -> Vec<Entry> {
-    let mut entries: Vec<Entry> = Vec::new();
+fn registered() -> Vec<(String, String)> {
+    let pages = match registered_pages() {
+        Ok(pages) => pages,
+        Err(err) => {
+            output::warn(format!("{err:#}"));
+            return Vec::new();
+        }
+    };
 
-    for (page, heading, text) in DOC_PAGES {
-        for line in section(text, heading) {
-            let Some(entry) = row(page, line) else {
-                continue;
-            };
+    pages
+        .into_iter()
+        .filter_map(|path| match std::fs::read_to_string(&path) {
+            Ok(text) => Some((path.display().to_string(), text)),
+            Err(err) => {
+                output::warn(format!("doc: failed to read {}: {err}", path.display()));
+                None
+            }
+        })
+        .collect()
+}
 
-            let Some(kept) = entries.iter_mut().find(|kept| kept.names == entry.names) else {
-                entries.push(entry);
-                continue;
-            };
+fn registered_pages() -> Result<Vec<PathBuf>> {
+    let config = lua::load_config()?;
+    let pages = utils::configured("doc", &config)?.doc_pages().to_vec();
 
-            if !kept.pages.contains(&page) {
-                kept.pages.push(page);
+    Ok(pages)
+}
+
+fn entries_with(pages: &[(String, String)]) -> Vec<Entry> {
+    let mut entries = entries();
+
+    for (page, text) in pages {
+        for line in text.lines() {
+            if let Some(entry) = registered_row(page, line) {
+                merge(&mut entries, entry);
             }
         }
     }
 
     entries
+}
+
+fn entries() -> Vec<Entry> {
+    let mut entries: Vec<Entry> = Vec::new();
+
+    for (page, heading, text) in DOC_PAGES {
+        for line in section(text, heading) {
+            if let Some(entry) = row(page, line) {
+                merge(&mut entries, entry);
+            }
+        }
+    }
+
+    entries
+}
+
+fn merge(entries: &mut Vec<Entry>, entry: Entry) {
+    let Some(kept) = entries.iter_mut().find(|kept| kept.names == entry.names) else {
+        entries.push(entry);
+        return;
+    };
+
+    for page in entry.pages {
+        if !kept.pages.contains(&page) {
+            kept.pages.push(page);
+        }
+    }
 }
 
 fn section<'a>(text: &'a str, heading: &str) -> impl Iterator<Item = &'a str> {
@@ -148,23 +198,37 @@ fn section<'a>(text: &'a str, heading: &str) -> impl Iterator<Item = &'a str> {
         .take_while(|line| !line.starts_with(DOC_HEADING))
 }
 
-fn row(page: &'static str, line: &str) -> Option<Entry> {
+fn row(page: &str, line: &str) -> Option<Entry> {
     let line = line.trim();
     if !line.starts_with(DOC_ROW) {
         return None;
     }
 
+    let cells = cells(line)?;
+    entry(page, &cells, names(cells[0]))
+}
+
+fn registered_row(page: &str, line: &str) -> Option<Entry> {
+    let line = line.trim();
+    if !line.starts_with(DOC_REGISTERED_ROW) {
+        return None;
+    }
+
+    let cells = cells(line)?;
+    entry(page, &cells, registered_names(cells[0]))
+}
+
+fn cells(line: &str) -> Option<Vec<&str>> {
     let cells: Vec<&str> = line
         .trim_matches('|')
         .splitn(DOC_CELLS, '|')
         .map(str::trim)
         .collect();
 
-    if cells.len() != DOC_CELLS {
-        return None;
-    }
+    (cells.len() == DOC_CELLS).then_some(cells)
+}
 
-    let names = names(cells[0]);
+fn entry(page: &str, cells: &[&str], names: Vec<String>) -> Option<Entry> {
     if names.is_empty() {
         return None;
     }
@@ -174,7 +238,7 @@ fn row(page: &'static str, line: &str) -> Option<Entry> {
         arguments: plain(cells[1]),
         effect: plain(cells[2]),
         names,
-        pages: vec![page],
+        pages: vec![page.to_string()],
     })
 }
 
@@ -183,14 +247,25 @@ fn plain(cell: &str) -> String {
 }
 
 fn names(cell: &str) -> Vec<String> {
-    cell.split('`')
-        .skip(1)
-        .step_by(2)
+    tokens(cell)
         .filter_map(|token| token.strip_prefix(DOC_API))
         .filter_map(|token| token.split('(').next())
         .map(str::to_string)
         .filter(|name| !name.is_empty())
         .collect()
+}
+
+fn registered_names(cell: &str) -> Vec<String> {
+    tokens(cell)
+        .map(|token| token.strip_prefix(DOC_API).unwrap_or(token))
+        .filter_map(|token| token.split('(').next())
+        .map(str::to_string)
+        .filter(|name| name.contains('.'))
+        .collect()
+}
+
+fn tokens(cell: &str) -> impl Iterator<Item = &str> {
+    cell.split('`').skip(1).step_by(2)
 }
 
 #[cfg(test)]
@@ -256,5 +331,28 @@ mod tests {
         let error = found(&entries(), "opt.colour").unwrap_err().to_string();
 
         assert!(error.starts_with("doc: `opt.colour` is not a call"));
+    }
+
+    #[test]
+    fn a_registered_page_answers_for_its_namespaced_calls_and_nothing_else() {
+        let page = (
+            "/plugins/lazyld/docs/lazyld.md".to_string(),
+            "# lazyld\n\n| Call | Arguments | Effect |\n| --- | --- | --- |\n\
+             | `lazyld.sync(names)` | plugin names | Clones what is missing. |\n\
+             | `ld.lazyld.clean()` | none | Removes what is unused. |\n\n\
+             | Key | Values | Effect |\n| --- | --- | --- |\n\
+             | `branch` | a string | The branch to track. |\n"
+                .to_string(),
+        );
+
+        let entries = entries_with(&[page]);
+
+        let sync = only(&entries, "lazyld.sync");
+        assert_eq!(sync.signature, "lazyld.sync(names)");
+        assert_eq!(sync.effect, "Clones what is missing.");
+        assert_eq!(sync.pages, ["/plugins/lazyld/docs/lazyld.md"]);
+        assert_eq!(found(&entries, "lazyld").unwrap().len(), 2);
+        assert!(found(&entries, "branch").is_err());
+        assert_eq!(only(&entries, "opt.link").pages, ["docs/ld.md"]);
     }
 }

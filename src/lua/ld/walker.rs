@@ -6,20 +6,21 @@ use super::constants::{
 };
 use super::signature::Collect;
 use super::{
-    alt, argv, class, cmd, crypt, fs, git, json, on, opt, path, pkg, print, regex, root, rtp,
+    alt, argv, class, cmd, crypt, doc, fs, git, json, on, opt, path, pkg, print, regex, root, rtp,
     setup, sys,
 };
 
 type Describer = fn(TypeWalker) -> TypeWalker;
 
 pub fn walker() -> TypeWalker {
-    let describers: [Describer; 18] = [
+    let describers: [Describer; 19] = [
         root::describe,
         alt::describe,
         argv::describe,
         class::describe,
         cmd::describe,
         crypt::describe,
+        doc::describe,
         fs::describe,
         git::describe,
         json::describe,

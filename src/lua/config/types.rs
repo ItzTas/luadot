@@ -42,6 +42,7 @@ pub struct Config {
     around: BTreeMap<Command, Chain>,
     runtime_paths: Vec<PathBuf>,
     tasks: BTreeMap<String, Task>,
+    doc_pages: Vec<PathBuf>,
     runtimes: Vec<Lua>,
 }
 
@@ -69,6 +70,7 @@ impl Default for Config {
             around: BTreeMap::new(),
             runtime_paths: Vec::new(),
             tasks: BTreeMap::new(),
+            doc_pages: Vec::new(),
             runtimes: Vec::new(),
         }
     }
@@ -134,6 +136,18 @@ impl Config {
 
     pub fn runtime_paths(&self) -> &[PathBuf] {
         &self.runtime_paths
+    }
+
+    pub fn add_doc_page(&mut self, page: PathBuf) {
+        if self.doc_pages.contains(&page) {
+            return;
+        }
+
+        self.doc_pages.push(page);
+    }
+
+    pub fn doc_pages(&self) -> &[PathBuf] {
+        &self.doc_pages
     }
 
     pub fn set_diff(&mut self, diff: Diff) {
