@@ -6,6 +6,7 @@ mod file;
 mod load;
 mod report;
 mod status;
+mod task;
 mod types;
 
 pub use around::{Around, Chain, Moment};
@@ -16,4 +17,5 @@ pub use load::from_source;
 pub use load::{config_path, load_config};
 pub use report::Report;
 pub use status::{StatusCounts, StatusFile};
+pub use task::Task;
 pub use types::{Class, Config, Matcher, Rule, Shared};

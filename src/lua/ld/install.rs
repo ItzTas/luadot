@@ -67,6 +67,7 @@ mod tests {
 
     const EVERY_CALL: &str = r#"
         assert(type(ld.rules) == "function", "rules is missing")
+        assert(type(ld.task) == "function", "task is missing")
         for _, name in ipairs({ "out", "file", "render", "expand", "read", "exists", "glob", "json" }) do
           assert(type(ld.alt[name]) == "function", "alt." .. name .. " is missing")
         end

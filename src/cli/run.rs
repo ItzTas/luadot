@@ -107,7 +107,9 @@ fn run_command(command: Cmd) -> Result<()> {
         Cmd::Setup(args) => commands::setup_cmd(args),
         Cmd::Status(args) => commands::status_cmd(args),
         Cmd::Sync(args) => commands::sync_cmd(args),
+        Cmd::Task(args) => commands::task_cmd(args),
         Cmd::Tmpl(args) => commands::tmpl_cmd(args),
+        Cmd::External(words) => commands::external_cmd(words),
     }
 }
 
@@ -145,6 +147,7 @@ fn customized(command: &Cmd) -> Option<Command> {
         Cmd::Sync(_) => Some(Command::Sync),
         Cmd::Tmpl(args) => Some(args.command()),
         Cmd::Completions(_) | Cmd::Doc(_) | Cmd::Man | Cmd::Meta(_) => None,
+        Cmd::Task(_) | Cmd::External(_) => None,
     }
 }
 

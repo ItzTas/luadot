@@ -665,6 +665,44 @@ fn a_command_runs_the_functions_the_configuration_sets_before_and_after_it() {
 }
 
 #[test]
+fn a_task_the_configuration_registers_runs_under_its_own_name() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"
+        ld.task("plug", {
+          about = "Manage plugins",
+          run = function(argv) return "plug " .. table.concat(argv, " ") end,
+        })
+        "#,
+    );
+
+    luadot(&home)
+        .args(["plug", "sync", "--all"])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("plug sync --all\n"));
+    luadot(&home)
+        .args(["task", "plug", "sync"])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("plug sync\n"));
+    luadot(&home)
+        .args(["task", "--list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::diff("plug\n"));
+    luadot(&home)
+        .arg("stauts")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "`stauts` is not a command of luadot nor a task",
+        ));
+}
+
+#[test]
 fn print_writes_the_line_the_way_the_script_asks_for_it() {
     let home = tempfile::tempdir().unwrap();
 

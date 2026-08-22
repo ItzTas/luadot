@@ -19,6 +19,7 @@
 | `luadot class [list\|set\|unset\|get]` | Lists the declared classes and answers them for this machine. |
 | `luadot bootstrap` | Runs the repository's `bootstrap.lua`. |
 | `luadot setup [-l] [name]...` | Runs the setup scripts the names ask for, `-l` prints the names instead. |
+| `luadot task [-l] <name> [args]...` | Runs a task the configuration registers, `-l` prints the names instead; `luadot <name> [args]...` is the same. |
 | `luadot cd` | Starts a shell in the repository. |
 | `luadot sync [-m MSG] [--no-push]` | Stages what changed in the repository, commits it and pushes it. |
 | `luadot git <args>...` | Runs git inside the repository. |
@@ -32,7 +33,7 @@
 `luadot --version` prints the version.
 
 `config.lua` can run a function before and after any command in the table but
-`doc`, `meta`, `completions` and `man`; see
+`doc`, `meta`, `completions`, `man` and `task`; see
 [customizing a command](ld.md#customizing-a-command).
 
 `luadot doc` answers for the `ld` interface instead: `luadot doc opt.link`
@@ -50,7 +51,8 @@ The bash, zsh and fish completions hand `luadot git` and `luadot push` over to
 git's own completion, pointed at the managed repository: `luadot git checkout
 <Tab>` answers with the branches of that repository, not of the directory you
 are in. `luadot setup <Tab>` answers with the setups the repository declares,
-`luadot doc <Tab>` with the calls of the interface.
+`luadot task <Tab>` with the tasks the configuration registers, `luadot doc
+<Tab>` with the calls of the interface.
 
 `man luadot` opens the same reference after any of the packages. The page is
 built from the commands themselves, so `luadot man` prints it wherever the

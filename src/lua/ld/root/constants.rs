@@ -25,6 +25,43 @@ pub const RULE_KEYS: [&str; 12] = [
     AUTOPUSH,
 ];
 
+pub const TASK: &str = "task";
+
+pub const ABOUT: &str = "about";
+
+pub const RUN: &str = "run";
+
+pub const TASK_KEYS: [&str; 2] = [ABOUT, RUN];
+
+pub const BUILTINS: [&str; 26] = [
+    "init",
+    "clone",
+    "add",
+    "rm",
+    "status",
+    "diff",
+    "apply",
+    "tmpl",
+    "restore",
+    "edit",
+    "rekey",
+    "exec",
+    "config",
+    "class",
+    "bootstrap",
+    "setup",
+    "task",
+    "cd",
+    "sync",
+    "git",
+    "push",
+    "doc",
+    "meta",
+    "completions",
+    "man",
+    "help",
+];
+
 #[cfg(feature = "meta")]
 pub const API_DOC: &str = "The interface luadot installs in every script it runs: `config.lua`, `bootstrap.lua`, the setup scripts, the templates and `luadot exec`. A call does the same thing wherever it runs, on the one configuration the command is using.";
 
@@ -52,18 +89,61 @@ pub const FIELDS: [Field; 2] = [
 ];
 
 #[cfg(feature = "meta")]
-pub const SIGNATURES: [Signature; 1] = [Signature {
-    name: RULES,
-    params: &[Param {
-        name: "rules",
-        kind: Kind::Or(&[
-            Kind::Named(RULE_TYPENAME),
-            Kind::List(&Kind::Named(RULE_TYPENAME)),
-        ]),
-    }],
-    returns: &[],
-    doc: "Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.",
-}];
+pub const TASK_TYPENAME: &str = "ld.Task";
+
+#[cfg(feature = "meta")]
+pub const TASK_DOC: &str = "A command of the configuration's own, as `ld.task` takes it.";
+
+#[cfg(feature = "meta")]
+pub const SIGNATURES: [Signature; 2] = [
+    Signature {
+        name: RULES,
+        params: &[Param {
+            name: "rules",
+            kind: Kind::Or(&[
+                Kind::Named(RULE_TYPENAME),
+                Kind::List(&Kind::Named(RULE_TYPENAME)),
+            ]),
+        }],
+        returns: &[],
+        doc: "Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.",
+    },
+    Signature {
+        name: TASK,
+        params: &[
+            Param {
+                name: "name",
+                kind: Kind::String,
+            },
+            Param {
+                name: "task",
+                kind: Kind::Named(TASK_TYPENAME),
+            },
+        ],
+        returns: &[],
+        doc: "Registers a command of the configuration's own: `luadot <name>` and `luadot task <name>` run its function with the arguments that follow. The name of a command luadot already has is refused, and so is one registered twice. Only `config.lua` registers; elsewhere the call does nothing and says so.",
+    },
+];
+
+#[cfg(feature = "meta")]
+pub const TASK_FIELDS: [Field; 2] = [
+    Field {
+        name: ABOUT,
+        kind: Kind::Optional(&Kind::String),
+        doc: "One line saying what the task does, shown by `luadot task --list`.",
+    },
+    Field {
+        name: RUN,
+        kind: Kind::Function(
+            &[Param {
+                name: "argv",
+                kind: Kind::List(&Kind::String),
+            }],
+            &[Kind::Optional(&Kind::String)],
+        ),
+        doc: "What runs, handed everything after the task name. Whatever it returns is written as a line; an error stops the command. Required.",
+    },
+];
 
 #[cfg(feature = "meta")]
 pub const RULE_FIELDS: [Field; 12] = [

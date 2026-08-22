@@ -89,6 +89,11 @@
 ---@field autocommit? boolean Whether `add` and `rm` commit on their own once one of those files is staged.
 ---@field autopush? boolean Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back.
 
+---A command of the configuration's own, as `ld.task` takes it.
+---@class ld.Task
+---@field about? string One line saying what the task does, shown by `luadot task --list`.
+---@field run fun(argv: string[]): string? What runs, handed everything after the task name. Whatever it returns is written as a line; an error stops the command. Required.
+
 ---A file a template produces, as `ld.alt.out` takes it or `luadot.lua` returns it.
 ---@class ld.Output
 ---@field content string|ld.File What lands on the system: a string is written, a file is linked. Required.
@@ -246,6 +251,11 @@ ld = {}
 ---Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.
 ---@param rules ld.Rule|ld.Rule[]
 function ld.rules(rules) end
+
+---Registers a command of the configuration's own: `luadot <name>` and `luadot task <name>` run its function with the arguments that follow. The name of a command luadot already has is refused, and so is one registered twice. Only `config.lua` registers; elsewhere the call does nothing and says so.
+---@param name string
+---@param task ld.Task
+function ld.task(name, task) end
 
 ---The files of a template, resolved against the directory the running script lives in: the template directory inside a template, `ld.path.dir` anywhere else. A relative name starts there; an absolute one, or one climbing out with `..`, reaches anywhere.
 ---@class ld.alt

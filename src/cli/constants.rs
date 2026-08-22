@@ -37,6 +37,10 @@ pub const MANAGED_FILES: &str = "managed";
 
 pub const GENERATED_FILES: &str = "generated";
 
+pub const TASK_NONE: &str = "task: no task named";
+
+pub const TASK_UNKNOWN: &str = "is not a command of luadot nor a task the configuration registers; `luadot --help` lists the commands";
+
 pub const DOC_PAGES: [(&str, &str, &str); 3] = [
     (
         "docs/ld.md",
@@ -254,7 +258,7 @@ _luadot_complete() {
             _luadot_git "$1" "$index" push
             return
             ;;
-        setup | doc)
+        setup | doc | task)
             [[ "$2" == -* ]] && break
             _luadot_names "$1" "$2" "${COMP_WORDS[index]}" && return
             break
@@ -310,7 +314,7 @@ _luadot() {
                 _luadot_git $index push
                 return
                 ;;
-            setup | doc)
+            setup | doc | task)
                 [[ $words[CURRENT] == -* ]] && break
                 _luadot_names $words[index] && return
                 break
@@ -357,6 +361,7 @@ end
 
 complete -c luadot -n "__fish_seen_subcommand_from git push" -f -a "(__luadot_git_completions)"
 complete -c luadot -n "__fish_seen_subcommand_from setup" -f -a "(__luadot_names setup)"
+complete -c luadot -n "__fish_seen_subcommand_from task" -f -a "(__luadot_names task)"
 complete -c luadot -n "__fish_seen_subcommand_from doc" -f -a "(__luadot_names doc)"
 "##;
 

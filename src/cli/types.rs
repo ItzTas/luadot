@@ -3,7 +3,7 @@ use clap::{ArgAction, Parser, Subcommand};
 use super::commands::{
     AddArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs, DocArgs,
     EditArgs, ExecArgs, GitArgs, InitArgs, MetaArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs,
-    SetupArgs, StatusArgs, SyncArgs, TmplArgs,
+    SetupArgs, StatusArgs, SyncArgs, TaskArgs, TmplArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -66,6 +66,8 @@ pub enum Cmd {
     Bootstrap,
     #[command(about = "Run the repository's setup scripts")]
     Setup(SetupArgs),
+    #[command(about = "Run a task the configuration registers; `luadot <name>` is the same")]
+    Task(TaskArgs),
     #[command(about = "Start a shell in the repository")]
     Cd,
     #[command(about = "Stage what changed in the repository, commit it and push it")]
@@ -84,6 +86,8 @@ pub enum Cmd {
     Completions(CompletionsArgs),
     #[command(about = "Print the manual page")]
     Man,
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }
 
 #[cfg(test)]
@@ -91,6 +95,7 @@ mod tests {
     use clap::CommandFactory;
 
     use super::*;
+    use crate::lua::BUILTINS;
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
         Cli::try_parse_from(args)
@@ -99,6 +104,31 @@ mod tests {
     #[test]
     fn the_declaration_is_consistent() {
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn a_name_that_is_no_command_reaches_the_tasks_with_what_follows_it() {
+        let cli = parse(&["luadot", "plug", "sync", "--all"]).unwrap();
+
+        match cli.command {
+            Cmd::External(words) => assert_eq!(words, ["plug", "sync", "--all"]),
+            other => panic!("parsed {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_names_a_task_cannot_take_are_the_commands_declared() {
+        let mut command = Cli::command();
+        command.build();
+        let mut declared: Vec<&str> = command
+            .get_subcommands()
+            .map(|sub| sub.get_name())
+            .collect();
+        let mut refused: Vec<&str> = BUILTINS.to_vec();
+        declared.sort_unstable();
+        refused.sort_unstable();
+
+        assert_eq!(declared, refused);
     }
 
     #[test]

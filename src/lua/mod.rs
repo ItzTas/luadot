@@ -17,9 +17,11 @@ pub use bootstrap::{bootstrap_path, run_bootstrap};
 pub use config::from_source;
 pub use config::{
     Around, Call, Chain, Class, Config, Custom, Diff, DiffCounts, DiffFile, DiffState, Matcher,
-    Moment, Report, Rule, Shared, StatusCounts, StatusFile, Tool, config_path, load_config,
+    Moment, Report, Rule, Shared, StatusCounts, StatusFile, Task, Tool, config_path, load_config,
 };
 pub use exec::run_exec;
+#[cfg(test)]
+pub use ld::BUILTINS;
 pub use ld::Command;
 #[cfg(feature = "meta")]
 pub use meta::generate as generate_definitions;

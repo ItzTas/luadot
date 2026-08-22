@@ -38,6 +38,8 @@ pub use constants::{CALL_METHOD, NIL};
 pub use install::{install, share};
 pub use on::Command;
 pub use path::Paths;
+#[cfg(test)]
+pub use root::BUILTINS;
 pub use rtp::extend as extend_module_path;
 #[cfg(test)]
 pub use rtp::plugin;
