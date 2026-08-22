@@ -4,9 +4,9 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::backup;
-use crate::files;
+use crate::files::{self, SyncOutcome};
 use crate::lua;
-use crate::output::{self, Tone};
+use crate::output;
 use crate::utils;
 
 const PREVIEW_LIMIT: usize = 10;
@@ -22,7 +22,11 @@ pub struct RestoreArgs {
         help = "The backup to put back, the most recent one when left out"
     )]
     pub backup: Option<String>,
-    #[arg(short, long, help = "Show the backups instead of putting one back")]
+    #[arg(
+        short,
+        long,
+        help = "Show the backups, or the files of the one named, instead of putting one back"
+    )]
     pub list: bool,
     #[arg(short, long, help = "Put the files back without asking first")]
     pub yes: bool,
@@ -44,7 +48,7 @@ pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
     }
 
     if args.list {
-        return list(&taken);
+        return list(&taken, args.backup.as_ref());
     }
 
     let (stamp, dir) = chosen(&taken, args.backup.as_ref())?;
@@ -63,19 +67,34 @@ pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
         return Ok(());
     }
 
+    let mut created = 0usize;
     for file in &saved {
-        put_back("restore", dir, file)?;
+        let (dest, outcome) = put_back("restore", dir, file)?;
+        output::report(outcome, dest.display());
+        created += usize::from(outcome == SyncOutcome::Created);
     }
 
-    output::note(format!(
-        "restored {} file(s) from backup {stamp}",
-        saved.len()
-    ));
+    output::note(summary("restored", saved.len(), created, stamp));
 
     Ok(())
 }
 
-fn list(taken: &[(u64, PathBuf)]) -> Result<()> {
+fn list(taken: &[(u64, PathBuf)], name: Option<&String>) -> Result<()> {
+    let Some(name) = name else {
+        return show(taken);
+    };
+
+    let (stamp, dir) = chosen(taken, Some(name))?;
+    show(&[(stamp, dir.to_path_buf())])?;
+
+    for file in files::collect_files("restore", dir)? {
+        output::hint(destination(dir, &file)?.display());
+    }
+
+    Ok(())
+}
+
+fn show(taken: &[(u64, PathBuf)]) -> Result<()> {
     let rows = rows(taken, backup::now()?)?;
     let width = rows
         .iter()
@@ -106,20 +125,29 @@ fn rows(taken: &[(u64, PathBuf)], now: u64) -> Result<Vec<(u64, String, usize)>>
 }
 
 fn foresee(dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<()> {
+    let mut created = 0usize;
     for file in saved {
-        output::entry(Tone::Warning, "restore", destination(dir, file)?.display());
+        let dest = destination(dir, file)?;
+        let outcome = planned("restore", &dest)?;
+        output::preview(outcome, dest.display());
+        created += usize::from(outcome == SyncOutcome::Created);
     }
 
-    output::note(format!(
-        "would restore {} file(s) from backup {stamp}",
-        saved.len()
-    ));
+    output::note(summary("would restore", saved.len(), created, stamp));
 
     Ok(())
 }
 
 fn confirmed(dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<bool> {
-    output::line(preview(dir, saved));
+    for file in saved.iter().take(PREVIEW_LIMIT) {
+        let dest = destination(dir, file)?;
+        output::preview(planned("restore", &dest)?, dest.display());
+    }
+
+    if saved.len() > PREVIEW_LIMIT {
+        output::hint(format!("... and {} more", saved.len() - PREVIEW_LIMIT));
+    }
+
     output::confirm(
         "restore",
         &format!("Put {} file(s) of backup {stamp} back?", saved.len()),
@@ -127,18 +155,11 @@ fn confirmed(dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<bool> {
     )
 }
 
-fn preview(dir: &Path, saved: &[PathBuf]) -> String {
-    let mut lines: Vec<String> = saved
-        .iter()
-        .take(PREVIEW_LIMIT)
-        .map(|file| format!("  {}", utils::relative(dir, file).display()))
-        .collect();
-
-    if saved.len() > PREVIEW_LIMIT {
-        lines.push(format!("  ... and {} more", saved.len() - PREVIEW_LIMIT));
-    }
-
-    lines.join("\n")
+fn summary(action: &str, saved: usize, created: usize, stamp: u64) -> String {
+    format!(
+        "{action} {saved} file(s) from backup {stamp} ({created} created, {} replaced)",
+        saved.saturating_sub(created)
+    )
 }
 
 fn chosen<'a>(taken: &'a [(u64, PathBuf)], name: Option<&String>) -> Result<(u64, &'a Path)> {
@@ -148,7 +169,7 @@ fn chosen<'a>(taken: &'a [(u64, PathBuf)], name: Option<&String>) -> Result<(u64
     };
 
     let Some((stamp, dir)) = taken.iter().find(|(stamp, _)| stamp.to_string() == *name) else {
-        bail!("restore: no backup named {name}; run `luadot restore list` to see them");
+        bail!("restore: no backup named {name}; run `luadot restore --list` to see them");
     };
 
     Ok((*stamp, dir.as_path()))
@@ -166,21 +187,30 @@ fn destination(dir: &Path, file: &Path) -> Result<PathBuf> {
     Ok(Path::new("/").join(relative))
 }
 
-fn put_back(command: &str, dir: &Path, file: &Path) -> Result<()> {
+fn planned(command: &str, dest: &Path) -> Result<SyncOutcome> {
+    match files::exists(command, dest)? {
+        true => Ok(SyncOutcome::Replaced),
+        false => Ok(SyncOutcome::Created),
+    }
+}
+
+fn put_back(command: &str, dir: &Path, file: &Path) -> Result<(PathBuf, SyncOutcome)> {
     let dest = destination(dir, file)?;
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("{command}: failed to create {}", parent.display()))?;
     }
-    clear(command, &dest)?;
+    let outcome = cleared(command, &dest)?;
 
-    backup::copy_entry(command, file, &dest)
+    backup::copy_entry(command, file, &dest)?;
+
+    Ok((dest, outcome))
 }
 
-fn clear(command: &str, dest: &Path) -> Result<()> {
+fn cleared(command: &str, dest: &Path) -> Result<SyncOutcome> {
     let meta = match std::fs::symlink_metadata(dest) {
         Ok(meta) => meta,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(SyncOutcome::Created),
         Err(err) => {
             return Err(err)
                 .with_context(|| format!("{command}: failed to inspect {}", dest.display()));
@@ -195,7 +225,9 @@ fn clear(command: &str, dest: &Path) -> Result<()> {
     }
 
     std::fs::remove_file(dest)
-        .with_context(|| format!("{command}: failed to remove {}", dest.display()))
+        .with_context(|| format!("{command}: failed to remove {}", dest.display()))?;
+
+    Ok(SyncOutcome::Replaced)
 }
 
 fn ago(seconds: u64) -> String {
@@ -229,6 +261,20 @@ mod tests {
     }
 
     #[test]
+    fn a_file_the_system_lost_comes_back_as_created() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("backup");
+        let saved = backed(&dir, &root.path().join("home/.zshrc"));
+        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
+        std::fs::write(&saved, "handwritten").unwrap();
+
+        let (dest, outcome) = put_back("restore", &dir, &saved).unwrap();
+
+        assert_eq!(outcome, SyncOutcome::Created);
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "handwritten");
+    }
+
+    #[test]
     fn restoring_over_a_hard_link_leaves_the_other_file_alone() {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
@@ -243,8 +289,9 @@ mod tests {
         std::fs::write(&managed, "managed").unwrap();
         std::fs::hard_link(&managed, home.join(".zshrc")).unwrap();
 
-        put_back("restore", &dir, &saved).unwrap();
+        let (_, outcome) = put_back("restore", &dir, &saved).unwrap();
 
+        assert_eq!(outcome, SyncOutcome::Replaced);
         assert_eq!(
             std::fs::read_to_string(home.join(".zshrc")).unwrap(),
             "handwritten"
