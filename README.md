@@ -52,7 +52,7 @@ has the details.
 - [Install](docs/install.md): AUR, deb, Nix, source.
 - [Commands](docs/commands.md): what each one does.
 - [The repository](docs/repository.md): layout, the rules git reads, mode and owner.
-- [The ld interface](docs/ld.md): rules, options, classes, the Lua toolbox.
+- [The ld interface](docs/ld.md): rules, options, classes, plugins, the Lua toolbox.
 - [Templates](docs/templates.md): files that differ per machine.
 - [Encrypted files](docs/secrets.md): age and gpg secrets.
 - [Backups](docs/backups.md): what a run saved, and restore.

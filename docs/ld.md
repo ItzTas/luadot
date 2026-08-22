@@ -147,7 +147,8 @@ script deciding whether it may do something slow reads it first.
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
 | `ld.crypt.backend`, `ld.crypt.lock` | `config.lua`, which builds the configuration | does nothing, warns |
-| `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
+| `ld.task`, `ld.doc.page` | `config.lua`, which the command reads them from | does nothing, warns |
+| `ld.cmd`, `ld.git`, `ld.git.clone`, `ld.git.at`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
 | `ld.alt.out` | everywhere | warns in `config.lua`, where it writes its file before every command |
 | everything else | everywhere | |
 
@@ -339,6 +340,20 @@ A call before a repository is set stops instead of running git somewhere else:
 ```
 luadot: `ld.git`: no repository set; run `luadot clone <url>` first
 ```
+
+Two calls reach other repositories. `ld.git.clone(url, dir, options)` clones
+into a directory that is empty or missing, through the same library
+`luadot clone` uses, so it needs no `git` binary; `options` takes a `branch`
+to check out and a `depth` of history to fetch. `ld.git.at(dir)` hands back
+the call `ld.git` is, bound to that directory instead of the managed
+repository:
+
+```lua
+ld.git.clone("https://github.com/someone/lazyld", "~/.local/share/luadot/plugins/lazyld", { depth = 1 })
+ld.git.at("~/.local/share/luadot/plugins/lazyld")("fetch", "--tags")
+```
+
+`~` and a relative directory resolve against your home directory in both.
 
 ## Printing
 
@@ -592,10 +607,11 @@ documented at <https://www.inf.puc-rio.br/~roberto/lpeg/> and
 
 ## Slow calls
 
-`ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup` and `ld.setup.all` reach
-other programs, which takes seconds to minutes. `config.lua` runs before every
-command, so a call to one of them there slows every command down. They belong
-in `bootstrap.lua`, which runs once; elsewhere a warning says so:
+`ld.cmd`, `ld.git`, `ld.git.clone`, `ld.git.at`, `ld.pkg.install`, `ld.setup`
+and `ld.setup.all` reach other programs or the network, which takes seconds
+to minutes. `config.lua` runs before every command, so a call to one of them
+there slows every command down. They belong in `bootstrap.lua`, which runs
+once; elsewhere a warning says so:
 
 ```
 luadot: `ld.pkg.install` in config.lua runs before every command and will slow all
@@ -630,6 +646,67 @@ require("editors")
 `ld` is a global, so a required module calls it directly, returns values for
 `config.lua` to pass along, or exposes functions. The same directory is on the
 module path of every template, so a helper written once is reached from both.
+
+## Plugins
+
+luadot ships no plugin manager and reads no plugin spec. What it has is
+enough for one to be written in Lua, the way `lazy.nvim` is written against
+Neovim, and for the plugins it installs to reach every script luadot runs.
+
+A plugin is a directory. `lua/` holds what `require` finds once the directory
+is registered, `meta/` an optional `---@meta` file for the editor, `docs/` an
+optional page for `luadot doc`. Nothing else is read and nothing is
+discovered: how a plugin is fetched, named, pinned and ordered is the
+manager's business.
+
+| Call | Gives a manager |
+| --- | --- |
+| `ld.rtp.add(dir)` | `require` for `<dir>/lua/`, in this script and in every script the command runs after it, behind the configuration's own `lua/`. |
+| `ld.path.data` | A place to install into, `~/.local/share/luadot`; luadot owns no subdirectory there a manager might pick. |
+| `ld.git.clone(url, dir, options)`, `ld.git.at(dir)` | Cloning and running git outside the managed repository; the clone needs no `git` binary. |
+| `ld.fs` | `exists`, `is_dir`, `mkdir`, `ls`, `rm`, `read` and `write`, resolved against your home directory instead of a template. |
+| `ld.json.encode(value)`, `ld.json.decode(text)` | A lockfile out and in. |
+| `ld.task(name, task)` | A command line: `luadot <name>` runs the function it registers. |
+| `ld.doc.page(path)` | A page `luadot doc` answers from. |
+| `ld.surface` | Which script is running, so network work waits for `bootstrap.lua`. |
+
+The bootstrap a manager ends up with looks like the one Neovim users already
+have in hand:
+
+```lua
+local root = ld.path.data .. "/plugins"
+
+if not ld.fs.is_dir(root .. "/lazyld") then
+  ld.git.clone("https://github.com/someone/lazyld", root .. "/lazyld")
+end
+
+ld.rtp.add(root .. "/lazyld")
+
+require("lazyld").setup({
+  { "someone/luadot-secrets" },
+  { "someone/laptop-only", when = ld.class.get("form-factor") == "laptop" },
+})
+```
+
+One `stat` per command on a machine that already has the manager, a clone on
+one that does not. A lockfile the manager keeps next to `config.lua` is
+versioned by `luadot add` like everything else under `~/.config/luadot/`, so
+every other machine checks out the same pinned revisions.
+
+Registering is a `config.lua` act. `ld.rtp.add` from a template or a setup
+script reaches the rest of that run, but `ld.task` and `ld.doc.page` only take
+effect from `config.lua`, and say so elsewhere. `completions`, `man` and a
+bare `meta` describe luadot itself, never read the configuration, and see no
+plugin.
+
+A plugin is Lua and nothing else: `package.loadlib` and the C module searchers
+are closed, so it cannot load a shared library. It is still arbitrary code
+running inside `config.lua`, before every command, beside the calls that
+decrypt secrets and write into your home directory, with `io` and `os` at
+hand. luadot does not sandbox it, and a sandbox would break the plugins it
+protects. A manager pinning every plugin to a revision in its lockfile, and
+updating only when asked, is the whole mitigation; read what a plugin does
+before letting a manager install it.
 
 ## exec
 
