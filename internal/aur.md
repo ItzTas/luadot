@@ -27,8 +27,10 @@ there they are the same string.
 
 The pipeline in `.gitlab/workflows/ci.yml` does it, in this order:
 
-1. `bump` (stage `release`) runs `cog bump`, pushes the new commit and tag to
-   GitLab, and exports the tag as `LUADOT_TAG` through a dotenv artifact.
+1. `bump` (stage `release`) runs `cog bump`, rewrites the changelog with
+   `packaging/release/changelog.sh --amend`, pushes the new commit and tag to
+   GitLab, and exports the tag as `LUADOT_TAG` through a dotenv artifact. See
+   [The changelog](#the-changelog).
 2. `push-to-github` (stage `mirror`) mirrors that tag to GitHub. Nothing
    downstream waits for it — it is the contribution mirror, not a source.
 3. `source-tarball` (stage `binaries`, `main` and `nightly`) calls
@@ -52,6 +54,22 @@ The pipeline in `.gitlab/workflows/ci.yml` does it, in this order:
 needs `bump` and `binaries`. `source-tarball` and `binaries` share the
 `release-assets` resource group, so the two never write to the same release at
 once.
+
+## The changelog
+
+`cog bump` renders every release the repository has ever tagged, not only the
+new one, and writes that whole block above what `CHANGELOG.md` already holds.
+Two bumps leave two copies of the history in the file, ten leave ten. The
+prerelease chain is what triggers it: with `pre = "nightly.*"` set, cocogitto
+7.0.0 stops resolving the tag a release starts from and falls back to the first
+commit. A repository of four commits and three `cog bump --pre` runs reproduces
+it.
+
+`packaging/release/changelog.sh` keeps the first copy of each release, drops
+the rest, and writes the separator and the cocogitto footer back. With no
+argument it rewrites the file; `--check` fails when the file holds a repeat;
+`--amend` rewrites it, folds the result into the commit `cog bump` just made
+and moves the tag onto it, which is what the pipeline runs.
 
 ## Release assets
 

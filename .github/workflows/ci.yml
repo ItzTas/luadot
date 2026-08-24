@@ -76,6 +76,16 @@ jobs:
       - name: Check
         run: ./packaging/vendor/update.sh --check
 
+  changelog:
+    name: Changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check
+        run: ./packaging/release/changelog.sh --check
+
   meta:
     name: Lua definitions
     runs-on: ubuntu-latest

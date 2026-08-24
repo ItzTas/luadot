@@ -48,6 +48,16 @@ vendor:
   script:
     - ./packaging/vendor/update.sh --check
 
+changelog:
+  stage: test
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  image: rust:latest
+  script:
+    - ./packaging/release/changelog.sh --check
+
 meta:
   stage: test
   tags:
