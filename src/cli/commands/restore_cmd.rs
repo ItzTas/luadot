@@ -196,38 +196,13 @@ fn planned(command: &str, dest: &Path) -> Result<SyncOutcome> {
 
 fn put_back(command: &str, dir: &Path, file: &Path) -> Result<(PathBuf, SyncOutcome)> {
     let dest = destination(dir, file)?;
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("{command}: failed to create {}", parent.display()))?;
-    }
-    let outcome = cleared(command, &dest)?;
+    let outcome = planned(command, &dest)?;
 
-    backup::copy_entry(command, file, &dest)?;
+    files::replace_file(command, &dest, |staged| {
+        backup::copy_entry(command, file, staged)
+    })?;
 
     Ok((dest, outcome))
-}
-
-fn cleared(command: &str, dest: &Path) -> Result<SyncOutcome> {
-    let meta = match std::fs::symlink_metadata(dest) {
-        Ok(meta) => meta,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(SyncOutcome::Created),
-        Err(err) => {
-            return Err(err)
-                .with_context(|| format!("{command}: failed to inspect {}", dest.display()));
-        }
-    };
-
-    if meta.file_type().is_dir() {
-        bail!(
-            "{command}: refusing to replace directory {} with a file",
-            dest.display()
-        );
-    }
-
-    std::fs::remove_file(dest)
-        .with_context(|| format!("{command}: failed to remove {}", dest.display()))?;
-
-    Ok(SyncOutcome::Replaced)
 }
 
 fn ago(seconds: u64) -> String {

@@ -1,3 +1,4 @@
+mod atomic;
 mod constants;
 mod fs;
 mod link;
@@ -10,13 +11,14 @@ mod template;
 mod walk;
 mod write;
 
+pub use atomic::{replace_contents, replace_file};
 pub use fs::{
-    create_parent, effective_mode, exists, link_target, mode_bits, read_contents, regular_file,
-    remove_existing, write_mode,
+    create_parent, effective_mode, exists, link_target, metadata, mode_bits, prune_parents,
+    read_contents, regular_file, write_mode,
 };
 pub use link::{LinkMode, link};
 pub use mirror::{Mirror, Side, Tracked};
-pub use placement::Placement;
+pub use placement::{Attributes, Placement};
 pub use predict::predict;
 pub use status::{FileStatus, file_status};
 pub use sync::{ConflictPolicy, SyncOutcome, refused, sync_file};

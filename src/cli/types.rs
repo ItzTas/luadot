@@ -2,8 +2,8 @@ use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
     AddArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs, DocArgs,
-    EditArgs, ExecArgs, GitArgs, InitArgs, MetaArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs,
-    SetupArgs, StatusArgs, SyncArgs, TaskArgs, TmplArgs,
+    EditArgs, ExecArgs, GitArgs, InitArgs, MetaArgs, MvArgs, PushArgs, RekeyArgs, RestoreArgs,
+    RmArgs, SetupArgs, StatusArgs, SyncArgs, TaskArgs, TmplArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -42,6 +42,8 @@ pub enum Cmd {
     Add(AddArgs),
     #[command(about = "Stop managing files or directories, leaving your home copy in place")]
     Rm(RmArgs),
+    #[command(about = "Move managed files or directories, in the repository and on the system")]
+    Mv(MvArgs),
     #[command(about = "List the managed files whose system copy is not in sync")]
     Status(StatusArgs),
     #[command(about = "Show what the repository holds and the system does not")]

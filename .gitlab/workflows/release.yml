@@ -32,6 +32,7 @@ bump:
     - git config user.email "$GITLAB_USER_EMAIL"
   script:
     - cog bump $BUMP_ARGS --skip-ci
+    - ./packaging/release/changelog.sh --amend
     - git push -o ci.skip origin "$CI_COMMIT_BRANCH"
     - git push -o ci.skip origin --tags
     - echo "LUADOT_TAG=$(git describe --tags --exact-match HEAD)" > bump.env

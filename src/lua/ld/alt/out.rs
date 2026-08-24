@@ -40,7 +40,7 @@ fn place(output: &Output) -> mlua::Result<()> {
 
     let placement = Placement::new(output.link().unwrap_or_default()).with_mode(output.mode());
     let outcome = match output.content() {
-        Content::Text(text) => write_file(policy, placement, output.dest(), text),
+        Content::Text(text) => write_file(policy, placement.attributes(), output.dest(), text),
         Content::File(source) => sync_file(policy, placement, source, output.dest()),
     }
     .map_err(|err| {

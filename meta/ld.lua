@@ -95,7 +95,7 @@
 ---@field owner? string `"user"` or `"user:group"`, who owns a matching file once placed, set through `chown`.
 ---@field encrypt? boolean Whether `add` stores the matching files encrypted.
 ---@field lfs? boolean Whether the matching files are stored in Git LFS. Needs `match`, since git attributes have no regular expressions, and does not go with `encrypt`. luadot writes the patterns into the repository's `.local/share/luadot/git/attributes`, between the `# luadot:lfs` markers, and copies that file into `.git/info/attributes`.
----@field autocommit? boolean Whether `add` and `rm` commit on their own once one of those files is staged.
+---@field autocommit? boolean Whether `add`, `rm` and `mv` commit on their own once one of those files is staged.
 ---@field autopush? boolean Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back.
 
 ---A command of the configuration's own, as `ld.task` takes it.
@@ -212,7 +212,7 @@
 
 ---The table form of the options, `ld.opt({ link = "symbolic" })`: only the keys it carries are set.
 ---@class ld.Options
----@field autocommit? boolean Whether `add` and `rm` commit what they staged. Defaults to `false`.
+---@field autocommit? boolean Whether `add`, `rm` and `mv` commit what they staged. Defaults to `false`.
 ---@field autopush? boolean Whether that commit is pushed too, committing first. Defaults to `false`.
 ---@field backup? boolean Whether a file is copied aside before luadot writes over it. Defaults to `true`.
 ---@field backup_age? string How long a backup is kept, as a span like `"30d"` in `s`, `m`, `h`, `d` or `w`; the ones older than that are dropped. Defaults to keeping them forever.
@@ -476,6 +476,10 @@ function ld.on.git(options) end
 ---@param options ld.Around
 function ld.on.init(options) end
 
+---Runs a function before and after `mv`.
+---@param options ld.Around
+function ld.on.mv(options) end
+
 ---Runs a function before and after `push`.
 ---@param options ld.Around
 function ld.on.push(options) end
@@ -521,7 +525,7 @@ function ld.on.tmpl.new(options) end
 ---@overload fun(options: ld.Options)
 ld.opt = {}
 
----Whether `add` and `rm` commit what they staged. Defaults to `false`.
+---Whether `add`, `rm` and `mv` commit what they staged. Defaults to `false`.
 ---@param enabled boolean
 function ld.opt.autocommit(enabled) end
 

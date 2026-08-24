@@ -36,13 +36,17 @@ pub fn link(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
 }
 
 fn hard(source: &Path, dest: &Path) -> Result<()> {
-    std::fs::hard_link(source, dest).with_context(|| {
-        format!(
-            "files: failed to hard link {} -> {}",
-            dest.display(),
-            source.display()
-        )
-    })
+    match std::fs::hard_link(source, dest) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::CrossesDevices => copy(source, dest),
+        Err(err) => Err(err).with_context(|| {
+            format!(
+                "files: failed to hard link {} -> {}",
+                dest.display(),
+                source.display()
+            )
+        }),
+    }
 }
 
 fn symbolic(source: &Path, dest: &Path) -> Result<()> {
@@ -93,6 +97,24 @@ mod tests {
         assert!(kind.is_symlink());
         assert_eq!(std::fs::read_link(&dest).unwrap(), source);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
+    }
+
+    #[test]
+    fn a_hard_link_shares_the_inode_of_the_source() {
+        use std::os::unix::fs::MetadataExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source.txt");
+        let dest = dir.path().join("dest.txt");
+        std::fs::write(&source, "hello").unwrap();
+
+        link(LinkMode::Hard, &source, &dest).unwrap();
+
+        let (a, b) = (
+            std::fs::metadata(&source).unwrap(),
+            std::fs::metadata(&dest).unwrap(),
+        );
+        assert_eq!((a.dev(), a.ino()), (b.dev(), b.ino()));
     }
 
     #[test]

@@ -6,6 +6,7 @@
 | `luadot clone <url> [dir]` | Clones a dotfiles repository and makes it the managed one. |
 | `luadot add <path>...` | Starts managing a file or directory, mirroring it into the repository. |
 | `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving the system copy in place. |
+| `luadot mv [-n] <path>... <dest>` | Moves a managed file or directory, in the repository and on the system. |
 | `luadot status [-t] [path]` | Lists the managed files whose system copy is not in sync, `-t` the files the templates produce too. |
 | `luadot diff [-t] [path]` | Shows what the repository holds and the system does not, `-t` what the templates produce too. |
 | `luadot apply [-n] [path]` | Puts the repository's files back on the system. |
@@ -179,9 +180,34 @@ alone. Directories that become empty are pruned from the repository.
 Removing more than one file asks first, listing what is about to go. `-y` (or
 `--yes`) answers upfront; without a terminal, `rm` refuses.
 
+## mv
+
+`mv` renames a managed path on both sides at once: the repository's copy moves,
+and the system copy follows it. A symlink into the repository is pointed at the
+file where it landed. A hard link, a copy, or a system file that diverged is
+moved to the new path as it is, and a file the system does not have is only
+moved in the repository. Directories that become empty are pruned.
+
+The last path is where everything goes. One path renames, several need a
+directory of the repository to land in:
+
+```
+luadot mv ~/.vimrc ~/.config/vim/vimrc
+luadot mv ~/.vimrc ~/.gvimrc ~/.config/vim
+```
+
+The paths are the ones you use, never the ones the repository stores: a secret
+kept as `.netrc.age` is named `~/.netrc`, a template kept as `.zshrc.luadot` is
+named `~/.zshrc`. Both keep the form they are in, so a secret lands encrypted
+and a template moves whole. The rules are not read again for the destination;
+`rm` and `add` are how a file changes the way it is stored.
+
+A destination either side already holds is refused, and so is a directory moved
+into itself.
+
 ## sync
 
-`add` and `rm` stage what they changed. `sync` commits what is staged and
+`add`, `rm` and `mv` stage what they changed. `sync` commits what is staged and
 pushes it:
 
 ```
@@ -201,7 +227,7 @@ luadot git remote add origin git@github.com:me/dotfiles.git
 luadot sync
 ```
 
-`ld.opt.autocommit` makes `add` and `rm` commit on their own, and
+`ld.opt.autocommit` makes `add`, `rm` and `mv` commit on their own, and
 `ld.opt.autopush` pushes that commit (it implies the commit, so it stands
 alone). Both are rule keys too, so they can be set for one part of the
 repository:
@@ -222,7 +248,7 @@ commit.
 
 ## Dry runs
 
-`-n` (or `--dry-run`) makes `apply`, `tmpl alt` and `rm` report what they
+`-n` (or `--dry-run`) makes `apply`, `tmpl alt`, `rm` and `mv` report what they
 would do and touch nothing: nothing is written and no backup is taken. Only
 the files that would change are listed. A real run names every file it went through,
 unchanged ones included:

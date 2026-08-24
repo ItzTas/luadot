@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::crypt;
-use crate::files;
+use crate::files::{self, ConflictPolicy, LinkMode, Placement};
 use crate::git;
 use crate::lua::Config;
 use crate::output::{self, Tone};
@@ -293,7 +293,18 @@ fn link_into_repo(
             dest,
         );
     }
-    files::link(config.link_mode(relative), source, dest)
+
+    let placement = config.placement(relative);
+    if placement.link() != LinkMode::Symbolic {
+        return files::link(placement.link(), source, dest);
+    }
+
+    store_and_point_at(placement, source, dest)
+}
+
+fn store_and_point_at(placement: Placement, system: &Path, stored: &Path) -> Result<()> {
+    files::link(LinkMode::Copy, system, stored)?;
+    files::sync_file(ConflictPolicy::Overwrite, placement, stored, system).map(|_| ())
 }
 
 #[cfg(test)]

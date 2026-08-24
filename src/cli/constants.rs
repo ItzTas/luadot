@@ -17,6 +17,12 @@ pub const CONFIG_WROTE: &str = "wrote";
 
 pub const ADD_LABEL: &str = "added";
 
+pub const MOVE_LABEL: &str = "moved";
+
+pub const MOVE_PREDICTION: &str = "move";
+
+pub const MOVE_ARROW: &str = " -> ";
+
 pub const UNDECLARED: &str = "(not declared)";
 
 pub const DEFAULT_SHELL: &str = "/bin/sh";

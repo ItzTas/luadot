@@ -139,7 +139,7 @@ fn write(
 
     match output.content() {
         Content::File(source) => files::sync_file(policy, placement, source, dest),
-        Content::Text(text) => files::write_file(policy, placement, dest, text),
+        Content::Text(text) => files::write_file(policy, placement.attributes(), dest, text),
     }
     .with_context(|| format!("tmpl alt: failed to place {}", dest.display()))
 }

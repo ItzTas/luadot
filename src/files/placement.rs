@@ -11,18 +11,22 @@ use super::fs::mode_bits;
 use super::link::LinkMode;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Placement<'a> {
-    link: LinkMode,
+pub struct Attributes<'a> {
     mode: Option<u32>,
     owner: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Placement<'a> {
+    link: LinkMode,
+    attributes: Attributes<'a>,
 }
 
 impl<'a> Placement<'a> {
     pub fn new(link: LinkMode) -> Self {
         Self {
             link,
-            mode: None,
-            owner: None,
+            attributes: Attributes::default(),
         }
     }
 
@@ -31,15 +35,55 @@ impl<'a> Placement<'a> {
     }
 
     pub fn with_mode(self, mode: Option<u32>) -> Self {
+        Self {
+            attributes: self.attributes.with_mode(mode),
+            ..self
+        }
+    }
+
+    pub fn with_owner(self, owner: Option<&'a str>) -> Self {
+        Self {
+            attributes: self.attributes.with_owner(owner),
+            ..self
+        }
+    }
+
+    pub fn link(&self) -> LinkMode {
+        self.link
+    }
+
+    pub fn attributes(&self) -> Attributes<'a> {
+        self.attributes
+    }
+
+    pub fn mode(&self) -> Option<u32> {
+        self.attributes.mode()
+    }
+
+    pub fn owner(&self) -> Option<&'a str> {
+        self.attributes.owner()
+    }
+
+    pub fn carried_by(&self, dest: &Path) -> bool {
+        self.attributes.carried_by(dest)
+    }
+
+    pub fn set_on(&self, command: &str, dest: &Path) -> Result<()> {
+        self.attributes.set_on(command, dest)
+    }
+
+    pub fn own(&self, command: &str, dest: &Path) -> Result<()> {
+        self.attributes.own(command, dest)
+    }
+}
+
+impl<'a> Attributes<'a> {
+    pub fn with_mode(self, mode: Option<u32>) -> Self {
         Self { mode, ..self }
     }
 
     pub fn with_owner(self, owner: Option<&'a str>) -> Self {
         Self { owner, ..self }
-    }
-
-    pub fn link(&self) -> LinkMode {
-        self.link
     }
 
     pub fn mode(&self) -> Option<u32> {

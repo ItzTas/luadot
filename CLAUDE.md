@@ -6,9 +6,9 @@ luadot is a small Rust CLI; the toolchain is pinned with proto (`.prototools`).
 
 ## Language
 
-- The entire project must be written in English. Everything — code,
-  comments, identifiers, documentation, commit messages, and this file —
-  must be in English. No other language is allowed anywhere.
+- Write the entire project in English: code, comments, identifiers,
+  documentation, commit messages, and this file. No other language is
+  allowed anywhere.
 
 ## Commits
 
@@ -27,8 +27,7 @@ luadot is a small Rust CLI; the toolchain is pinned with proto (`.prototools`).
 
 ## Changes
 
-- After making any change, check for errors. If there are any, change the
-  code again to fix them.
+- After any change, check for errors and fix the ones you find.
 
 ## main.rs
 
@@ -37,5 +36,4 @@ luadot is a small Rust CLI; the toolchain is pinned with proto (`.prototools`).
 
 ## This file
 
-- Keep this file short and simple. It must stay easy to read and review,
-  so avoid adding complex or lengthy content.
+- Keep this file short and simple, so it stays easy to read and review.

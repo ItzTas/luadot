@@ -38,6 +38,8 @@ pub const GIT: &str = "git";
 
 pub const INIT: &str = "init";
 
+pub const MV: &str = "mv";
+
 pub const PUSH: &str = "push";
 
 pub const REKEY: &str = "rekey";
@@ -64,7 +66,7 @@ pub const TMPL_NEW: &str = "tmpl new";
 
 pub type Customizer = fn(&Lua, Command) -> mlua::Result<Function>;
 
-pub const FUNCTIONS: [(&str, Command, Customizer); 19] = [
+pub const FUNCTIONS: [(&str, Command, Customizer); 20] = [
     (ADD, Command::Add, around::function),
     (APPLY, Command::Apply, around::function),
     (BOOTSTRAP, Command::Bootstrap, around::function),
@@ -77,6 +79,7 @@ pub const FUNCTIONS: [(&str, Command, Customizer); 19] = [
     (EXEC, Command::Exec, around::function),
     (GIT, Command::Git, around::function),
     (INIT, Command::Init, around::function),
+    (MV, Command::Mv, around::function),
     (PUSH, Command::Push, around::function),
     (REKEY, Command::Rekey, around::function),
     (RESTORE, Command::Restore, around::function),
@@ -309,7 +312,7 @@ const fn around(name: &'static str, doc: &'static str) -> Signature {
 }
 
 #[cfg(feature = "meta")]
-pub const SIGNATURES: [Signature; 19] = [
+pub const SIGNATURES: [Signature; 20] = [
     around(ADD, "Runs a function before and after `add`."),
     around(APPLY, "Runs a function before and after `apply`."),
     around(BOOTSTRAP, "Runs a function before and after `bootstrap`."),
@@ -330,6 +333,7 @@ pub const SIGNATURES: [Signature; 19] = [
     around(EXEC, "Runs a function before and after `exec`."),
     around(GIT, "Runs a function before and after `git`."),
     around(INIT, "Runs a function before and after `init`."),
+    around(MV, "Runs a function before and after `mv`."),
     around(PUSH, "Runs a function before and after `push`."),
     around(REKEY, "Runs a function before and after `rekey`."),
     around(RESTORE, "Runs a function before and after `restore`."),
