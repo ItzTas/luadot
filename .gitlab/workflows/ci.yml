@@ -16,3 +16,4 @@ include:
   - local: .gitlab/workflows/binaries.yml
   - local: .gitlab/workflows/aur.yml
   - local: .gitlab/workflows/crates.yml
+  - local: .gitlab/workflows/github.yml

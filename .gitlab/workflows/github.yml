@@ -1,0 +1,25 @@
+github-release:
+  stage: publish
+  tags:
+    - k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "nightly"'
+  image: alpine/git:latest
+  resource_group: github-release
+  needs:
+    - job: bump
+      artifacts: true
+    - job: push-to-github
+    - job: source-tarball
+    - job: binaries
+      optional: true
+  variables:
+    GIT_DEPTH: 0
+  before_script:
+    - apk add --no-cache bash curl jq
+    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.digitalventura.com.br/luadot/luadot.git"
+    - git fetch origin --tags --force
+    - git checkout "$LUADOT_TAG"
+  script:
+    - ./packaging/release/github.sh "$LUADOT_TAG"
