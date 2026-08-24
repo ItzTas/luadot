@@ -2,6 +2,20 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.0-nightly.12](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.11..v0.1.0-nightly.12) - 2026-08-24
+#### Features
+- (**cli**) move a managed file with luadot mv - ([34a6a53](https://github.com/ItzTas/luadot/commit/34a6a530705bcc61aa5c5374f3cf8a83ae44013e)) - Tales
+#### Bug Fixes
+- (**changelog**) drop the releases the merge brought back - ([2548b80](https://github.com/ItzTas/luadot/commit/2548b8011942017d4f4f23cd82c94cd4807a01a9)) - Tales
+- (**changelog**) tell releases apart by version, not by rendered line - ([4e6c116](https://github.com/ItzTas/luadot/commit/4e6c116a7a227937e001130335ed65a3028c73a7)) - Tales
+- (**changelog**) drop the releases every bump repeats - ([7ac6ef3](https://github.com/ItzTas/luadot/commit/7ac6ef3464e13935bd47578cd1e61b9492b7a330)) - Tales
+#### Tests
+- (**git**) run the panic-hook test in its own process - ([694c8c2](https://github.com/ItzTas/luadot/commit/694c8c256147600c66b752ab3beb6d39df7474a6)) - Tales
+#### Continuous Integration
+- publish the release assets to github - ([9dd58f0](https://github.com/ItzTas/luadot/commit/9dd58f0672229e05d9754e2cf3af606fd77912e3)) - Tales
+
+- - -
+
 ## [v0.1.0-nightly.11](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.10..v0.1.0-nightly.11) - 2026-08-22
 #### Features
 - (**cli**) show restore's files per backup and created/replaced outcomes - ([a6505a8](https://github.com/ItzTas/luadot/commit/a6505a8e93396183c9c2fc943fe6a9f1ec43d974)) - Tales
@@ -28,6 +42,7 @@ All notable changes to this project will be documented in this file. See [conven
 - (**cli**) point the editor at plugin definitions - ([7368e64](https://github.com/ItzTas/luadot/commit/7368e64877f7f91465f2fb8d5eea8823237d2661)) - Tales
 - (**cli**) describe the calls a plugin registers - ([1379661](https://github.com/ItzTas/luadot/commit/1379661c6ac56a2594668c0264fae2ed59b42cc7)) - Tales
 - (**lua**) name the surface the script is running on - ([96d736c](https://github.com/ItzTas/luadot/commit/96d736c36ed0dc28ab436fc80097cc2294419863)) - Tales
+- (**version**) v0.1.0-nightly.11 [skip ci] - ([201ae7a](https://github.com/ItzTas/luadot/commit/201ae7a8bb4c7664651aa8bfcb98bf72d8238bee)) - github push repo
 - conflitos consertados - ([3c85572](https://github.com/ItzTas/luadot/commit/3c85572f1e1d5261ec1090194a325e694b11abaa)) - Tales
 - stop tracking local .cargo registry cache - ([01d1842](https://github.com/ItzTas/luadot/commit/01d1842e45f886fdc17e04733181abc4061f32d6)) - Tales
 
