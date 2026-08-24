@@ -34,8 +34,11 @@ first_of_each() {
 	awk -v footer="$footer" '
 		$0 == footer { next }
 		/^## \[/ {
-			if ($0 in seen) { exit }
-			seen[$0] = 1
+			release = $0
+			sub(/^## \[/, "", release)
+			sub(/\].*/, "", release)
+			if (release in seen) { exit }
+			seen[release] = 1
 		}
 		{ print }
 	' "$changelog"
