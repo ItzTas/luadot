@@ -3,8 +3,9 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use tracing::debug;
 
+use super::atomic::replace_file;
 use super::constants::COMMAND;
-use super::fs::{create_parent, exists, regular_file, remove_existing};
+use super::fs::{exists, regular_file};
 use super::placement::Placement;
 use super::{LinkMode, link};
 
@@ -73,7 +74,6 @@ fn sync(
         return Ok(outcome);
     }
 
-    remove_existing(COMMAND, dest)?;
     place(placement, source, dest)?;
 
     Ok(SyncOutcome::Replaced)
@@ -88,45 +88,30 @@ pub fn refused(command: &str, policy: ConflictPolicy, dest: &Path) -> Result<Opt
 }
 
 fn place(placement: Placement, source: &Path, dest: &Path) -> Result<()> {
-    create_parent(COMMAND, dest)?;
-    match placement.link() {
-        LinkMode::Hard => hard_or_copy(source, dest)?,
-        LinkMode::Symbolic | LinkMode::Copy => link(placement.link(), source, dest)?,
-    }
+    replace_file(COMMAND, dest, |staged| {
+        link(placement.link(), source, staged)?;
 
-    placement.set_on(COMMAND, dest)
-}
-
-fn hard_or_copy(source: &Path, dest: &Path) -> Result<()> {
-    match std::fs::hard_link(source, dest) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::CrossesDevices => copy(source, dest),
-        Err(err) => Err(err).with_context(|| {
-            format!(
-                "files: failed to hard link {} -> {}",
-                dest.display(),
-                source.display()
-            )
-        }),
-    }
-}
-
-fn copy(source: &Path, dest: &Path) -> Result<()> {
-    std::fs::copy(source, dest).map(|_| ()).with_context(|| {
-        format!(
-            "files: failed to copy {} -> {}",
-            source.display(),
-            dest.display()
-        )
+        placement.set_on(COMMAND, staged)
     })
 }
 
 pub(super) fn already_synced(mode: LinkMode, source: &Path, dest: &Path) -> Result<bool> {
     match mode {
-        LinkMode::Hard => Ok(same_file(source, dest)),
+        LinkMode::Hard => hard_linked(source, dest),
         LinkMode::Symbolic => points_to(dest, source),
         LinkMode::Copy => copied(source, dest),
     }
+}
+
+fn hard_linked(source: &Path, dest: &Path) -> Result<bool> {
+    if same_file(source, dest) {
+        return Ok(true);
+    }
+    if same_device(source, dest) {
+        return Ok(false);
+    }
+
+    copied(source, dest)
 }
 
 fn copied(source: &Path, dest: &Path) -> Result<bool> {
@@ -163,6 +148,16 @@ fn same_file(source: &Path, dest: &Path) -> bool {
     a.dev() == b.dev() && a.ino() == b.ino()
 }
 
+fn same_device(source: &Path, dest: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    let (Ok(a), Ok(b)) = (std::fs::metadata(source), std::fs::metadata(dest)) else {
+        return true;
+    };
+
+    a.dev() == b.dev()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,6 +169,49 @@ mod tests {
 
     fn placed(link: LinkMode) -> Placement<'static> {
         Placement::new(link)
+    }
+
+    fn other_device() -> Option<tempfile::TempDir> {
+        let here = std::fs::metadata(std::env::temp_dir()).ok()?.dev();
+        let there = tempfile::tempdir_in("/dev/shm").ok()?;
+
+        match std::fs::metadata(there.path()).ok()?.dev() == here {
+            true => None,
+            false => Some(there),
+        }
+    }
+
+    #[test]
+    fn a_hard_link_the_filesystems_refused_reads_as_synced_on_the_next_run() {
+        let Some(elsewhere) = other_device() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        let dest = elsewhere.path().join("dest");
+        write(&source, "data");
+
+        let created = sync_file(
+            ConflictPolicy::Overwrite,
+            placed(LinkMode::Hard),
+            &source,
+            &dest,
+        )
+        .unwrap();
+
+        assert_eq!(created, SyncOutcome::Created);
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "data");
+        assert!(!same_file(&source, &dest));
+
+        let again = sync_file(
+            ConflictPolicy::Overwrite,
+            placed(LinkMode::Hard),
+            &source,
+            &dest,
+        )
+        .unwrap();
+
+        assert_eq!(again, SyncOutcome::AlreadySynced);
     }
 
     #[test]

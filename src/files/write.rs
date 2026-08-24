@@ -1,10 +1,11 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
+use super::atomic::replace_file;
 use super::constants::COMMAND;
-use super::fs::{create_parent, exists, mode_bits, regular_file, remove_existing, write_mode};
-use super::placement::Placement;
+use super::fs::{exists, mode_bits, regular_file, write_contents};
+use super::placement::Attributes;
 use super::status::FileStatus;
 use super::sync::{ConflictPolicy, SyncOutcome, refused};
 
@@ -22,17 +23,16 @@ pub fn text_status(dest: &Path, contents: &str, mode: Option<u32>) -> Result<Fil
 
 pub fn write_file(
     policy: ConflictPolicy,
-    placement: Placement,
+    attributes: Attributes,
     dest: &Path,
     contents: &str,
 ) -> Result<SyncOutcome> {
     if !exists(COMMAND, dest)? {
-        create_parent(COMMAND, dest)?;
-        write(placement, dest, contents)?;
+        write(attributes, dest, contents)?;
         return Ok(SyncOutcome::Created);
     }
 
-    if holds(dest, contents, placement.mode())? {
+    if holds(dest, contents, attributes.mode())? {
         return Ok(SyncOutcome::AlreadySynced);
     }
 
@@ -40,8 +40,7 @@ pub fn write_file(
         return Ok(outcome);
     }
 
-    remove_existing(COMMAND, dest)?;
-    write(placement, dest, contents)?;
+    write(attributes, dest, contents)?;
 
     Ok(SyncOutcome::Replaced)
 }
@@ -57,14 +56,12 @@ fn holds(path: &Path, contents: &str, mode: Option<u32>) -> Result<bool> {
     Ok(matches!(std::fs::read(path), Ok(found) if found == contents.as_bytes()))
 }
 
-fn write(placement: Placement, dest: &Path, contents: &str) -> Result<()> {
-    match placement.mode() {
-        Some(mode) => write_mode(COMMAND, dest, contents.as_bytes(), mode)?,
-        None => std::fs::write(dest, contents)
-            .with_context(|| format!("{COMMAND}: failed to write {}", dest.display()))?,
-    }
+fn write(attributes: Attributes, dest: &Path, contents: &str) -> Result<()> {
+    replace_file(COMMAND, dest, |staged| {
+        write_contents(COMMAND, staged, contents.as_bytes(), attributes.mode())?;
 
-    placement.own(COMMAND, dest)
+        attributes.own(COMMAND, staged)
+    })
 }
 
 #[cfg(test)]
@@ -74,8 +71,8 @@ mod tests {
 
     use super::*;
 
-    fn with_mode(mode: u32) -> Placement<'static> {
-        Placement::default().with_mode(Some(mode))
+    fn with_mode(mode: u32) -> Attributes<'static> {
+        Attributes::default().with_mode(Some(mode))
     }
 
     #[test]
@@ -86,7 +83,7 @@ mod tests {
 
         let outcome = write_file(
             ConflictPolicy::Skip,
-            Placement::default(),
+            Attributes::default(),
             &dest,
             "generated",
         )

@@ -1,20 +1,16 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use super::constants::STARTER;
+use crate::files;
 
 pub fn place(command: &str, path: &Path) -> Result<Option<PathBuf>> {
     if path.exists() {
         return Ok(None);
     }
 
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("{command}: failed to create {}", parent.display()))?;
-    }
-    std::fs::write(path, STARTER)
-        .with_context(|| format!("{command}: failed to write {}", path.display()))?;
+    files::replace_contents(command, path, STARTER.as_bytes())?;
 
     Ok(Some(path.to_path_buf()))
 }

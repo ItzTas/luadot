@@ -7,8 +7,8 @@ use super::constants::SECRET_MODE;
 use super::lock::Lock;
 use super::run;
 use crate::files::{
-    ConflictPolicy, FileStatus, Placement, SyncOutcome, create_parent, exists, mode_bits, refused,
-    regular_file, remove_existing, write_mode,
+    ConflictPolicy, FileStatus, Placement, SyncOutcome, exists, mode_bits, refused, regular_file,
+    replace_file, write_mode,
 };
 
 pub fn status(
@@ -56,7 +56,6 @@ pub fn place(
     dest: &Path,
 ) -> Result<SyncOutcome> {
     if !exists(command, dest)? {
-        create_parent(command, dest)?;
         write(command, placement, dest, contents)?;
         return Ok(SyncOutcome::Created);
     }
@@ -69,7 +68,6 @@ pub fn place(
         return Ok(outcome);
     }
 
-    remove_existing(command, dest)?;
     write(command, placement, dest, contents)?;
 
     Ok(SyncOutcome::Replaced)
@@ -91,9 +89,11 @@ fn holds(dest: &Path, expected: &[u8], mode: u32) -> bool {
 }
 
 fn write(command: &str, placement: Placement, dest: &Path, contents: &[u8]) -> Result<()> {
-    write_mode(command, dest, contents, secret_mode(placement.mode()))?;
+    replace_file(command, dest, |staged| {
+        write_mode(command, staged, contents, secret_mode(placement.mode()))?;
 
-    placement.own(command, dest)
+        placement.own(command, staged)
+    })
 }
 
 #[cfg(test)]

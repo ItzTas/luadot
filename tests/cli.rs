@@ -137,6 +137,40 @@ fn add_then_apply_manage_a_file_end_to_end() {
 }
 
 #[test]
+fn a_symbolic_rule_makes_add_store_the_content_and_point_the_system_copy_at_it() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    repository(&repo);
+    write(&home.join(".config/tlp/tlp.conf"), "TLP_ENABLE=1\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.rules({ { match = ".config/tlp/**", link = "symbolic" } })"#,
+    );
+    write_state(&home, &repo);
+
+    luadot_with_git(&home)
+        .args(["add", home.join(".config/tlp").to_str().unwrap()])
+        .assert()
+        .success();
+
+    let stored = repo.join(".config/tlp/tlp.conf");
+    let placed = home.join(".config/tlp/tlp.conf");
+    assert!(stored.symlink_metadata().unwrap().file_type().is_file());
+    assert_eq!(read(&stored), "TLP_ENABLE=1\n");
+    assert!(git(&repo, &["ls-files", "-s"]).starts_with("100644 "));
+    assert_eq!(std::fs::read_link(&placed).unwrap(), stored);
+
+    luadot_with_git(&home)
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "nothing to apply, every managed file is synced",
+        ));
+}
+
+#[test]
 fn add_stages_what_it_mirrors_and_rm_stages_what_it_takes_out() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -159,6 +193,69 @@ fn add_stages_what_it_mirrors_and_rm_stages_what_it_takes_out() {
 
     assert_eq!(staged(&repo), ".vimrc\n");
     assert_eq!(read(&home.join(".vimrc")), "set number\n");
+}
+
+#[test]
+fn mv_carries_both_sides_of_a_managed_file_and_stages_the_rename() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    repository(&repo);
+    write(&home.join(".vimrc"), "set number\n");
+    write_state(&home, &repo);
+
+    luadot_with_git(&home)
+        .args(["add", home.join(".vimrc").to_str().unwrap()])
+        .assert()
+        .success();
+    git(&repo, &["commit", "--quiet", "-m", "first"]);
+
+    luadot_with_git(&home)
+        .args([
+            "mv",
+            home.join(".vimrc").to_str().unwrap(),
+            home.join(".config/vim/vimrc").to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "moved      .vimrc -> .config/vim/vimrc",
+        ))
+        .stdout(predicate::str::contains("moved 1 file(s)"));
+
+    assert!(!repo.join(".vimrc").exists());
+    assert!(!home.join(".vimrc").exists());
+    assert_eq!(read(&repo.join(".config/vim/vimrc")), "set number\n");
+    assert_eq!(read(&home.join(".config/vim/vimrc")), "set number\n");
+    assert_eq!(
+        git(&repo, &["diff", "--cached", "--name-status"]),
+        "R100\t.vimrc\t.config/vim/vimrc\n"
+    );
+}
+
+#[test]
+fn a_dry_run_of_mv_leaves_both_sides_where_they_are() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".vimrc"), "set number\n");
+    write(&home.join(".vimrc"), "set number\n");
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args([
+            "mv",
+            "-n",
+            home.join(".vimrc").to_str().unwrap(),
+            home.join(".gvimrc").to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("would move 1 file(s)"));
+
+    assert!(repo.join(".vimrc").exists());
+    assert!(home.join(".vimrc").exists());
+    assert!(!repo.join(".gvimrc").exists());
 }
 
 #[test]

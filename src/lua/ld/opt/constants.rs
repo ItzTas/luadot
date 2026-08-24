@@ -92,7 +92,7 @@ pub const SIGNATURES: [Signature; 12] = [
         name: AUTOCOMMIT,
         params: &[ENABLED],
         returns: &[],
-        doc: "Whether `add` and `rm` commit what they staged. Defaults to `false`.",
+        doc: "Whether `add`, `rm` and `mv` commit what they staged. Defaults to `false`.",
     },
     Signature {
         name: AUTOPUSH,

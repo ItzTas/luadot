@@ -66,7 +66,7 @@ All the keys:
 | `owner` | `"user"` or `"user:group"` | Who owns a matching file once placed, set through `chown`. |
 | `encrypt` | `true`, `false` | Whether `add` stores the matching files encrypted. |
 | `lfs` | `true`, `false` | Whether the matching files are stored in Git LFS. Takes `match`, not `regex`, and does not go with `encrypt`. |
-| `autocommit` | `true`, `false` | Whether `add` and `rm` commit on their own once one of those files is staged. |
+| `autocommit` | `true`, `false` | Whether `add`, `rm` and `mv` commit on their own once one of those files is staged. |
 | `autopush` | `true`, `false` | Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back. |
 
 Any other key is an error.
@@ -413,8 +413,9 @@ ld.print.entry("create", "~/.bashrc", { tone = "good" })
 `ld.on` carries one call per command, taking a table. Every command that runs
 `config.lua` has one: `ld.on.add`, `ld.on.apply`, `ld.on.bootstrap`,
 `ld.on.cd`, `ld.on.class`, `ld.on.clone`, `ld.on.config`, `ld.on.diff`,
-`ld.on.edit`, `ld.on.exec`, `ld.on.git`, `ld.on.init`, `ld.on.push`,
-`ld.on.rekey`, `ld.on.restore`, `ld.on.rm`, `ld.on.setup`, `ld.on.status`,
+`ld.on.edit`, `ld.on.exec`, `ld.on.git`, `ld.on.init`, `ld.on.mv`,
+`ld.on.push`, `ld.on.rekey`, `ld.on.restore`, `ld.on.rm`, `ld.on.setup`,
+`ld.on.status`,
 `ld.on.sync`, and `ld.on.tmpl.alt` and `ld.on.tmpl.new` for the two `tmpl`
 actions. `completions`, `doc`, `man` and `meta` describe luadot itself and
 have none.
@@ -766,7 +767,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.opt.backup_age(span)` | a span like `"30d"`, in `s`, `m`, `h`, `d` or `w` | How long a backup is kept; the ones older than that are dropped. Defaults to keeping them forever. |
 | `ld.opt.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
-| `ld.opt.autocommit(enabled)` | `true`, `false` | Whether `add` and `rm` commit what they staged. Defaults to `false`. |
+| `ld.opt.autocommit(enabled)` | `true`, `false` | Whether `add`, `rm` and `mv` commit what they staged. Defaults to `false`. |
 | `ld.opt.autopush(enabled)` | `true`, `false` | Whether that commit is pushed too, committing first. Defaults to `false`. |
 | `ld.opt.lfs(enabled)` | `true`, `false` | Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
@@ -816,6 +817,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.on.exec(options)` | a table of `before` and `after` | Runs a function before and after `exec`. |
 | `ld.on.git(options)` | a table of `before` and `after` | Runs a function before and after `git`. |
 | `ld.on.init(options)` | a table of `before` and `after` | Runs a function before and after `init`. |
+| `ld.on.mv(options)` | a table of `before` and `after` | Runs a function before and after `mv`. |
 | `ld.on.push(options)` | a table of `before` and `after` | Runs a function before and after `push`. |
 | `ld.on.rekey(options)` | a table of `before` and `after` | Runs a function before and after `rekey`. |
 | `ld.on.restore(options)` | a table of `before` and `after` | Runs a function before and after `restore`. |

@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use super::State;
+use crate::files;
 use crate::utils;
 
 pub fn load() -> Result<State> {
@@ -29,13 +30,8 @@ fn load_from(path: &Path) -> Result<State> {
 }
 
 fn save_to(path: &Path, state: &State) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("state: failed to create {}", parent.display()))?;
-    }
     let contents = serde_json::to_string_pretty(state).context("state: failed to serialize")?;
-    std::fs::write(path, contents)
-        .with_context(|| format!("state: failed to write {}", path.display()))?;
+    files::replace_contents("state", path, contents.as_bytes())?;
     debug!(path = %path.display(), "saved the state");
     Ok(())
 }

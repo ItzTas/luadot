@@ -101,6 +101,7 @@ fn run_command(command: Cmd) -> Result<()> {
         Cmd::Init(args) => commands::init_cmd(args),
         Cmd::Man => commands::man_cmd(),
         Cmd::Meta(args) => commands::meta_cmd(args),
+        Cmd::Mv(args) => commands::mv_cmd(args),
         Cmd::Push(args) => commands::push_cmd(args),
         Cmd::Rekey(args) => commands::rekey_cmd(args),
         Cmd::Rm(args) => commands::rm_cmd(args),
@@ -116,6 +117,7 @@ fn run_command(command: Cmd) -> Result<()> {
 fn dry_run(command: &Cmd) -> bool {
     match command {
         Cmd::Apply(args) => args.dry_run,
+        Cmd::Mv(args) => args.dry_run,
         Cmd::Rekey(args) => args.dry_run,
         Cmd::Restore(args) => args.dry_run,
         Cmd::Rm(args) => args.dry_run,
@@ -138,6 +140,7 @@ fn customized(command: &Cmd) -> Option<Command> {
         Cmd::Exec(_) => Some(Command::Exec),
         Cmd::Git(_) => Some(Command::Git),
         Cmd::Init(_) => Some(Command::Init),
+        Cmd::Mv(_) => Some(Command::Mv),
         Cmd::Push(_) => Some(Command::Push),
         Cmd::Rekey(_) => Some(Command::Rekey),
         Cmd::Restore(_) => Some(Command::Restore),

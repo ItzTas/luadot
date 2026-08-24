@@ -33,11 +33,12 @@ pub const RUN: &str = "run";
 
 pub const TASK_KEYS: [&str; 2] = [ABOUT, RUN];
 
-pub const BUILTINS: [&str; 26] = [
+pub const BUILTINS: [&str; 27] = [
     "init",
     "clone",
     "add",
     "rm",
+    "mv",
     "status",
     "diff",
     "apply",
@@ -213,7 +214,7 @@ pub const RULE_FIELDS: [Field; 12] = [
     Field {
         name: AUTOCOMMIT,
         kind: Kind::Optional(&Kind::Boolean),
-        doc: "Whether `add` and `rm` commit on their own once one of those files is staged.",
+        doc: "Whether `add`, `rm` and `mv` commit on their own once one of those files is staged.",
     },
     Field {
         name: AUTOPUSH,

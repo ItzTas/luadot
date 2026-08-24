@@ -474,30 +474,11 @@ fn restore(source: &Path, dest: &Path) -> Result<()> {
 }
 
 fn prune_parents(repo: &Path, file: &Path) -> Result<()> {
-    let mut current = file.parent();
-    while let Some(dir) = current.filter(|dir| *dir != repo && dir.starts_with(repo)) {
-        if !is_empty(dir)? {
-            return Ok(());
-        }
-        std::fs::remove_dir(dir)
-            .with_context(|| format!("rm: failed to remove {}", dir.display()))?;
-        current = dir.parent();
-    }
-    Ok(())
-}
-
-fn is_empty(dir: &Path) -> Result<bool> {
-    let mut entries =
-        std::fs::read_dir(dir).with_context(|| format!("rm: failed to read {}", dir.display()))?;
-    Ok(entries.next().is_none())
+    files::prune_parents("rm", repo, file)
 }
 
 fn metadata(path: &Path) -> Result<Option<Metadata>> {
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) => Ok(Some(meta)),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(err).with_context(|| format!("rm: failed to inspect {}", path.display())),
-    }
+    files::metadata("rm", path)
 }
 
 fn points_at(link: &Path, target: &Path) -> Result<bool> {

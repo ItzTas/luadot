@@ -6,6 +6,7 @@ use tracing::debug;
 use super::block::stitched;
 use super::constants::{MARKER_END, MARKER_START, RULES_ATTRIBUTES, TRACKED, UNTRACKED};
 use super::rules;
+use crate::files;
 
 pub fn path(command: &str, repo: &Path) -> Result<PathBuf> {
     Ok(rules::dir(command, repo)?.join(RULES_ATTRIBUTES))
@@ -34,12 +35,7 @@ pub fn sync(command: &str, repo: &Path, patterns: &[(String, bool)]) -> Result<b
         return Ok(true);
     }
 
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("{command}: failed to create {}", parent.display()))?;
-    }
-    std::fs::write(&path, &wanted)
-        .with_context(|| format!("{command}: failed to write {}", path.display()))?;
+    files::replace_contents(command, &path, wanted.as_bytes())?;
 
     Ok(true)
 }
