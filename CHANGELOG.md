@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.2.1](https://github.com/ItzTas/luadot/compare/286da8c0c67f00dde4b27a070a24f8773d0d4229..v0.2.1) - 2026-08-25
+#### Bug Fixes
+- (**changelog**) put back the releases the truncation dropped - ([64a36a5](https://github.com/ItzTas/luadot/commit/64a36a55bfcbb56100c709aaf701e67c7627b303)) - luadot
+- (**changelog**) keep the releases below a partial render - ([286da8c](https://github.com/ItzTas/luadot/commit/286da8c0c67f00dde4b27a070a24f8773d0d4229)) - luadot
+
+- - -
+
 ## [v0.2.0](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.13..v0.2.0) - 2026-08-25
 #### Miscellaneous Chores
 - bring main up to nightly - ([d8d81b2](https://github.com/ItzTas/luadot/commit/d8d81b2a35ef1c0bec37899953885639bad20445)) - luadot
