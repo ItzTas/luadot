@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.0-nightly.13](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.12..v0.1.0-nightly.13) - 2026-08-25
+#### Miscellaneous Chores
+- remove the file a test commit left in the repository - ([99736d2](https://github.com/ItzTas/luadot/commit/99736d2671bcea423e39d0412f1e3df785df88fa)) - luadot
+
+- - -
+
 ## [v0.1.0-nightly.12](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.11..v0.1.0-nightly.12) - 2026-08-24
 #### Features
 - (**cli**) move a managed file with luadot mv - ([34a6a53](https://github.com/ItzTas/luadot/commit/34a6a530705bcc61aa5c5374f3cf8a83ae44013e)) - Tales
@@ -13,6 +19,8 @@ All notable changes to this project will be documented in this file. See [conven
 - (**git**) run the panic-hook test in its own process - ([694c8c2](https://github.com/ItzTas/luadot/commit/694c8c256147600c66b752ab3beb6d39df7474a6)) - Tales
 #### Continuous Integration
 - publish the release assets to github - ([9dd58f0](https://github.com/ItzTas/luadot/commit/9dd58f0672229e05d9754e2cf3af606fd77912e3)) - Tales
+#### Miscellaneous Chores
+- (**version**) v0.1.0-nightly.12 [skip ci] - ([a84cf1e](https://github.com/ItzTas/luadot/commit/a84cf1ebbbae0e5070eb820ae9705237977b4586)) - Tales Sabini
 
 - - -
 
