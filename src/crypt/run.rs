@@ -1,11 +1,13 @@
+use std::fs::Permissions;
 use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
 
 use anyhow::{Context, Result, bail};
 
 use super::backend::Backend;
-use super::constants::{GPG_FLAGS, GPG_PASSPHRASE_FLAGS};
+use super::constants::{GPG_FLAGS, GPG_PASSPHRASE_FLAGS, SECRET_MODE};
 use super::lock::Lock;
 use super::plugin;
 
@@ -71,8 +73,14 @@ pub fn decrypt_into(
     run(
         command,
         decrypt_command(backend, lock, identity, source, Some(dest)),
-    )
-    .map(|_| ())
+    )?;
+
+    private(command, dest)
+}
+
+fn private(command: &str, dest: &Path) -> Result<()> {
+    std::fs::set_permissions(dest, Permissions::from_mode(SECRET_MODE))
+        .with_context(|| format!("{command}: failed to set the mode of {}", dest.display()))
 }
 
 pub fn require_recipients(command: &str, lock: Lock, recipients: &[String]) -> Result<()> {
@@ -276,6 +284,21 @@ mod tests {
                 "/home/u/key.txt",
                 "/repo/.netrc.age",
             ]
+        );
+    }
+
+    #[test]
+    fn the_plaintext_is_left_readable_by_no_one_else() {
+        let dir = tempfile::tempdir().unwrap();
+        let plain = dir.path().join("plaintext");
+        std::fs::write(&plain, "secret").unwrap();
+        std::fs::set_permissions(&plain, Permissions::from_mode(0o644)).unwrap();
+
+        private("edit", &plain).unwrap();
+
+        assert_eq!(
+            std::fs::metadata(&plain).unwrap().permissions().mode() & 0o7777,
+            SECRET_MODE
         );
     }
 

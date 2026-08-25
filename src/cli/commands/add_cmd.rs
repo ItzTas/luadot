@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
+use crate::backup::Backup;
 use crate::crypt;
 use crate::files::{self, ConflictPolicy, LinkMode, Placement, SyncOutcome};
 use crate::git;
@@ -27,8 +28,7 @@ pub struct AddArgs {
 pub struct TakeArgs {
     #[arg(
         value_name = "PATH",
-        required = true,
-        help = "The managed files or directories to store as the system holds them"
+        help = "The managed files or directories to store as the system holds them; with none, everything the repository holds"
     )]
     pub paths: Vec<String>,
 }
@@ -72,10 +72,12 @@ fn run(mode: Mode, paths: &[String]) -> Result<()> {
     let (pairs, wholes) = plan(mode, &home, &repo, paths, &config)?;
     let lock = config.crypt_lock();
     require_plugins(mode, &config, lock, &repo, &pairs)?;
+    let mut backup = opened(mode, paths, &config)?;
 
     let mut stored = Vec::with_capacity(pairs.len() + wholes.len());
     let mut replaced = 0;
     for (source, dest) in pairs {
+        save(command, &mut backup, &dest)?;
         let outcome = link_into_repo(mode, &config, lock, &repo, &source, &dest)?;
         if outcome == SyncOutcome::Replaced {
             replaced += 1;
@@ -84,6 +86,7 @@ fn run(mode: Mode, paths: &[String]) -> Result<()> {
         stored.push(dest);
     }
     for whole in wholes {
+        save(command, &mut backup, &whole.dest)?;
         let outcome = store_whole(mode, &config, &repo, &whole)?;
         if outcome == SyncOutcome::Replaced {
             replaced += 1;
@@ -94,10 +97,32 @@ fn run(mode: Mode, paths: &[String]) -> Result<()> {
 
     track_in_lfs(mode, &config, &repo)?;
     git::stage(command, &repo, &stored)?;
-    report(mode, &stored, replaced, paths.is_empty());
+    report(mode, &stored, replaced, paths);
+    if let Some(backup) = backup.as_ref() {
+        backup.finish()?;
+    }
 
     let automatic = utils::automatic(&config, &repo, &stored);
     git::auto(command, &repo, automatic.commits, automatic.pushes)
+}
+
+fn opened(mode: Mode, sources: &[String], config: &Config) -> Result<Option<Backup>> {
+    if mode != Mode::Replace || !sources.is_empty() || !config.backup() {
+        return Ok(None);
+    }
+
+    Backup::open(TAKE_COMMAND, config.backup_dir(), config.retention()).map(Some)
+}
+
+fn save(command: &str, backup: &mut Option<Backup>, dest: &Path) -> Result<()> {
+    let Some(backup) = backup.as_mut() else {
+        return Ok(());
+    };
+    if !files::exists(command, dest)? {
+        return Ok(());
+    }
+
+    backup.save(dest)
 }
 
 fn announce(outcome: SyncOutcome, path: impl Display) {
@@ -108,16 +133,9 @@ fn announce(outcome: SyncOutcome, path: impl Display) {
     output::entry(Tone::Good, ADD_LABEL, path);
 }
 
-fn report(mode: Mode, stored: &[PathBuf], replaced: usize, automatic: bool) {
+fn report(mode: Mode, stored: &[PathBuf], replaced: usize, sources: &[String]) {
     if stored.is_empty() {
-        if automatic {
-            output::note("nothing to add, the `auto` rules cover nothing new");
-            return;
-        }
-        output::note(format!(
-            "nothing to {}, the rules leave every path out",
-            mode.command()
-        ));
+        output::note(nothing(mode, sources));
         return;
     }
 
@@ -131,6 +149,20 @@ fn report(mode: Mode, stored: &[PathBuf], replaced: usize, automatic: bool) {
         "took {total} file(s) ({} added, {replaced} replaced)",
         total - replaced
     ));
+}
+
+fn nothing(mode: Mode, sources: &[String]) -> String {
+    if !sources.is_empty() {
+        return format!(
+            "nothing to {}, the rules leave every path out",
+            mode.command()
+        );
+    }
+    if mode == Mode::Add {
+        return "nothing to add, the `auto` rules cover nothing new".to_string();
+    }
+
+    "nothing to take, the repository holds nothing the system has".to_string()
 }
 
 fn track_in_lfs(mode: Mode, config: &Config, repo: &Path) -> Result<()> {
@@ -187,61 +219,79 @@ fn plan(
     sources: &[String],
     config: &Config,
 ) -> Result<(Vec<Pair>, Vec<Whole>)> {
-    let mut excludes = git::Excludes::open(mode.command(), repo)?;
+    let command = mode.command();
+    let mut excludes = git::Excludes::open(command, repo)?;
     let mut wholes: Vec<Whole> = Vec::new();
 
-    let pairs = match mode == Mode::Add && sources.is_empty() {
-        true => adopt(mode, home, repo, config, &mut excludes, &mut wholes)?,
-        false => named(
-            mode,
-            home,
-            repo,
-            sources,
-            config,
-            &mut excludes,
-            &mut wholes,
-        )?,
+    let found = match sources.is_empty() {
+        true => sweep(mode, home, repo, config, &mut excludes)?,
+        false => named(command, sources)?,
     };
+    let pairs = gather(mode, home, repo, found, config, &mut excludes, &mut wholes)?;
     check_conflicts(mode, &pairs, &wholes)?;
 
     Ok((pairs, wholes))
 }
 
-fn named(
+fn named(command: &str, sources: &[String]) -> Result<Vec<PathBuf>> {
+    sources
+        .iter()
+        .map(|source| {
+            std::path::absolute(source).with_context(|| format!("{command}: invalid path {source}"))
+        })
+        .collect()
+}
+
+fn sweep(
     mode: Mode,
     home: &Path,
     repo: &Path,
-    sources: &[String],
+    config: &Config,
+    excludes: &mut git::Excludes,
+) -> Result<Vec<PathBuf>> {
+    if mode == Mode::Add {
+        return adopted(mode.command(), home, repo, config, excludes);
+    }
+
+    held(mode.command(), home, repo, config)
+}
+
+fn gather(
+    mode: Mode,
+    home: &Path,
+    repo: &Path,
+    sources: Vec<PathBuf>,
     config: &Config,
     excludes: &mut git::Excludes,
     wholes: &mut Vec<Whole>,
 ) -> Result<Vec<Pair>> {
-    let command = mode.command();
-
     let mut pairs: Vec<Pair> = Vec::new();
     for source in sources {
-        let source = std::path::absolute(source)
-            .with_context(|| format!("{command}: invalid path {source}"))?;
         pairs.extend(collect(mode, home, repo, source, config, excludes, wholes)?);
     }
 
     Ok(pairs)
 }
 
-fn adopt(
-    mode: Mode,
-    home: &Path,
-    repo: &Path,
-    config: &Config,
-    excludes: &mut git::Excludes,
-    wholes: &mut Vec<Whole>,
-) -> Result<Vec<Pair>> {
-    let mut pairs: Vec<Pair> = Vec::new();
-    for source in adopted(mode.command(), home, repo, config, excludes)? {
-        pairs.extend(collect(mode, home, repo, source, config, excludes, wholes)?);
+fn held(command: &str, home: &Path, repo: &Path, config: &Config) -> Result<Vec<PathBuf>> {
+    let files = utils::managed_files(command, repo, repo, |relative| {
+        config.is_ignored(&crypt::logical(relative))
+    })?;
+
+    let mut sources = Vec::new();
+    for one in utils::units(command, config, repo, files)? {
+        let relative = match &one {
+            utils::Managed::Unit(unit) => utils::relative(repo, unit.root()).to_path_buf(),
+            utils::Managed::File(file) => crypt::logical(utils::relative(repo, file)),
+        };
+
+        let source = home.join(relative);
+        if files::exists(command, &source)? {
+            sources.push(source);
+        }
     }
 
-    Ok(pairs)
+    Ok(sources)
 }
 
 fn adopted(
@@ -1082,6 +1132,59 @@ mod tests {
         .unwrap();
 
         assert_eq!(pairs, vec![(managed, repo.join(".config/nvim/init.lua"))]);
+    }
+
+    #[test]
+    fn take_with_no_path_reaches_what_the_repository_holds() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(repo.join(".config/nvim")).unwrap();
+        std::fs::write(home.join(".bashrc"), "system").unwrap();
+        std::fs::write(home.join(".netrc"), "machine example").unwrap();
+        std::fs::write(repo.join(".bashrc"), "repository").unwrap();
+        std::fs::write(repo.join(".netrc.age"), "cipher").unwrap();
+        std::fs::write(repo.join(".config/nvim/init.lua"), "stored").unwrap();
+
+        let config = lua::from_source(r#"ld.rules({ match = ".netrc", encrypt = true })"#).unwrap();
+        let (pairs, wholes) = plan(Mode::Replace, &home, &repo, &[], &config).unwrap();
+
+        assert_eq!(
+            pairs,
+            vec![
+                (home.join(".bashrc"), repo.join(".bashrc")),
+                (home.join(".netrc"), repo.join(".netrc.age")),
+            ]
+        );
+        assert_eq!(wholes, vec![]);
+    }
+
+    #[test]
+    fn take_with_no_path_reaches_a_whole_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let nvim = home.join(".config/nvim");
+        std::fs::create_dir_all(&nvim).unwrap();
+        std::fs::create_dir_all(repo.join(".config/nvim")).unwrap();
+        std::fs::write(nvim.join("init.lua"), "system").unwrap();
+        std::fs::write(repo.join(".config/nvim/init.lua"), "stored").unwrap();
+
+        let config = lua::from_source(
+            r#"ld.rules({ match = ".config/nvim", whole = true, link = "symbolic" })"#,
+        )
+        .unwrap();
+        let (pairs, wholes) = plan(Mode::Replace, &home, &repo, &[], &config).unwrap();
+
+        assert_eq!(pairs, vec![]);
+        assert_eq!(
+            wholes,
+            vec![Whole {
+                source: nvim,
+                dest: repo.join(".config/nvim"),
+            }]
+        );
     }
 
     #[test]

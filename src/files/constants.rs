@@ -12,6 +12,8 @@ pub const STAGED_ATTEMPTS: u32 = 64;
 
 pub const CHOWN: &str = "chown";
 
+pub const CHOWN_NO_FOLLOW: &str = "-h";
+
 pub const MIRROR_PREFIX: &str = "luadot-diff";
 
 pub const MIRROR_MODE: u32 = 0o700;

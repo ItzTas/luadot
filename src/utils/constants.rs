@@ -1,5 +1,9 @@
 pub const APP_DIR: &str = "luadot";
 
+pub const DEFAULT_CONFIG_DIR: &str = ".config";
+
+pub const DEFAULT_DATA_DIR: &str = ".local/share";
+
 pub const DEFAULT_EDITOR: &str = "vi";
 
 pub const DEFAULT_REPO_DIR: &str = "repo";

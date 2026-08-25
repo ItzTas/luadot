@@ -309,6 +309,37 @@ fn take_stores_system_copy_and_relinks() {
 }
 
 #[test]
+fn take_with_no_path_stores_everything_and_backs_it_up() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    repository(&repo);
+    write(&repo.join(".vimrc"), "set number\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&home.join(".vimrc"), "set paste\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.opt.backup_dir("~/saved")"#,
+    );
+    write_state(&home, &repo);
+
+    luadot_with_git(&home)
+        .arg("take")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "took 1 file(s) (0 added, 1 replaced)",
+        ));
+
+    assert_eq!(read(&repo.join(".vimrc")), "set paste\n");
+    assert_eq!(read(&repo.join(".bashrc")), "managed\n");
+    assert_eq!(staged(&repo), ".vimrc\n");
+
+    let saved = only_dir(&home.join("saved"));
+    assert_eq!(read(&backed(&saved, &repo.join(".vimrc"))), "set number\n");
+}
+
+#[test]
 fn add_and_take_point_at_each_other() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -1421,6 +1452,40 @@ fn edit_leaves_no_plaintext() {
         read(&home.join(".netrc")),
         "machine example password hunter2\npassword hunter3\n"
     );
+}
+
+#[test]
+fn edit_hands_the_editor_a_private_plaintext() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let recorded = root.path().join("mode");
+    std::fs::create_dir_all(&repo).unwrap();
+    let bin = fake_age(root.path());
+    executable(
+        &bin.join("mode-editor"),
+        &format!(
+            "#!/bin/sh\nstat -c '%a' \"$1\" > {} 2>/dev/null || stat -f '%Lp' \"$1\" > {}\nprintf 'x\\n' >> \"$1\"\n",
+            recorded.display(),
+            recorded.display()
+        ),
+    );
+    crypt_config(&home);
+    write(&home.join(".netrc"), "machine example password hunter2\n");
+    write_state(&home, &repo);
+
+    luadot_with_tools(&home, &bin)
+        .args(["add", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    luadot_with_tools(&home, &bin)
+        .env("EDITOR", "mode-editor")
+        .args(["edit", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    assert_eq!(read(&recorded).trim(), "600");
 }
 
 #[test]

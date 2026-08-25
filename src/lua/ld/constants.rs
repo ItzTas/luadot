@@ -16,6 +16,8 @@ pub const ON_CHANGE: &str = "on_change";
 
 pub const MODE: &str = "mode";
 
+pub const SPECIAL_BITS: [(u32, &str); 2] = [(0o4000, "setuid"), (0o2000, "setgid")];
+
 pub const LINK_MODES: [(&str, LinkMode); 3] = [
     ("hard", LinkMode::Hard),
     ("symbolic", LinkMode::Symbolic),

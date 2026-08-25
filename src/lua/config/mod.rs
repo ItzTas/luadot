@@ -8,6 +8,7 @@ mod report;
 mod starter;
 mod status;
 mod task;
+mod trust;
 mod types;
 
 pub use around::{Around, Chain, Moment};

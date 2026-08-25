@@ -4,6 +4,8 @@ use super::diff::DiffState;
 
 pub const CONFIG_FILE: &str = "config.lua";
 
+pub const SHARED_WRITE: u32 = 0o022;
+
 pub const GIT_DIR: &str = ".git";
 
 pub const CLASS_QUESTION: &str = "define the class";

@@ -3,7 +3,9 @@
 `~/.config/luadot/config.lua` (or `$XDG_CONFIG_HOME/luadot/config.lua`) runs
 before every command and configures luadot through the global `ld`. Without
 the file, the defaults apply. `luadot init` and `luadot config edit` write a
-commented starter there when it is missing.
+commented starter there when it is missing. It is full Lua running before
+everything else, so luadot refuses a `config.lua` that group or others can
+write, and one owned by anybody but you.
 
 ```lua
 ld.opt.link("hard")
@@ -233,8 +235,12 @@ the machine has no answer yet and writes the answer to the state, so
 repository is set, and `dir`, the directory of the script that is running.
 `data` is `~/.local/share/luadot` (or `$XDG_DATA_HOME/luadot`), where the
 state, the backups and the default repository live; luadot owns no other
-subdirectory there, so a plugin manager can pick its own. Inside `config.lua`
-itself, `ld.path.repo` is the repository known before the file ran, so it does
+subdirectory there, so a plugin manager can pick its own. `$XDG_CONFIG_HOME`
+and `$XDG_DATA_HOME` are read while they point inside the home; a value
+outside it falls back to `~/.config` and `~/.local/share`, so the three paths
+always describe the same home. The data directory is
+`0700` and the `state.json` in it `0600`, whatever your umask is. Inside
+`config.lua` itself, `ld.path.repo` is the repository known before the file ran, so it does
 not answer for an `ld.opt.repo_dir` set in that same file; every script that
 runs afterwards gets the resolved one.
 
