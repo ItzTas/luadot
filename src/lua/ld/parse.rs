@@ -2,7 +2,9 @@ use glob::Pattern;
 use mlua::{Table, Value};
 use regex::Regex;
 
-use super::constants::{API, CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX, TRACK_KINDS};
+use super::constants::{
+    API, CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX, SPECIAL_BITS, TRACK_KINDS,
+};
 use crate::files::{ConflictPolicy, LinkMode};
 use crate::lua::{Matcher, Track};
 
@@ -88,6 +90,16 @@ pub fn mode_bits(raw: &str, what: &str) -> mlua::Result<u32> {
     Ok(raw
         .bytes()
         .fold(0, |bits, digit| bits * 8 + u32::from(digit - b'0')))
+}
+
+pub fn special_bits(bits: u32) -> Option<String> {
+    let names: Vec<&str> = SPECIAL_BITS
+        .iter()
+        .filter(|(bit, _)| bits & bit != 0)
+        .map(|(_, name)| *name)
+        .collect();
+
+    (!names.is_empty()).then(|| names.join(" and "))
 }
 
 pub fn owner_name(raw: &str, what: &str) -> mlua::Result<String> {
@@ -179,6 +191,15 @@ mod tests {
             assert!(err.contains("three or four octal digits"), "{raw}");
             assert!(err.contains(raw), "{raw}");
         }
+    }
+
+    #[test]
+    fn special_bits_name_what_the_mode_asks_for() {
+        assert_eq!(special_bits(0o644), None);
+        assert_eq!(special_bits(0o1777), None);
+        assert_eq!(special_bits(0o4755).as_deref(), Some("setuid"));
+        assert_eq!(special_bits(0o2755).as_deref(), Some("setgid"));
+        assert_eq!(special_bits(0o6755).as_deref(), Some("setuid and setgid"));
     }
 
     #[test]

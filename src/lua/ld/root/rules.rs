@@ -2,11 +2,12 @@ use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::{API, CONFLICT, LINK, MATCH, MODE, ON_CHANGE};
 use super::super::parse::{
-    conflict_policy, external, link_mode, matcher, mode_bits, owner_name, track,
+    conflict_policy, external, link_mode, matcher, mode_bits, owner_name, special_bits, track,
 };
 use super::constants::{AUTOCOMMIT, AUTOPUSH, ENCRYPT, LFS, OWNER, RULE_KEYS, TRACK, WHOLE};
 use crate::files::LinkMode;
 use crate::lua::{Config, Matcher, Rule, Track};
+use crate::output;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, list: Table| {
@@ -61,7 +62,7 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
         Rule::new(pattern, link_mode(link)?, conflict_policy(conflict)?)
             .with_on_change(on_change)
             .with_track(track)
-            .with_mode(mode.map(|raw| mode_bits(&raw, "a rule")).transpose()?)
+            .with_mode(placed_mode(mode)?)
             .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?)
             .with_encrypt(encrypt)
             .with_lfs(lfs)
@@ -69,6 +70,21 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
             .with_autopush(autopush)
             .with_whole(whole),
     )
+}
+
+fn placed_mode(raw: Option<String>) -> mlua::Result<Option<u32>> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+
+    let bits = mode_bits(&raw, "a rule")?;
+    if let Some(names) = special_bits(bits) {
+        output::warn(format!(
+            "`{API}.rules`: `{MODE}` {raw} asks for {names} on every file it places"
+        ));
+    }
+
+    Ok(Some(bits))
 }
 
 fn placed_whole(
