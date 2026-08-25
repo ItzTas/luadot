@@ -8,14 +8,14 @@ use super::super::parse::external;
 use super::constants::{NAMESPACE, SHELL, SHELL_ARG};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, (_, line): (Table, Option<String>)| {
+    lua.create_function(|_, (_, line): (Table, Option<String>)| {
         let line = line
             .ok_or_else(|| external(format!("`{API}.{NAMESPACE}` takes a command line to run")))?;
 
         let mut command = Command::new(SHELL);
         command.arg(SHELL_ARG).arg(&line);
 
-        run(lua, command, NAMESPACE, &line)
+        run(command, NAMESPACE, &line)
     })
 }
 

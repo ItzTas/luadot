@@ -12,6 +12,12 @@
 ---| "skip"
 ---| "error"
 
+---How luadot picks a file up: `auto` adds it on its own, `manual` waits for `luadot add`, `never` leaves it alone.
+---@alias ld.Track
+---| "auto"
+---| "manual"
+---| "never"
+
 ---The tool that encrypts and decrypts managed files.
 ---@alias ld.Backend
 ---| "age"
@@ -90,13 +96,14 @@
 ---@field link? ld.LinkMode How the matching files are placed.
 ---@field conflict? ld.Conflict Answer when the system copy differs.
 ---@field on_change? string A command line that runs after `apply` or `tmpl alt` created or replaced one of those files.
----@field ignore? boolean Whether the matching files are left unmanaged.
+---@field track? ld.Track How luadot picks the matching files up: `"auto"` adds them on its own when `luadot add` runs with no path, `"manual"` waits for an explicit `luadot add`, `"never"` leaves them unmanaged. `"auto"` needs a `match` pattern opening on a literal name, since that is where luadot looks.
 ---@field mode? string Three or four octal digits, the permission bits a matching file is placed with, and put back when they drift. An encrypted file carries `600` without it.
 ---@field owner? string `"user"` or `"user:group"`, who owns a matching file once placed, set through `chown`.
 ---@field encrypt? boolean Whether `add` stores the matching files encrypted.
 ---@field lfs? boolean Whether the matching files are stored in Git LFS. Needs `match`, since git attributes have no regular expressions, and does not go with `encrypt`. luadot writes the patterns into the repository's `.local/share/luadot/git/attributes`, between the `# luadot:lfs` markers, and copies that file into `.git/info/attributes`.
 ---@field autocommit? boolean Whether `add`, `rm` and `mv` commit on their own once one of those files is staged.
 ---@field autopush? boolean Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back.
+---@field whole? boolean Whether a matching directory is placed whole, as one symlink or one copy of the tree, instead of file by file. Takes `link` `"symbolic"` or `"copy"`, and every file inside is stored: nothing under the directory may be excluded, encrypted, or a template.
 
 ---A command of the configuration's own, as `ld.task` takes it.
 ---@class ld.Task
@@ -167,7 +174,7 @@
 
 ---A drifted file, as `diff` hands it to `entry` and `render`.
 ---@class ld.DiffFile
----@field path string The path as the repository writes it: `.bashrc`.
+---@field path string The path as you use it: `.bashrc`, and `.netrc` for a secret the repository keeps as `.netrc.age`.
 ---@field system string The absolute path of the system copy.
 ---@field side ld.Side `"repository"` for a managed file, `"generated"` for one a template produced.
 ---@field state ld.DiffState Where the file stands.
@@ -176,7 +183,7 @@
 
 ---An inspected file, synced or not, as `status` hands it to `entry` and `render`.
 ---@class ld.StatusFile
----@field path string The path as the repository writes it: `.bashrc`.
+---@field path string The path as you use it: `.bashrc`, and `.netrc` for a secret the repository keeps as `.netrc.age`.
 ---@field system string The absolute path of the system copy.
 ---@field side ld.Side `"repository"` for a managed file, `"generated"` for one a template produced.
 ---@field state ld.StatusState Where the file stands.
@@ -258,7 +265,7 @@
 ---@field re table LPeg's `re` module, the table `require("re")` returns, loaded when first reached.
 ld = {}
 
----Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.
+---Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, says how they are `track`ed, marks them as encrypted, stores them in Git LFS, commits and pushes them on their own, and places matching directories `whole`. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.
 ---@param rules ld.Rule|ld.Rule[]
 function ld.rules(rules) end
 
@@ -507,6 +514,10 @@ function ld.on.status(options) end
 ---Runs a function before and after `sync`.
 ---@param options ld.Around
 function ld.on.sync(options) end
+
+---Runs a function before and after `take`.
+---@param options ld.Around
+function ld.on.take(options) end
 
 ---The two `tmpl` actions, customized apart.
 ---@class ld.on.tmpl

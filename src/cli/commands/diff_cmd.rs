@@ -4,6 +4,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
+use crate::crypt;
 use crate::files::{self, Entry, FileStatus, Mirror, Side, Tracked};
 use crate::lua::{
     self, Config, Content, Diff, DiffCounts, DiffFile, DiffState, Output, Shared, Tool,
@@ -56,9 +57,11 @@ pub fn diff_cmd(args: DiffArgs) -> Result<()> {
     let root = utils::managed_root("diff", &home, &repo, args.path.as_deref())?;
 
     let (files, templates): (Vec<Entry>, Vec<Entry>) =
-        utils::managed_entries("diff", &repo, &root, |relative| config.is_ignored(relative))?
-            .into_iter()
-            .partition(|entry| matches!(entry, Entry::File(_)));
+        utils::managed_entries("diff", &repo, &root, |relative| {
+            config.is_ignored(&crypt::logical(relative))
+        })?
+        .into_iter()
+        .partition(|entry| matches!(entry, Entry::File(_)));
 
     if files.is_empty() && templates.is_empty() {
         output::note("nothing is managed");
@@ -95,25 +98,81 @@ pub fn diff_cmd(args: DiffArgs) -> Result<()> {
 }
 
 fn managed_items(config: &Config, home: &Path, repo: &Path, files: &[Entry]) -> Result<Vec<Item>> {
+    let lock = config.crypt_lock();
+    let mut identity = config.crypt_identity(home);
+
     let mut drifted = Vec::new();
     for file in files.iter().map(Entry::path) {
         let relative = utils::relative(repo, file);
-        let dest = utils::system_path(home, repo, file)?;
-        let status = files::file_status(config.placement(relative), file, &dest)
-            .with_context(|| format!("diff: failed to inspect {}", dest.display()))?;
+        let found = match crypt::split(relative) {
+            Some((stripped, backend)) => {
+                let dest = utils::system_path(home, repo, &repo.join(&stripped))?;
+                secret_item(config, file, stripped, dest, backend, lock, &mut identity)?
+            }
+            None => {
+                let dest = utils::system_path(home, repo, file)?;
+                plain_item(config, file, relative, dest)?
+            }
+        };
 
-        if !shows(status) {
-            continue;
-        }
-        drifted.push(Item {
-            relative: relative.to_path_buf(),
-            dest,
-            contents: files::read_contents("diff", file)?,
-            mode: Some(files::effective_mode("diff", file, config.mode(relative))?),
-        });
+        drifted.extend(found);
     }
 
     Ok(drifted)
+}
+
+fn plain_item(
+    config: &Config,
+    file: &Path,
+    relative: &Path,
+    dest: PathBuf,
+) -> Result<Option<Item>> {
+    let status = files::file_status(config.placement(relative), file, &dest)
+        .with_context(|| format!("diff: failed to inspect {}", dest.display()))?;
+
+    if !shows(status) {
+        return Ok(None);
+    }
+
+    Ok(Some(Item {
+        relative: relative.to_path_buf(),
+        dest,
+        contents: files::read_contents("diff", file)?,
+        mode: Some(files::effective_mode("diff", file, config.mode(relative))?),
+    }))
+}
+
+fn secret_item(
+    config: &Config,
+    file: &Path,
+    stripped: PathBuf,
+    dest: PathBuf,
+    backend: crypt::Backend,
+    lock: crypt::Lock,
+    identity: &mut crypt::Identity,
+) -> Result<Option<Item>> {
+    let Ok(contents) = crypt::decrypt("diff", backend, lock, identity.path("diff")?, file) else {
+        output::warn(format!(
+            "{} could not be decrypted, leaving it out",
+            stripped.display()
+        ));
+        return Ok(None);
+    };
+
+    let mode = config.mode(&stripped).unwrap_or(crypt::SECRET_MODE);
+    let status = crypt::plain_status("diff", &contents, &dest, Some(mode))
+        .with_context(|| format!("diff: failed to inspect {}", dest.display()))?;
+
+    if !shows(status) {
+        return Ok(None);
+    }
+
+    Ok(Some(Item {
+        relative: stripped,
+        dest,
+        contents,
+        mode: Some(mode),
+    }))
 }
 
 fn resolve(
@@ -396,7 +455,7 @@ mod tests {
     }
 
     #[test]
-    fn git_is_asked_for_the_diff_it_always_prints() {
+    fn git_is_asked_for_the_diff() {
         let command = build_command(
             Path::new("/tmp/luadot-diff-1-0/tree"),
             DIFF_PROGRAM,
@@ -412,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn the_repository_side_is_staged_and_the_system_side_is_what_the_tree_holds() {
+    fn sides_come_from_index_and_tree() {
         let mirror = Mirror::open("diff").unwrap();
         let files = [
             DiffFile::new(
@@ -451,7 +510,7 @@ mod tests {
     }
 
     #[test]
-    fn a_tool_of_its_own_replaces_git_and_keeps_the_two_sides_last() {
+    fn a_custom_tool_replaces_git() {
         let tool = Tool::new("difft".to_string(), vec!["--color".to_string()]);
         let diff = Diff::default()
             .with_tool(Some(tool.clone()))
@@ -471,7 +530,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_content_carries_the_mode_the_template_declares() {
+    fn generated_content_carries_its_mode() {
         let dest = PathBuf::from("/home/u/.netrc");
         let output = Output::new(
             dest.clone(),

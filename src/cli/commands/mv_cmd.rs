@@ -7,6 +7,7 @@ use clap::Args;
 use crate::crypt;
 use crate::files::{self, Entry, LinkMode};
 use crate::git;
+use crate::lua::Shared;
 use crate::output::{self, Tone};
 use crate::utils::{self, Workspace};
 
@@ -59,6 +60,7 @@ pub fn mv_cmd(args: MvArgs) -> Result<()> {
         output::note("nothing to move");
         return Ok(());
     }
+    check_wholes(&config, &repo, &moves)?;
     if args.dry_run {
         return foresee(&repo, &moves);
     }
@@ -102,6 +104,24 @@ fn shown(repo: &Path, one: &Move) -> String {
         utils::relative(repo, one.entry.path()).display(),
         utils::relative(repo, &one.dest).display()
     )
+}
+
+fn check_wholes(shared: &Shared, repo: &Path, moves: &[Move]) -> Result<()> {
+    let config = utils::configured("mv", shared)?;
+    for one in moves {
+        for path in [one.entry.path(), one.dest.as_path()] {
+            let logical = crypt::logical(utils::relative(repo, path));
+            if let Some(root) = config.unit_root(&logical) {
+                bail!(
+                    "mv: {} is inside {}, which is placed whole; adjust the rule before moving it",
+                    utils::relative(repo, path).display(),
+                    root.display()
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn plan(home: &Path, repo: &Path, sources: &[String], dest: &str) -> Result<Vec<Move>> {
@@ -335,7 +355,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rename_keeps_the_form_the_repository_stores_the_secret_in() {
+    fn a_rename_keeps_the_secret_form() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -355,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_hands_every_file_below_it_the_same_move() {
+    fn a_directory_moves_every_file_below() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -381,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn several_paths_need_a_directory_to_land_in() {
+    fn several_paths_need_a_directory() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -405,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn a_destination_the_repository_already_holds_is_refused() {
+    fn an_existing_destination_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -425,7 +445,7 @@ mod tests {
     }
 
     #[test]
-    fn a_symlink_into_the_repository_points_at_the_file_where_it_landed() {
+    fn a_system_symlink_follows_the_move() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -450,7 +470,7 @@ mod tests {
     }
 
     #[test]
-    fn a_repository_symlink_points_at_the_system_file_where_it_landed() {
+    fn a_repository_symlink_follows_the_move() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -478,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn a_system_copy_of_its_own_travels_with_the_file() {
+    fn a_standalone_copy_travels_along() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -502,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn a_template_carries_the_suffix_and_the_file_it_produced() {
+    fn a_template_moves_with_its_output() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");

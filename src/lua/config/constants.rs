@@ -59,7 +59,7 @@ pub const STARTER: &str = r#"-- The luadot configuration, read before every comm
 -- ld.rules({
 --   { match = ".ssh/id_*", encrypt = true },
 --   { match = ".config/mako/**", on_change = "makoctl reload" },
---   { match = ".cache/**", ignore = true },
+--   { match = ".cache/**", track = "never" },
 -- })
 
 -- if ld.sys.has_battery() then

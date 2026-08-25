@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use glob::Pattern;
 use luadot::files::{ConflictPolicy, LinkMode};
-use luadot::lua::{Config, Matcher, Rule};
+use luadot::lua::{Config, Matcher, Rule, Track};
 use luadot::utils;
 use support::{PROBE_COUNT, RULE_COUNTS, managed_name};
 
@@ -107,7 +107,7 @@ fn ignored(count: usize) -> Vec<Rule> {
     (0..count)
         .map(|index| pattern(&format!(".cache/app{index:03}/**")))
         .chain([pattern("*.swp"), pattern(".local/state/**")])
-        .map(|pattern| Rule::new(pattern, None, None).with_ignore(Some(true)))
+        .map(|pattern| Rule::new(pattern, None, None).with_track(Some(Track::Never)))
         .collect()
 }
 

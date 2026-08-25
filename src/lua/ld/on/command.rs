@@ -1,7 +1,7 @@
 use super::super::constants::API;
 use super::constants::{
     ADD, ALT, APPLY, BOOTSTRAP, CD, CLASS, CLONE, CONFIG, DIFF, EDIT, EXEC, GIT, INIT, MV,
-    NAMESPACE, NEW, PUSH, REKEY, RESTORE, RM, SETUP, STATUS, SYNC, TMPL, TMPL_ALT, TMPL_NEW,
+    NAMESPACE, NEW, PUSH, REKEY, RESTORE, RM, SETUP, STATUS, SYNC, TAKE, TMPL, TMPL_ALT, TMPL_NEW,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -26,6 +26,7 @@ pub enum Command {
     Setup,
     Status,
     Sync,
+    Take,
     TmplAlt,
     TmplNew,
 }
@@ -53,6 +54,7 @@ impl Command {
             Self::Setup => SETUP,
             Self::Status => STATUS,
             Self::Sync => SYNC,
+            Self::Take => TAKE,
             Self::TmplAlt => TMPL_ALT,
             Self::TmplNew => TMPL_NEW,
         }

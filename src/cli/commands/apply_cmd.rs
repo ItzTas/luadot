@@ -71,13 +71,21 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
 
     let root = utils::managed_root("apply", &home, &repo, args.path.as_deref())?;
 
-    let files = utils::managed_files("apply", &repo, &root, |relative| {
+    let found = utils::managed_files("apply", &repo, &root, |relative| {
         config.is_ignored(&crypt::logical(relative))
     })?;
-    if files.is_empty() {
+    if found.is_empty() {
         output::note("nothing to apply");
         return Ok(());
     }
+    let managed = utils::units("apply", &config, &repo, found)?;
+    let files: Vec<PathBuf> = managed
+        .iter()
+        .filter_map(|one| match one {
+            utils::Managed::File(file) => Some(file.clone()),
+            utils::Managed::Unit(_) => None,
+        })
+        .collect();
 
     let lock = config.crypt_lock();
     let mut identity = config.crypt_identity(&home);
@@ -94,22 +102,26 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     let mut replaced = 0u32;
     let mut unchanged = 0u32;
     let mut skipped = 0u32;
-    for file in &files {
-        let relative = utils::relative(&repo, file);
-
-        let outcome = match crypt::split(relative) {
-            Some((stripped, backend)) => place_encrypted(
-                &mut secrets,
-                backend,
-                &stripped,
-                file,
-                &home,
-                &repo,
-                &mut run,
-            )?,
-            None => {
-                let dest = utils::system_path(&home, &repo, file)?;
-                place_file(&config, relative, file, &dest, &mut run)?
+    for one in &managed {
+        let outcome = match one {
+            utils::Managed::Unit(unit) => place_unit(&config, &home, &repo, unit, &mut run)?,
+            utils::Managed::File(file) => {
+                let relative = utils::relative(&repo, file);
+                match crypt::split(relative) {
+                    Some((stripped, backend)) => place_encrypted(
+                        &mut secrets,
+                        backend,
+                        &stripped,
+                        file,
+                        &home,
+                        &repo,
+                        &mut run,
+                    )?,
+                    None => {
+                        let dest = utils::system_path(&home, &repo, file)?;
+                        place_file(&config, relative, file, &dest, &mut run)?
+                    }
+                }
             }
         };
 
@@ -122,16 +134,33 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     }
 
     output::note(format!(
-        "{} {} file(s) ({created} created, {replaced} replaced, {unchanged} unchanged, {skipped} skipped)",
+        "{} {} path(s) ({created} created, {replaced} replaced, {unchanged} unchanged, {skipped} skipped)",
         match args.dry_run {
             true => "would apply",
             false => "applied",
         },
-        files.len()
+        managed.len()
     ));
     run.finish("apply")?;
 
     Ok(())
+}
+
+fn place_unit(
+    config: &Config,
+    home: &Path,
+    repo: &Path,
+    unit: &utils::Unit,
+    run: &mut Run,
+) -> Result<SyncOutcome> {
+    let relative = utils::relative(repo, unit.root());
+    let dest = utils::system_path(home, repo, unit.root())?;
+    let link = utils::whole_link("apply", config, relative)?;
+    let target = Target::new(config, relative, &dest);
+
+    target.settle(run, files::dir_status(link, unit.root(), &dest), || {
+        files::sync_dir(target.policy, link, unit.root(), &dest)
+    })
 }
 
 fn sources(repo: &Path, files: &[PathBuf]) -> Vec<(crypt::Backend, PathBuf)> {

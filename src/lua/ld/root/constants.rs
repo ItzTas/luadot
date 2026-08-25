@@ -1,6 +1,6 @@
 use super::super::constants::{CONFLICT, LINK, MATCH, MODE, ON_CHANGE, REGEX};
 #[cfg(feature = "meta")]
-use super::super::constants::{CONFLICT_TYPENAME, LINK_MODE_TYPENAME};
+use super::super::constants::{CONFLICT_TYPENAME, LINK_MODE_TYPENAME, TRACK_TYPENAME};
 #[cfg(feature = "meta")]
 use super::super::signature::{Field, Kind, Param, Signature};
 #[cfg(feature = "meta")]
@@ -8,7 +8,7 @@ use crate::lua::bundled::lpeg::{LPEG_MODULE, RE_MODULE};
 
 pub const RULES: &str = "rules";
 
-pub const IGNORE: &str = "ignore";
+pub const TRACK: &str = "track";
 
 pub const OWNER: &str = "owner";
 
@@ -20,9 +20,11 @@ pub const AUTOCOMMIT: &str = "autocommit";
 
 pub const AUTOPUSH: &str = "autopush";
 
-pub const RULE_KEYS: [&str; 12] = [
-    MATCH, REGEX, LINK, CONFLICT, ON_CHANGE, IGNORE, MODE, OWNER, ENCRYPT, LFS, AUTOCOMMIT,
-    AUTOPUSH,
+pub const WHOLE: &str = "whole";
+
+pub const RULE_KEYS: [&str; 13] = [
+    MATCH, REGEX, LINK, CONFLICT, ON_CHANGE, TRACK, MODE, OWNER, ENCRYPT, LFS, AUTOCOMMIT,
+    AUTOPUSH, WHOLE,
 ];
 
 pub const TASK: &str = "task";
@@ -33,10 +35,11 @@ pub const RUN: &str = "run";
 
 pub const TASK_KEYS: [&str; 2] = [ABOUT, RUN];
 
-pub const BUILTINS: [&str; 27] = [
+pub const BUILTINS: [&str; 28] = [
     "init",
     "clone",
     "add",
+    "take",
     "rm",
     "mv",
     "status",
@@ -120,7 +123,7 @@ pub const SIGNATURES: [Signature; 2] = [
             ]),
         }],
         returns: &[],
-        doc: "Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.",
+        doc: "Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, says how they are `track`ed, marks them as encrypted, stores them in Git LFS, commits and pushes them on their own, and places matching directories `whole`. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.",
     },
     Signature {
         name: TASK,
@@ -160,7 +163,7 @@ pub const TASK_FIELDS: [Field; 2] = [
 ];
 
 #[cfg(feature = "meta")]
-pub const RULE_FIELDS: [Field; 12] = [
+pub const RULE_FIELDS: [Field; 13] = [
     Field {
         name: MATCH,
         kind: PATTERNS,
@@ -187,9 +190,9 @@ pub const RULE_FIELDS: [Field; 12] = [
         doc: "A command line that runs after `apply` or `tmpl alt` created or replaced one of those files.",
     },
     Field {
-        name: IGNORE,
-        kind: Kind::Optional(&Kind::Boolean),
-        doc: "Whether the matching files are left unmanaged.",
+        name: TRACK,
+        kind: Kind::Optional(&Kind::Named(TRACK_TYPENAME)),
+        doc: "How luadot picks the matching files up: `\"auto\"` adds them on its own when `luadot add` runs with no path, `\"manual\"` waits for an explicit `luadot add`, `\"never\"` leaves them unmanaged. `\"auto\"` needs a `match` pattern opening on a literal name, since that is where luadot looks.",
     },
     Field {
         name: MODE,
@@ -220,5 +223,10 @@ pub const RULE_FIELDS: [Field; 12] = [
         name: AUTOPUSH,
         kind: Kind::Optional(&Kind::Boolean),
         doc: "Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back.",
+    },
+    Field {
+        name: WHOLE,
+        kind: Kind::Optional(&Kind::Boolean),
+        doc: "Whether a matching directory is placed whole, as one symlink or one copy of the tree, instead of file by file. Takes `link` `\"symbolic\"` or `\"copy\"`, and every file inside is stored: nothing under the directory may be excluded, encrypted, or a template.",
     },
 ];

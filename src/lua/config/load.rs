@@ -119,13 +119,13 @@ mod tests {
     }
 
     #[test]
-    fn requires_modules_from_the_lua_directory() {
+    fn requires_from_the_lua_directory() {
         let dir = tempfile::tempdir().unwrap();
         let modules = dir.path().join(MODULES_DIR);
         std::fs::create_dir_all(modules.join("editors")).unwrap();
         std::fs::write(
             modules.join("patterns.lua"),
-            r#"return { { match = "*.swp", ignore = true }, { match = ".cache/**", ignore = true } }"#,
+            r#"return { { match = "*.swp", track = "never" }, { match = ".cache/**", track = "never" } }"#,
         )
         .unwrap();
         std::fs::write(

@@ -54,6 +54,8 @@ pub const STATUS: &str = "status";
 
 pub const SYNC: &str = "sync";
 
+pub const TAKE: &str = "take";
+
 pub const TMPL: &str = "tmpl";
 
 pub const ALT: &str = "alt";
@@ -66,7 +68,7 @@ pub const TMPL_NEW: &str = "tmpl new";
 
 pub type Customizer = fn(&Lua, Command) -> mlua::Result<Function>;
 
-pub const FUNCTIONS: [(&str, Command, Customizer); 20] = [
+pub const FUNCTIONS: [(&str, Command, Customizer); 21] = [
     (ADD, Command::Add, around::function),
     (APPLY, Command::Apply, around::function),
     (BOOTSTRAP, Command::Bootstrap, around::function),
@@ -87,6 +89,7 @@ pub const FUNCTIONS: [(&str, Command, Customizer); 20] = [
     (SETUP, Command::Setup, around::function),
     (STATUS, Command::Status, status::function),
     (SYNC, Command::Sync, around::function),
+    (TAKE, Command::Take, around::function),
 ];
 
 pub const TMPL_FUNCTIONS: [(&str, Command, Customizer); 2] = [
@@ -312,7 +315,7 @@ const fn around(name: &'static str, doc: &'static str) -> Signature {
 }
 
 #[cfg(feature = "meta")]
-pub const SIGNATURES: [Signature; 20] = [
+pub const SIGNATURES: [Signature; 21] = [
     around(ADD, "Runs a function before and after `add`."),
     around(APPLY, "Runs a function before and after `apply`."),
     around(BOOTSTRAP, "Runs a function before and after `bootstrap`."),
@@ -349,6 +352,7 @@ pub const SIGNATURES: [Signature; 20] = [
         doc: "Says what `status` prints, line by line, and runs a function before and after it.",
     },
     around(SYNC, "Runs a function before and after `sync`."),
+    around(TAKE, "Runs a function before and after `take`."),
 ];
 
 #[cfg(feature = "meta")]
@@ -431,7 +435,7 @@ pub const FILE_FIELDS: [Field; 3] = [
     Field {
         name: PATH,
         kind: Kind::String,
-        doc: "The path as the repository writes it: `.bashrc`.",
+        doc: "The path as you use it: `.bashrc`, and `.netrc` for a secret the repository keeps as `.netrc.age`.",
     },
     Field {
         name: SYSTEM,

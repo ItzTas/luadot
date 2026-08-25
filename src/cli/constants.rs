@@ -15,6 +15,10 @@ pub const UNSET: &str = "(none)";
 
 pub const CONFIG_WROTE: &str = "wrote";
 
+pub const ADD_COMMAND: &str = "add";
+
+pub const TAKE_COMMAND: &str = "take";
+
 pub const ADD_LABEL: &str = "added";
 
 pub const MOVE_LABEL: &str = "moved";
@@ -396,25 +400,28 @@ pub const STATUS_CLEAN: &str = "nothing to apply, every managed file is synced";
 
 pub const STATUS_GENERATED_CLEAN: &str = "nothing to apply, every generated file is synced";
 
-pub const STATUS_SECTIONS: [(FileStatus, &str, &str); 4] = [
+pub const STATUS_SECTIONS: [(FileStatus, &str, &[&str]); 4] = [
     (
         FileStatus::Missing,
         "Files not on the system:",
-        "(use \"luadot apply <path>...\" to write them)",
+        &["(use \"luadot apply <path>...\" to write them)"],
     ),
     (
         FileStatus::Unlinked,
         "Files not linked:",
-        "(use \"luadot apply <path>...\" to link them)",
+        &["(use \"luadot apply <path>...\" to link them)"],
     ),
     (
         FileStatus::Differs,
         "Files that differ:",
-        "(use \"luadot diff <path>...\" to see what changed)",
+        &[
+            "(use \"luadot diff <path>...\" to see what changed)",
+            "(use \"luadot apply\" to keep the repository's copy, \"luadot take\" to keep the system's)",
+        ],
     ),
     (
         FileStatus::Unreadable,
         "Files luadot could not decrypt:",
-        "(use \"luadot apply <path>...\" to see what the backend says)",
+        &["(use \"luadot apply <path>...\" to see what the backend says)"],
     ),
 ];
