@@ -23,11 +23,17 @@ switches. The stored file keeps its path and gains the backend's extension:
 as encrypted from then on, whatever the rules say later.
 
 - `add` encrypts into the repository and never writes the plaintext there.
+- `take` re-encrypts the system copy into the repository, for the recipients
+  set now.
 - `apply` decrypts to the system as a plain copy, whatever `link` says, with
   mode `600` unless a `mode` rule says otherwise, and the `owner` a rule
   names.
 - `status` compares the decrypted content against the system copy; a file it
   cannot decrypt is `unreadable`.
+- `diff` compares the decrypted content too, and stages both sides in the
+  private mirror it builds for every diff, so no plaintext outlives the
+  command. The report names the file as you use it, `.netrc` and not
+  `.netrc.age`.
 - `edit` decrypts to a private temporary directory (`0700`, under
   `$XDG_RUNTIME_DIR` when it exists), opens the editor, re-encrypts and
   removes the plaintext, even when the editor exits badly. An unchanged file
@@ -39,7 +45,8 @@ as encrypted from then on, whatever the rules say later.
 Encrypting is done to the `recipients` (age public keys, or key ids for gpg).
 Decrypting with age needs the `identity`, the private key file; gpg ignores it
 and uses its keyring both ways. A failed decryption stops `apply` with the
-tool's own error rather than skipping the file.
+tool's own error rather than skipping the file; `diff` warns and leaves that
+file out of the report.
 
 ## The identity
 

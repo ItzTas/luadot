@@ -4,7 +4,8 @@
 | --- | --- |
 | `luadot init [dir]` | Creates an empty dotfiles repository and makes it the managed one. |
 | `luadot clone <url> [dir]` | Clones a dotfiles repository and makes it the managed one. |
-| `luadot add <path>...` | Starts managing a file or directory, mirroring it into the repository. |
+| `luadot add [path]...` | Starts managing a file or directory, mirroring it into the repository; with no path, whatever a `track = "auto"` rule covers. |
+| `luadot take <path>...` | Stores a managed file or directory as the system holds it, and links it again. |
 | `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving the system copy in place. |
 | `luadot mv [-n] <path>... <dest>` | Moves a managed file or directory, in the repository and on the system. |
 | `luadot status [-t] [path]` | Lists the managed files whose system copy is not in sync, `-t` the files the templates produce too. |
@@ -95,6 +96,33 @@ path is read on every command; luadot never moves the directory for you.
 ld.opt.repo_dir("~/dotfiles")
 ```
 
+## add
+
+`add` takes the paths you name. With none, it takes what the `track = "auto"`
+rules cover and the repository does not hold yet:
+
+```lua
+ld.rules({
+  { match = ".config/nvim/**", track = "auto" },
+  { match = ".config/nvim/spell/**", track = "manual" },
+})
+```
+
+```
+$ luadot add
+added      .config/nvim/init.lua
+added      .config/nvim/lua/plugins.lua
+added 2 file(s)
+```
+
+luadot looks under the literal part of each pattern, `~/.config/nvim` for the
+rule above, so `track = "auto"` needs a `match` opening on a name: a pattern
+starting with `*` or a `regex` is refused, since neither says where to look.
+A file the repository already holds, one a template produces and one the
+repository's ignore rules exclude are all left where they are. Everything the
+rules say about a file, from `link` to `encrypt`, holds for the ones taken this
+way.
+
 ## status
 
 `status` reads like `git status`: one section per state, each naming the
@@ -115,6 +143,7 @@ Files not linked:
 
 Files that differ:
   (use "luadot diff <path>..." to see what changed)
+  (use "luadot apply" to keep the repository's copy, "luadot take" to keep the system's)
         differs:     .zshrc
 ```
 
@@ -130,11 +159,18 @@ With nothing left to apply, the sections go away and the line under the header
 says so. Every line is replaceable through `ld.on.status`; see
 [customizing a command](ld.md#customizing-a-command).
 
+A last line counts the files a `track = "auto"` rule covers and the repository
+does not hold yet:
+
+```
+1 file(s) an `auto` rule covers, not managed yet; `luadot add` takes them
+```
+
 ## diff
 
 `diff` shows the content behind a `differs`. The repository is the left side,
 the system the right side: what the diff adds is what `apply` would overwrite,
-what it removes is what `add` would bring in. A path narrows the report to
+what it removes is what `take` would bring in. A path narrows the report to
 that file or everything below that directory. A file the system does not have
 shows as a deleted file; one reported `unlinked` holds the same content and
 has nothing to show.
@@ -169,6 +205,40 @@ Templates are left out of both reports; the summary says how many were. `-t`
 (or `--templates`) resolves them and reports the files they produce, without
 writing them. `diff --templates` shows the generated side under `generated/`
 rather than `repository/`. [templates.md](templates.md) says more.
+
+## take
+
+`take` is `apply` in the other direction: the system copy goes into the
+repository and the file is linked again.
+
+A hard link makes both copies the same file, so editing either one edits both.
+An editor that writes a new file over the old one instead of writing into it
+breaks that link, and neovim, VS Code and `sed -i` all do. From there the two
+copies drift, and `apply` would write the system's edit away.
+
+```
+$ luadot status
+Files that differ:
+  (use "luadot diff <path>..." to see what changed)
+  (use "luadot apply" to keep the repository's copy, "luadot take" to keep the system's)
+        differs:     .zshrc
+
+$ luadot take ~/.zshrc
+replaced   .zshrc
+luadot: took 1 file(s) (0 added, 1 replaced)
+```
+
+A path names a file or a directory, the way `add` does. A directory takes the
+files the repository already holds and leaves the rest out, so a new file under
+a managed directory still needs `add`. A file the repository does not hold is
+refused, and so is one a template produces.
+
+The rules are read again for what it stores: a file with an `encrypt` rule is
+re-encrypted for the recipients set now, one tracked in LFS stays there, and a
+`symbolic` rule stores the content and points the system copy back at it. The
+repository's copy is replaced through a temporary file beside it, so a run that
+fails leaves the copy that was there. Permission bits stay where `apply` puts
+them.
 
 ## rm
 
