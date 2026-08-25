@@ -229,7 +229,7 @@
 ---@field lfs? boolean Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
 ---@field link? ld.LinkMode Default strategy used to link a managed file.
 ---@field passphrase_warn? boolean Whether passphrase mode says it is weaker than keys. Defaults to `true`.
----@field pkg_warn? boolean Whether a call is warned about where it is slow or has no effect. Defaults to `true`.
+---@field pkg_warn? boolean Whether a call is warned about where it has no effect. Defaults to `true`.
 ---@field repo_dir? string The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory.
 
 ---The table beside the text, styling the line.
@@ -335,7 +335,7 @@ ld.class = {}
 ---@return string?
 function ld.class.get(name) end
 
----Runs commands and returns their standard output, trailing newline removed. A non-zero exit stops the script; standard error and standard input stay on the terminal. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
+---Runs commands and returns their standard output, trailing newline removed. A non-zero exit stops the script; standard error and standard input stay on the terminal. Slow: it belongs in `bootstrap.lua` or a setup script.
 ---@class ld.cmd
 ---@field [string] fun(...: string): string Indexed by a program name, runs the program itself with no shell in the way, every argument literal, and returns what it printed: `ld.cmd.git("status")`.
 ---@overload fun(line: string): string
@@ -400,7 +400,7 @@ function ld.fs.read(path) end
 ---@param text string
 function ld.fs.write(path, text) end
 
----Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else; `ld.git.clone` and `ld.git.at` reach other repositories. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
+---Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else; `ld.git.clone` and `ld.git.at` reach other repositories. Slow: it belongs in `bootstrap.lua` or a setup script.
 ---@class ld.git
 ---@overload fun(...: string): string
 ld.git = {}
@@ -576,7 +576,7 @@ function ld.opt.link(mode) end
 ---@param enabled boolean
 function ld.opt.passphrase_warn(enabled) end
 
----Whether a call is warned about where it is slow or has no effect. Defaults to `true`.
+---Whether a call is warned about where it has no effect. Defaults to `true`.
 ---@param enabled boolean
 function ld.opt.pkg_warn(enabled) end
 
@@ -597,7 +597,7 @@ ld.path = {}
 ---@class ld.pkg
 ld.pkg = {}
 
----Installs packages through the system package manager. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
+---Installs packages through the system package manager. Slow: it belongs in `bootstrap.lua` or a setup script.
 ---@param packages string|string[]
 function ld.pkg.install(packages) end
 
@@ -696,7 +696,7 @@ ld.rtp = {}
 ---@param dir string
 function ld.rtp.add(dir) end
 
----The setup scripts of the repository, under `.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`, and warns elsewhere.
+---The setup scripts of the repository, under `.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`.
 ---@class ld.setup
 ---@overload fun(name: string)
 ld.setup = {}
