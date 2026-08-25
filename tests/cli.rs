@@ -1465,7 +1465,8 @@ fn edit_hands_the_editor_a_private_plaintext() {
     executable(
         &bin.join("mode-editor"),
         &format!(
-            "#!/bin/sh\nstat -c '%a' \"$1\" > {}\nprintf 'x\\n' >> \"$1\"\n",
+            "#!/bin/sh\nstat -c '%a' \"$1\" > {} 2>/dev/null || stat -f '%Lp' \"$1\" > {}\nprintf 'x\\n' >> \"$1\"\n",
+            recorded.display(),
             recorded.display()
         ),
     );
