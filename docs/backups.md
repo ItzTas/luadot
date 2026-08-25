@@ -47,6 +47,11 @@ luadot: restored 2 file(s) from backup 1786677956412 (1 created, 1 replaced)
 Restoring writes plain copies, so the files it touches stop being linked to
 the repository until the next `apply`.
 
+A saved file only goes back where luadot manages: under your home directory,
+or under the repository when it sits outside the home. A backup directory
+holding any other absolute path is refused by name, so nothing is put back
+past those two roots.
+
 ## Location and pruning
 
 Backups live in `~/.local/share/luadot/backups` (or
