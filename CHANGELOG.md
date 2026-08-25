@@ -2,9 +2,22 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.0-nightly.15](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.14..v0.1.0-nightly.15) - 2026-08-25
+
+- - -
+
 ## [v0.1.0-nightly.14](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.13..v0.1.0-nightly.14) - 2026-08-25
+#### Features
+- (**cli**) add whole-directory adoption and a take command - ([226b4cf](https://github.com/ItzTas/luadot/commit/226b4cf5f43778acc08b32a845a5055e7f844501)) - luadot
 #### Bug Fixes
 - (**changelog**) keep the releases below a partial render - ([e4f1dc7](https://github.com/ItzTas/luadot/commit/e4f1dc7e8e0835400d53c337b6e5afa62604e3e0)) - luadot
+#### Documentation
+- document track, whole directories, and take - ([8285228](https://github.com/ItzTas/luadot/commit/8285228898883bce22bd4a2ad5e5636f3389fa5e)) - luadot
+#### Tests
+- trim redundant words from test names - ([923f829](https://github.com/ItzTas/luadot/commit/923f829fbf5ec99a412ca2667a78a19f712047cf)) - luadot
+#### Miscellaneous Chores
+- (**meta**) regenerate ld.lua doc comments - ([de2aaa6](https://github.com/ItzTas/luadot/commit/de2aaa62459e4b97ea091d7075c49c6823304984)) - luadot
+- (**version**) v0.1.0-nightly.14 [skip ci] - ([70d3d0c](https://github.com/ItzTas/luadot/commit/70d3d0cd91d346a7b472c33593ba640aa427e426)) - Tales Sabini
 
 - - -
 
