@@ -37,10 +37,10 @@ first_of_each() {
 			release = $0
 			sub(/^## \[/, "", release)
 			sub(/\].*/, "", release)
-			if (release in seen) { exit }
+			repeated = (release in seen)
 			seen[release] = 1
 		}
-		{ print }
+		!repeated { print }
 	' "$changelog"
 }
 
