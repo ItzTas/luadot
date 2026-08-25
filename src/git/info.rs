@@ -77,7 +77,7 @@ mod tests {
     }
 
     #[test]
-    fn the_rules_of_the_repository_land_between_markers_in_the_info_files() {
+    fn rules_land_between_markers() {
         let repo = repository();
         rule(repo.path(), RULES_IGNORE, "*.log\n.cache/\n");
         rule(repo.path(), RULES_ATTRIBUTES, "*.sh text eol=lf\n");
@@ -92,7 +92,7 @@ mod tests {
     }
 
     #[test]
-    fn the_lines_written_there_by_hand_are_kept_and_the_block_is_replaced() {
+    fn handwritten_lines_are_kept() {
         let repo = repository();
         let exclude = repo.path().join(".git").join(INFO_DIR).join(INFO_EXCLUDE);
         std::fs::write(&exclude, "# by hand\nscratch/\n").unwrap();
@@ -109,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_file_that_went_away_takes_its_block_out() {
+    fn a_missing_rule_file_drops_its_block() {
         let repo = repository();
         rule(repo.path(), RULES_IGNORE, "*.log\n");
         refresh("add", repo.path()).unwrap();
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_without_a_repository_is_left_alone() {
+    fn no_repository_means_no_write() {
         let dir = tempfile::tempdir().unwrap();
         rule(dir.path(), RULES_IGNORE, "*.log\n");
 

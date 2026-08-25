@@ -27,5 +27,5 @@ pub const SIGNATURES: [Signature; 1] = [Signature {
         kind: Kind::Or(&[Kind::String, Kind::List(&Kind::String)]),
     }],
     returns: &[],
-    doc: "Installs packages through the system package manager. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.",
+    doc: "Installs packages through the system package manager. Slow: it belongs in `bootstrap.lua` or a setup script.",
 }];

@@ -17,8 +17,8 @@ pub use bootstrap::{bootstrap_path, run_bootstrap};
 pub use config::from_source;
 pub use config::{
     Around, Call, Chain, Class, Config, Custom, Diff, DiffCounts, DiffFile, DiffState, Matcher,
-    Moment, Report, Rule, Shared, StatusCounts, StatusFile, Task, Tool, config_path, load_config,
-    place_starter,
+    Moment, Report, Rule, Shared, StatusCounts, StatusFile, Task, Tool, Track, config_path,
+    load_config, place_starter,
 };
 pub use exec::run_exec;
 #[cfg(test)]

@@ -33,10 +33,10 @@ so keep the repository's rules in `~/.local/share/luadot/git/` instead.
 `.gitmodules` has no other place: git reads it at the top only, so a
 repository with submodules keeps it there and `apply` puts a copy in `~`,
 where git ignores it. Anything else at the top level, a README or a license,
-needs an `ignore` rule:
+needs a rule leaving it out:
 
 ```lua
-ld.rules({ match = { "README.md", "LICENSE" }, ignore = true })
+ld.rules({ match = { "README.md", "LICENSE" }, track = "never" })
 ```
 
 Only `.git/` stays out, whatever the rules say. luadot writes nothing of its

@@ -25,7 +25,7 @@ mod tests {
     use super::*;
 
     const ALONE: &str = "LUADOT_TEST_PANIC_HOOK";
-    const TEST: &str = "git::locks::tests::a_panic_takes_the_lock_files_still_registered_with_it";
+    const TEST: &str = "git::locks::tests::a_panic_removes_the_lock_files";
 
     fn ran_in_its_own_process() -> bool {
         if std::env::var_os(ALONE).is_some() {
@@ -50,7 +50,7 @@ mod tests {
     }
 
     #[test]
-    fn a_panic_takes_the_lock_files_still_registered_with_it() {
+    fn a_panic_removes_the_lock_files() {
         if ran_in_its_own_process() {
             return;
         }

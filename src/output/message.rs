@@ -120,7 +120,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_mark_is_padded_with_the_head_it_opens() {
+    fn a_mark_is_padded_by_its_head() {
         let message = Message::new("create")
             .with_mark(Some("»".to_string()))
             .with_column(Some(11));

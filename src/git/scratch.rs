@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn recording_stages_every_file_it_is_given() {
+    fn recording_stages_every_file() {
         let (_dir, root) = repository("luadot");
         write(&root, ".bashrc", "managed\n", 0o644);
         write(&root, ".vimrc", "set number\n", 0o644);

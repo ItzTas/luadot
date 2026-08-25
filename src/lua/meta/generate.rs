@@ -20,7 +20,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_json_carries_the_description_for_the_documentation_generator() {
+    fn the_json_carries_the_description() {
         let json = generate([JSON_FLAG.to_string()].into_iter()).unwrap();
         let walker: tealr::TypeWalker = serde_json::from_str(&json).unwrap();
 

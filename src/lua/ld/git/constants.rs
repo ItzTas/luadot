@@ -21,7 +21,7 @@ pub const CLONE_KEYS: [&str; 2] = [BRANCH, DEPTH];
 pub const NAMESPACE_TYPENAME: &str = "ld.git";
 
 #[cfg(feature = "meta")]
-pub const DOC: &str = "Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else; `ld.git.clone` and `ld.git.at` reach other repositories. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.";
+pub const DOC: &str = "Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else; `ld.git.clone` and `ld.git.at` reach other repositories. Slow: it belongs in `bootstrap.lua` or a setup script.";
 
 #[cfg(feature = "meta")]
 pub const CLONE_OPTIONS_TYPENAME: &str = "ld.CloneOptions";

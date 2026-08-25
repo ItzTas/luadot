@@ -1,90 +1,166 @@
 use std::collections::HashSet;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::crypt;
-use crate::files::{self, ConflictPolicy, LinkMode, Placement};
+use crate::files::{self, ConflictPolicy, LinkMode, Placement, SyncOutcome};
 use crate::git;
 use crate::lua::Config;
 use crate::output::{self, Tone};
 use crate::utils::{self, Workspace};
 
-use super::super::constants::ADD_LABEL;
+use super::super::constants::{ADD_COMMAND, ADD_LABEL, TAKE_COMMAND};
 
 #[derive(Debug, Args)]
 pub struct AddArgs {
     #[arg(
         value_name = "PATH",
-        required = true,
-        help = "The files or directories to start managing"
+        help = "The files or directories to start managing; with none, the files an `auto` rule covers"
     )]
     pub paths: Vec<String>,
 }
 
-pub fn add_cmd(args: AddArgs) -> Result<()> {
-    let Workspace { config, home, repo } = utils::workspace("add")?;
-    let config = utils::configured("add", &config)?;
-
-    let pairs = plan(&home, &repo, &args.paths, &config)?;
-    let lock = config.crypt_lock();
-    require_plugins(&config, lock, &repo, &pairs)?;
-
-    let mut added = Vec::with_capacity(pairs.len());
-    for (source, dest) in pairs {
-        link_into_repo(&config, lock, &repo, &source, &dest)?;
-        output::entry(
-            Tone::Good,
-            ADD_LABEL,
-            utils::relative(&repo, &dest).display(),
-        );
-        added.push(dest);
-    }
-
-    track_in_lfs(&config, &repo)?;
-    git::stage("add", &repo, &added)?;
-    report(&added);
-
-    let automatic = utils::automatic(&config, &repo, &added);
-    git::auto("add", &repo, automatic.commits, automatic.pushes)
+#[derive(Debug, Args)]
+pub struct TakeArgs {
+    #[arg(
+        value_name = "PATH",
+        required = true,
+        help = "The managed files or directories to store as the system holds them"
+    )]
+    pub paths: Vec<String>,
 }
 
-fn report(added: &[PathBuf]) {
-    if added.is_empty() {
-        output::note("nothing to add, the rules leave every path out");
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Add,
+    Replace,
+}
+
+type Pair = (PathBuf, PathBuf);
+
+#[derive(Debug, PartialEq, Eq)]
+struct Whole {
+    source: PathBuf,
+    dest: PathBuf,
+}
+
+impl Mode {
+    fn command(self) -> &'static str {
+        match self {
+            Self::Add => ADD_COMMAND,
+            Self::Replace => TAKE_COMMAND,
+        }
+    }
+}
+
+pub fn add_cmd(args: AddArgs) -> Result<()> {
+    run(Mode::Add, &args.paths)
+}
+
+pub fn take_cmd(args: TakeArgs) -> Result<()> {
+    run(Mode::Replace, &args.paths)
+}
+
+fn run(mode: Mode, paths: &[String]) -> Result<()> {
+    let command = mode.command();
+    let Workspace { config, home, repo } = utils::workspace(command)?;
+    let config = utils::configured(command, &config)?;
+
+    let (pairs, wholes) = plan(mode, &home, &repo, paths, &config)?;
+    let lock = config.crypt_lock();
+    require_plugins(mode, &config, lock, &repo, &pairs)?;
+
+    let mut stored = Vec::with_capacity(pairs.len() + wholes.len());
+    let mut replaced = 0;
+    for (source, dest) in pairs {
+        let outcome = link_into_repo(mode, &config, lock, &repo, &source, &dest)?;
+        if outcome == SyncOutcome::Replaced {
+            replaced += 1;
+        }
+        announce(outcome, utils::relative(&repo, &dest).display());
+        stored.push(dest);
+    }
+    for whole in wholes {
+        let outcome = store_whole(mode, &config, &repo, &whole)?;
+        if outcome == SyncOutcome::Replaced {
+            replaced += 1;
+        }
+        announce(outcome, utils::relative(&repo, &whole.dest).display());
+        stored.push(whole.dest);
+    }
+
+    track_in_lfs(mode, &config, &repo)?;
+    git::stage(command, &repo, &stored)?;
+    report(mode, &stored, replaced, paths.is_empty());
+
+    let automatic = utils::automatic(&config, &repo, &stored);
+    git::auto(command, &repo, automatic.commits, automatic.pushes)
+}
+
+fn announce(outcome: SyncOutcome, path: impl Display) {
+    if outcome != SyncOutcome::Created {
+        return output::report(outcome, path);
+    }
+
+    output::entry(Tone::Good, ADD_LABEL, path);
+}
+
+fn report(mode: Mode, stored: &[PathBuf], replaced: usize, automatic: bool) {
+    if stored.is_empty() {
+        if automatic {
+            output::note("nothing to add, the `auto` rules cover nothing new");
+            return;
+        }
+        output::note(format!(
+            "nothing to {}, the rules leave every path out",
+            mode.command()
+        ));
         return;
     }
 
-    output::note(format!("added {} file(s)", added.len()));
+    let total = stored.len();
+    if mode == Mode::Add {
+        output::note(format!("added {total} file(s)"));
+        return;
+    }
+
+    output::note(format!(
+        "took {total} file(s) ({} added, {replaced} replaced)",
+        total - replaced
+    ));
 }
 
-fn track_in_lfs(config: &Config, repo: &Path) -> Result<()> {
+fn track_in_lfs(mode: Mode, config: &Config, repo: &Path) -> Result<()> {
+    let command = mode.command();
     let patterns = config.lfs_patterns();
     if !patterns.is_empty() {
         if !git::lfs_available() {
             output::warn("git-lfs is not on your PATH, the files it tracks are stored as they are");
         }
-        git::install_lfs("add", repo, config.lfs())?;
+        git::install_lfs(command, repo, config.lfs())?;
     }
-    if !git::sync_attributes("add", repo, &patterns)? {
+    if !git::sync_attributes(command, repo, &patterns)? {
         return Ok(());
     }
-    git::refresh_info("add", repo)?;
+    git::refresh_info(command, repo)?;
 
-    let path = git::attributes_path("add", repo)?;
+    let path = git::attributes_path(command, repo)?;
     if path.exists() {
-        return git::stage("add", repo, &[path]);
+        return git::stage(command, repo, &[path]);
     }
 
-    git::unstage("add", repo, &[path])
+    git::unstage(command, repo, &[path])
 }
 
 fn require_plugins(
+    mode: Mode,
     config: &Config,
     lock: crypt::Lock,
     repo: &Path,
-    pairs: &[(PathBuf, PathBuf)],
+    pairs: &[Pair],
 ) -> Result<()> {
     let encrypts = pairs.iter().any(|(_, dest)| {
         matches!(
@@ -97,7 +173,7 @@ fn require_plugins(
     }
 
     crypt::require_recipient_plugins(
-        "add",
+        mode.command(),
         crypt::Backend::Age,
         lock,
         config.crypt_secrets().recipients(),
@@ -105,63 +181,184 @@ fn require_plugins(
 }
 
 fn plan(
+    mode: Mode,
     home: &Path,
     repo: &Path,
     sources: &[String],
     config: &Config,
-) -> Result<Vec<(PathBuf, PathBuf)>> {
-    let mut excludes = git::Excludes::open("add", repo)?;
+) -> Result<(Vec<Pair>, Vec<Whole>)> {
+    let mut excludes = git::Excludes::open(mode.command(), repo)?;
+    let mut wholes: Vec<Whole> = Vec::new();
 
-    let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let pairs = match mode == Mode::Add && sources.is_empty() {
+        true => adopt(mode, home, repo, config, &mut excludes, &mut wholes)?,
+        false => named(
+            mode,
+            home,
+            repo,
+            sources,
+            config,
+            &mut excludes,
+            &mut wholes,
+        )?,
+    };
+    check_conflicts(mode, &pairs, &wholes)?;
+
+    Ok((pairs, wholes))
+}
+
+fn named(
+    mode: Mode,
+    home: &Path,
+    repo: &Path,
+    sources: &[String],
+    config: &Config,
+    excludes: &mut git::Excludes,
+    wholes: &mut Vec<Whole>,
+) -> Result<Vec<Pair>> {
+    let command = mode.command();
+
+    let mut pairs: Vec<Pair> = Vec::new();
     for source in sources {
-        let source =
-            std::path::absolute(source).with_context(|| format!("add: invalid path {source}"))?;
-        pairs.extend(collect(home, repo, source, config, &mut excludes)?);
+        let source = std::path::absolute(source)
+            .with_context(|| format!("{command}: invalid path {source}"))?;
+        pairs.extend(collect(mode, home, repo, source, config, excludes, wholes)?);
     }
-    check_conflicts(&pairs)?;
+
     Ok(pairs)
 }
 
+fn adopt(
+    mode: Mode,
+    home: &Path,
+    repo: &Path,
+    config: &Config,
+    excludes: &mut git::Excludes,
+    wholes: &mut Vec<Whole>,
+) -> Result<Vec<Pair>> {
+    let mut pairs: Vec<Pair> = Vec::new();
+    for source in adopted(mode.command(), home, repo, config, excludes)? {
+        pairs.extend(collect(mode, home, repo, source, config, excludes, wholes)?);
+    }
+
+    Ok(pairs)
+}
+
+fn adopted(
+    command: &str,
+    home: &Path,
+    repo: &Path,
+    config: &Config,
+    excludes: &mut git::Excludes,
+) -> Result<Vec<PathBuf>> {
+    let mut sources: Vec<PathBuf> = Vec::new();
+    for file in utils::adoptable(command, home, repo, config, excludes)? {
+        let relative = utils::managed_relative(home, &file)?;
+        let source = match config.unit_root(&relative) {
+            Some(root) => home.join(root),
+            None => file,
+        };
+
+        if sources.contains(&source) || utils::repo_path(home, repo, &source)?.exists() {
+            continue;
+        }
+        sources.push(source);
+    }
+
+    Ok(sources)
+}
+
 fn collect(
+    mode: Mode,
     home: &Path,
     repo: &Path,
     source: PathBuf,
     config: &Config,
     excludes: &mut git::Excludes,
-) -> Result<Vec<(PathBuf, PathBuf)>> {
-    utils::managed_relative(home, &source)
-        .with_context(|| format!("add: cannot manage {}", source.display()))?;
+    wholes: &mut Vec<Whole>,
+) -> Result<Vec<Pair>> {
+    let command = mode.command();
+    let relative = utils::managed_relative(home, &source)
+        .with_context(|| format!("{command}: cannot manage {}", source.display()))?;
 
     if source.is_dir() {
-        check_gitignore(home, &source, git::Kind::Directory, excludes)?;
-        return collect_dir(home, repo, &source, config, excludes);
+        check_gitignore(mode, home, &source, git::Kind::Directory, excludes)?;
+        if let Some(root) = config.unit_root(&relative) {
+            check_inside(mode, home, &source, &relative, &root)?;
+            if let Some(whole) = whole_dir(mode, home, repo, &source, true, config, excludes)? {
+                wholes.push(whole);
+            }
+            return Ok(Vec::new());
+        }
+        return collect_dir(mode, home, repo, &source, config, excludes, wholes);
     }
     if source.is_file() {
-        check_gitignore(home, &source, git::Kind::File, excludes)?;
-        check_template(home, repo, &source)?;
+        if let Some(root) = config.unit_root(&crypt::logical(&relative)) {
+            check_inside(mode, home, &source, &relative, &root)?;
+        }
+        check_gitignore(mode, home, &source, git::Kind::File, excludes)?;
+        check_template(mode, home, repo, &source)?;
         let Some(pair) = pair(home, repo, source, config, excludes)? else {
             return Ok(Vec::new());
         };
+        check_managed(mode, &pair.1)?;
         return Ok(vec![pair]);
     }
-    bail!("add: {} is not a file or directory", source.display())
+    bail!("{command}: {} is not a file or directory", source.display())
+}
+
+fn check_inside(
+    mode: Mode,
+    home: &Path,
+    source: &Path,
+    relative: &Path,
+    root: &Path,
+) -> Result<()> {
+    if root == relative {
+        return Ok(());
+    }
+
+    bail!(
+        "{}: {} sits inside {}, which is placed whole; run `luadot {} {}`",
+        mode.command(),
+        source.display(),
+        root.display(),
+        mode.command(),
+        home.join(root).display()
+    )
 }
 
 fn collect_dir(
+    mode: Mode,
     home: &Path,
     repo: &Path,
     dir: &Path,
     config: &Config,
     excludes: &mut git::Excludes,
-) -> Result<Vec<(PathBuf, PathBuf)>> {
+    wholes: &mut Vec<Whole>,
+) -> Result<Vec<Pair>> {
     utils::repo_path(home, repo, dir)?;
 
     let mut files = Vec::new();
-    walk(dir, &mut files)?;
+    walk(mode, dir, &mut files)?;
     files.sort();
 
+    let mut roots: Vec<PathBuf> = Vec::new();
     let mut pairs = Vec::new();
     for file in files {
+        let relative = utils::managed_relative(home, &file)?;
+        if let Some(root) = config.unit_root(&relative).filter(|root| *root != relative) {
+            let root_dir = home.join(&root);
+            if !roots.contains(&root_dir) {
+                if let Some(whole) =
+                    whole_dir(mode, home, repo, &root_dir, false, config, excludes)?
+                {
+                    wholes.push(whole);
+                }
+                roots.push(root_dir);
+            }
+            continue;
+        }
         if let Some(template) = template_for(home, repo, &file)? {
             output::warn(format!(
                 "{} is produced by {}, leaving it out",
@@ -174,16 +371,109 @@ fn collect_dir(
             pairs.push(pair);
         }
     }
-    Ok(pairs)
+
+    if mode == Mode::Add {
+        return Ok(pairs);
+    }
+
+    Ok(pairs
+        .into_iter()
+        .filter(|(_, dest)| dest.exists())
+        .collect())
 }
 
-fn check_template(home: &Path, repo: &Path, source: &Path) -> Result<()> {
+fn whole_dir(
+    mode: Mode,
+    home: &Path,
+    repo: &Path,
+    source: &Path,
+    direct: bool,
+    config: &Config,
+    excludes: &mut git::Excludes,
+) -> Result<Option<Whole>> {
+    let command = mode.command();
+    let relative = utils::managed_relative(home, source)?;
+    let dest = utils::repo_path(home, repo, source)?;
+    utils::whole_link(command, config, &relative)?;
+
+    if mode == Mode::Replace && !dest.exists() {
+        if direct {
+            check_managed(mode, &dest)?;
+        }
+        return Ok(None);
+    }
+
+    let mut files = Vec::new();
+    walk(mode, source, &mut files)?;
+    files.sort();
+    for file in files {
+        check_whole_member(mode, home, repo, &relative, &file, config, excludes)?;
+    }
+
+    Ok(Some(Whole {
+        source: source.to_path_buf(),
+        dest,
+    }))
+}
+
+fn check_whole_member(
+    mode: Mode,
+    home: &Path,
+    repo: &Path,
+    root: &Path,
+    file: &Path,
+    config: &Config,
+    excludes: &mut git::Excludes,
+) -> Result<()> {
+    let command = mode.command();
+    if let Some(template) = template_for(home, repo, file)? {
+        bail!(
+            "{command}: {} is placed whole, but {} is produced by {}",
+            root.display(),
+            file.display(),
+            template.display()
+        );
+    }
+
+    let dest = utils::repo_path(home, repo, file)?;
+    let relative = utils::relative(repo, &dest);
+    if config.is_ignored(relative) || excludes.excluded(relative, git::Kind::File)? {
+        bail!(
+            "{command}: {} is placed whole, but the rules leave {} out",
+            root.display(),
+            relative.display()
+        );
+    }
+    if config.encrypt(relative) {
+        bail!(
+            "{command}: {} is placed whole and cannot hold the encrypted {}",
+            root.display(),
+            relative.display()
+        );
+    }
+
+    Ok(())
+}
+
+fn check_managed(mode: Mode, dest: &Path) -> Result<()> {
+    if mode == Mode::Add || dest.exists() {
+        return Ok(());
+    }
+
+    bail!(
+        "{TAKE_COMMAND}: {} is not in the repository; run `luadot add` to start managing it",
+        dest.display()
+    )
+}
+
+fn check_template(mode: Mode, home: &Path, repo: &Path, source: &Path) -> Result<()> {
     let Some(template) = template_for(home, repo, source)? else {
         return Ok(());
     };
 
     bail!(
-        "add: {} is produced by {}; run `luadot edit` on it instead",
+        "{}: {} is produced by {}; run `luadot edit` on it instead",
+        mode.command(),
         source.display(),
         template.display()
     )
@@ -196,6 +486,7 @@ fn template_for(home: &Path, repo: &Path, source: &Path) -> Result<Option<PathBu
 }
 
 fn check_gitignore(
+    mode: Mode,
     home: &Path,
     source: &Path,
     kind: git::Kind,
@@ -207,7 +498,8 @@ fn check_gitignore(
     }
 
     bail!(
-        "add: {} lands on {}, which the repository's ignore rules exclude",
+        "{}: {} lands on {}, which the repository's ignore rules exclude",
+        mode.command(),
         source.display(),
         relative.display()
     )
@@ -234,17 +526,19 @@ fn pair(
     Ok(Some((source, stored)))
 }
 
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    let entries =
-        std::fs::read_dir(dir).with_context(|| format!("add: failed to read {}", dir.display()))?;
+fn walk(mode: Mode, dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    let command = mode.command();
+    let entries = std::fs::read_dir(dir)
+        .with_context(|| format!("{command}: failed to read {}", dir.display()))?;
     for entry in entries {
-        let entry = entry.with_context(|| format!("add: failed to read {}", dir.display()))?;
+        let entry =
+            entry.with_context(|| format!("{command}: failed to read {}", dir.display()))?;
         let file_type = entry
             .file_type()
-            .with_context(|| format!("add: failed to inspect {}", entry.path().display()))?;
+            .with_context(|| format!("{command}: failed to inspect {}", entry.path().display()))?;
         let path = entry.path();
         if file_type.is_dir() {
-            walk(&path, out)?;
+            walk(mode, &path, out)?;
             continue;
         }
         if file_type.is_file() {
@@ -254,57 +548,147 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn check_conflicts(pairs: &[(PathBuf, PathBuf)]) -> Result<()> {
+fn check_conflicts(mode: Mode, pairs: &[Pair], wholes: &[Whole]) -> Result<()> {
     let mut seen: HashSet<&Path> = HashSet::new();
-    for (_, dest) in pairs {
-        if dest.exists() {
-            bail!("add: {} already exists in the repository", dest.display());
+    let dests = pairs
+        .iter()
+        .map(|(_, dest)| dest.as_path())
+        .chain(wholes.iter().map(|whole| whole.dest.as_path()));
+    for dest in dests {
+        if mode == Mode::Add && dest.exists() {
+            bail!(
+                "{ADD_COMMAND}: {} already exists in the repository; run `luadot take` to store what the system holds",
+                dest.display()
+            );
         }
-        if !seen.insert(dest.as_path()) {
-            bail!("add: {} would be added more than once", dest.display());
+        if !seen.insert(dest) {
+            bail!(
+                "{}: {} would be added more than once",
+                mode.command(),
+                dest.display()
+            );
         }
     }
     Ok(())
 }
 
 fn link_into_repo(
+    mode: Mode,
     config: &Config,
     lock: crypt::Lock,
     repo: &Path,
     source: &Path,
     dest: &Path,
-) -> Result<()> {
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("add: failed to create {}", parent.display()))?;
-    }
+) -> Result<SyncOutcome> {
+    let command = mode.command();
+    let outcome = match files::exists(command, dest)? {
+        true => SyncOutcome::Replaced,
+        false => SyncOutcome::Created,
+    };
 
     let relative = utils::relative(repo, dest);
     if let Some((stripped, backend)) = crypt::split(relative)
         && config.encrypt(&stripped)
     {
-        let contents = files::read_contents("add", source)?;
-        return crypt::encrypt_contents(
-            "add",
-            backend,
-            lock,
-            config.crypt_secrets().recipients(),
-            &contents,
-            dest,
-        );
+        let contents = files::read_contents(command, source)?;
+        files::replace_file(command, dest, |staged| {
+            crypt::encrypt_contents(
+                command,
+                backend,
+                lock,
+                config.crypt_secrets().recipients(),
+                &contents,
+                staged,
+            )
+        })?;
+
+        return Ok(outcome);
     }
 
     let placement = config.placement(relative);
-    if placement.link() != LinkMode::Symbolic {
-        return files::link(placement.link(), source, dest);
+    if placement.link() == LinkMode::Symbolic {
+        store_and_point_at(command, placement, source, dest)?;
+        return Ok(outcome);
     }
 
-    store_and_point_at(placement, source, dest)
+    files::replace_file(command, dest, |staged| {
+        files::link(placement.link(), source, staged)
+    })?;
+
+    Ok(outcome)
 }
 
-fn store_and_point_at(placement: Placement, system: &Path, stored: &Path) -> Result<()> {
-    files::link(LinkMode::Copy, system, stored)?;
+fn store_and_point_at(
+    command: &str,
+    placement: Placement,
+    system: &Path,
+    stored: &Path,
+) -> Result<()> {
+    files::replace_file(command, stored, |staged| {
+        files::link(LinkMode::Copy, system, staged)
+    })?;
+
     files::sync_file(ConflictPolicy::Overwrite, placement, stored, system).map(|_| ())
+}
+
+fn store_whole(mode: Mode, config: &Config, repo: &Path, whole: &Whole) -> Result<SyncOutcome> {
+    let command = mode.command();
+    let relative = utils::relative(repo, &whole.dest);
+    let link = utils::whole_link(command, config, relative)?;
+
+    if points_at(command, &whole.source, &whole.dest)? {
+        return Ok(SyncOutcome::AlreadySynced);
+    }
+
+    let outcome = match files::exists(command, &whole.dest)? {
+        true => SyncOutcome::Replaced,
+        false => SyncOutcome::Created,
+    };
+    if outcome == SyncOutcome::Replaced {
+        files::remove_entry(command, &whole.dest)?;
+    }
+    files::copy_tree(command, &whole.source, &whole.dest)?;
+
+    if link == LinkMode::Symbolic {
+        swap_for_link(command, &whole.source, &whole.dest)?;
+    }
+
+    Ok(outcome)
+}
+
+fn points_at(command: &str, system: &Path, stored: &Path) -> Result<bool> {
+    let Some(meta) = files::metadata(command, system)? else {
+        return Ok(false);
+    };
+    if !meta.file_type().is_symlink() {
+        return Ok(false);
+    }
+
+    let target = std::fs::read_link(system)
+        .with_context(|| format!("{command}: failed to read {}", system.display()))?;
+    Ok(target == stored)
+}
+
+fn swap_for_link(command: &str, system: &Path, stored: &Path) -> Result<()> {
+    let mut name = system.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".{command}-{}", std::process::id()));
+    let aside = system.with_file_name(name);
+
+    std::fs::rename(system, &aside)
+        .with_context(|| format!("{command}: failed to move {} aside", system.display()))?;
+    if let Err(err) = std::os::unix::fs::symlink(stored, system) {
+        let _ = std::fs::rename(&aside, system);
+        return Err(err).with_context(|| {
+            format!(
+                "{command}: failed to symlink {} -> {}",
+                system.display(),
+                stored.display()
+            )
+        });
+    }
+
+    std::fs::remove_dir_all(&aside)
+        .with_context(|| format!("{command}: failed to remove {}", aside.display()))
 }
 
 #[cfg(test)]
@@ -317,7 +701,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_drops_the_files_the_configuration_ignores() {
+    fn plan_drops_ignored_files() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -327,14 +711,21 @@ mod tests {
         std::fs::write(&kept, "a").unwrap();
         std::fs::write(&ignored, "b").unwrap();
 
-        let config = lua::from_source(r#"ld.rules({ match = "*.swp", ignore = true })"#).unwrap();
-        let pairs = plan(&home, &repo, &[arg(&kept), arg(&ignored)], &config).unwrap();
+        let config = lua::from_source(r#"ld.rules({ match = "*.swp", track = "never" })"#).unwrap();
+        let (pairs, _) = plan(
+            Mode::Add,
+            &home,
+            &repo,
+            &[arg(&kept), arg(&ignored)],
+            &config,
+        )
+        .unwrap();
 
         assert_eq!(pairs, vec![(kept, repo.join(".vimrc"))]);
     }
 
     #[test]
-    fn plan_refuses_a_file_outside_the_home_directory() {
+    fn plan_refuses_a_file_outside_home() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -344,7 +735,7 @@ mod tests {
 
         let err = format!(
             "{:#}",
-            plan(&home, &repo, &[arg(&source)], &Config::default()).unwrap_err()
+            plan(Mode::Add, &home, &repo, &[arg(&source)], &Config::default()).unwrap_err()
         );
 
         assert_eq!(
@@ -358,7 +749,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_stores_an_encrypted_file_under_the_backend_extension() {
+    fn plan_stores_the_backend_extension() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -373,13 +764,13 @@ mod tests {
             "#,
         )
         .unwrap();
-        let pairs = plan(&home, &repo, &[arg(&source)], &config).unwrap();
+        let (pairs, _) = plan(Mode::Add, &home, &repo, &[arg(&source)], &config).unwrap();
 
         assert_eq!(pairs, vec![(source, repo.join(".netrc.gpg"))]);
     }
 
     #[test]
-    fn plan_walks_a_directory_mirroring_home() {
+    fn plan_walks_a_directory() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -390,7 +781,7 @@ mod tests {
         std::fs::write(&init, "init").unwrap();
         std::fs::write(&plugins, "plugins").unwrap();
 
-        let pairs = plan(&home, &repo, &[arg(&nvim)], &Config::default()).unwrap();
+        let (pairs, _) = plan(Mode::Add, &home, &repo, &[arg(&nvim)], &Config::default()).unwrap();
 
         assert_eq!(
             pairs,
@@ -399,5 +790,329 @@ mod tests {
                 (plugins, repo.join(".config/nvim/lua/plugins.lua")),
             ]
         );
+    }
+
+    #[test]
+    fn plan_keeps_a_whole_directory_as_one_unit() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let nvim = home.join(".config/nvim");
+        std::fs::create_dir_all(nvim.join("lua")).unwrap();
+        std::fs::write(nvim.join("init.lua"), "init").unwrap();
+        std::fs::write(nvim.join("lua/plugins.lua"), "plugins").unwrap();
+
+        let config = lua::from_source(
+            r#"ld.rules({ match = ".config/nvim", whole = true, link = "symbolic" })"#,
+        )
+        .unwrap();
+        let (pairs, wholes) = plan(Mode::Add, &home, &repo, &[arg(&nvim)], &config).unwrap();
+
+        assert_eq!(pairs, vec![]);
+        assert_eq!(
+            wholes,
+            vec![Whole {
+                source: nvim,
+                dest: repo.join(".config/nvim"),
+            }]
+        );
+    }
+
+    #[test]
+    fn plan_finds_a_whole_directory_under_a_walked_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let nvim = home.join(".config/nvim");
+        std::fs::create_dir_all(&nvim).unwrap();
+        std::fs::write(nvim.join("init.lua"), "init").unwrap();
+        std::fs::write(home.join(".config/starship.toml"), "prompt").unwrap();
+
+        let config = lua::from_source(
+            r#"ld.rules({ match = ".config/nvim", whole = true, link = "symbolic" })"#,
+        )
+        .unwrap();
+        let (pairs, wholes) = plan(
+            Mode::Add,
+            &home,
+            &repo,
+            &[arg(&home.join(".config"))],
+            &config,
+        )
+        .unwrap();
+
+        assert_eq!(
+            pairs,
+            vec![(
+                home.join(".config/starship.toml"),
+                repo.join(".config/starship.toml")
+            )]
+        );
+        assert_eq!(
+            wholes,
+            vec![Whole {
+                source: nvim,
+                dest: repo.join(".config/nvim"),
+            }]
+        );
+    }
+
+    #[test]
+    fn plan_refuses_a_path_inside_a_whole_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let nvim = home.join(".config/nvim");
+        std::fs::create_dir_all(&nvim).unwrap();
+        let init = nvim.join("init.lua");
+        std::fs::write(&init, "init").unwrap();
+
+        let config = lua::from_source(
+            r#"ld.rules({ match = ".config/nvim", whole = true, link = "symbolic" })"#,
+        )
+        .unwrap();
+        let err = format!(
+            "{:#}",
+            plan(Mode::Add, &home, &repo, &[arg(&init)], &config).unwrap_err()
+        );
+
+        assert_eq!(
+            err,
+            format!(
+                "add: {} sits inside .config/nvim, which is placed whole; run `luadot add {}`",
+                init.display(),
+                nvim.display()
+            )
+        );
+    }
+
+    #[test]
+    fn plan_refuses_a_whole_directory_leaving_a_file_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let nvim = home.join(".config/nvim");
+        std::fs::create_dir_all(&nvim).unwrap();
+        std::fs::write(nvim.join("init.lua"), "init").unwrap();
+        std::fs::write(nvim.join("init.lua.swp"), "swap").unwrap();
+
+        let config = lua::from_source(
+            r#"
+            ld.rules({
+              { match = ".config/nvim", whole = true, link = "symbolic" },
+              { match = "**/*.swp", track = "never" },
+            })
+            "#,
+        )
+        .unwrap();
+        let err = format!(
+            "{:#}",
+            plan(Mode::Add, &home, &repo, &[arg(&nvim)], &config).unwrap_err()
+        );
+
+        assert_eq!(
+            err,
+            "add: .config/nvim is placed whole, but the rules leave .config/nvim/init.lua.swp out"
+        );
+    }
+
+    #[test]
+    fn store_whole_swaps_the_directory_for_a_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let nvim = home.join(".config/nvim");
+        std::fs::create_dir_all(nvim.join("lua")).unwrap();
+        std::fs::write(nvim.join("init.lua"), "init").unwrap();
+        std::fs::write(nvim.join("lua/plugins.lua"), "plugins").unwrap();
+
+        let config = lua::from_source(
+            r#"ld.rules({ match = ".config/nvim", whole = true, link = "symbolic" })"#,
+        )
+        .unwrap();
+        let whole = Whole {
+            source: nvim.clone(),
+            dest: repo.join(".config/nvim"),
+        };
+
+        let outcome = store_whole(Mode::Add, &config, &repo, &whole).unwrap();
+
+        assert_eq!(outcome, SyncOutcome::Created);
+        assert_eq!(
+            std::fs::read_link(&nvim).unwrap(),
+            repo.join(".config/nvim")
+        );
+        assert_eq!(
+            std::fs::read_to_string(repo.join(".config/nvim/lua/plugins.lua")).unwrap(),
+            "plugins"
+        );
+
+        let again = store_whole(Mode::Replace, &config, &repo, &whole).unwrap();
+        assert_eq!(again, SyncOutcome::AlreadySynced);
+    }
+
+    #[test]
+    fn store_whole_copies_the_directory_without_touching_home() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let gnupg = home.join(".gnupg");
+        std::fs::create_dir_all(&gnupg).unwrap();
+        std::fs::write(gnupg.join("gpg.conf"), "keyserver").unwrap();
+
+        let config =
+            lua::from_source(r#"ld.rules({ match = ".gnupg", whole = true, link = "copy" })"#)
+                .unwrap();
+        let whole = Whole {
+            source: gnupg.clone(),
+            dest: repo.join(".gnupg"),
+        };
+
+        let outcome = store_whole(Mode::Add, &config, &repo, &whole).unwrap();
+
+        assert_eq!(outcome, SyncOutcome::Created);
+        assert!(!std::fs::symlink_metadata(&gnupg).unwrap().is_symlink());
+        assert_eq!(
+            std::fs::read_to_string(repo.join(".gnupg/gpg.conf")).unwrap(),
+            "keyserver"
+        );
+    }
+
+    #[test]
+    fn add_points_at_take_when_held() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&repo).unwrap();
+        let source = home.join(".bashrc");
+        let dest = repo.join(".bashrc");
+        std::fs::write(&source, "system").unwrap();
+        std::fs::write(&dest, "repository").unwrap();
+
+        let err = format!(
+            "{:#}",
+            plan(Mode::Add, &home, &repo, &[arg(&source)], &Config::default()).unwrap_err()
+        );
+
+        assert_eq!(
+            err,
+            format!(
+                "add: {} already exists in the repository; run `luadot take` to store what the system holds",
+                dest.display()
+            )
+        );
+    }
+
+    #[test]
+    fn take_reaches_a_held_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&repo).unwrap();
+        let source = home.join(".bashrc");
+        let dest = repo.join(".bashrc");
+        std::fs::write(&source, "system").unwrap();
+        std::fs::write(&dest, "repository").unwrap();
+
+        let (pairs, _) = plan(
+            Mode::Replace,
+            &home,
+            &repo,
+            &[arg(&source)],
+            &Config::default(),
+        )
+        .unwrap();
+
+        assert_eq!(pairs, vec![(source, dest)]);
+    }
+
+    #[test]
+    fn take_refuses_an_unheld_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&home).unwrap();
+        let source = home.join(".bashrc");
+        std::fs::write(&source, "system").unwrap();
+
+        let err = format!(
+            "{:#}",
+            plan(
+                Mode::Replace,
+                &home,
+                &repo,
+                &[arg(&source)],
+                &Config::default()
+            )
+            .unwrap_err()
+        );
+
+        assert_eq!(
+            err,
+            format!(
+                "take: {} is not in the repository; run `luadot add` to start managing it",
+                repo.join(".bashrc").display()
+            )
+        );
+    }
+
+    #[test]
+    fn take_skips_an_unheld_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let repo = dir.path().join("repo");
+        let nvim = home.join(".config").join("nvim");
+        std::fs::create_dir_all(&nvim).unwrap();
+        std::fs::create_dir_all(repo.join(".config/nvim")).unwrap();
+        let managed = nvim.join("init.lua");
+        let fresh = nvim.join("scratch.lua");
+        std::fs::write(&managed, "init").unwrap();
+        std::fs::write(&fresh, "scratch").unwrap();
+        std::fs::write(repo.join(".config/nvim/init.lua"), "stored").unwrap();
+
+        let (pairs, _) = plan(
+            Mode::Replace,
+            &home,
+            &repo,
+            &[arg(&nvim)],
+            &Config::default(),
+        )
+        .unwrap();
+
+        assert_eq!(pairs, vec![(managed, repo.join(".config/nvim/init.lua"))]);
+    }
+
+    #[test]
+    fn linking_replaces_what_was_held() {
+        use std::os::unix::fs::MetadataExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let source = dir.path().join(".bashrc");
+        let dest = repo.join(".bashrc");
+        std::fs::write(&source, "system").unwrap();
+        std::fs::write(&dest, "stale").unwrap();
+
+        let outcome = link_into_repo(
+            Mode::Replace,
+            &Config::default(),
+            crypt::Lock::default(),
+            &repo,
+            &source,
+            &dest,
+        )
+        .unwrap();
+
+        assert_eq!(outcome, SyncOutcome::Replaced);
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "system");
+
+        let (a, b) = (
+            std::fs::metadata(&source).unwrap(),
+            std::fs::metadata(&dest).unwrap(),
+        );
+        assert_eq!((a.dev(), a.ino()), (b.dev(), b.ino()));
     }
 }

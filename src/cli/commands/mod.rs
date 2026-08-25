@@ -25,7 +25,7 @@ mod sync_cmd;
 mod task_cmd;
 mod tmpl_cmd;
 
-pub use add_cmd::{AddArgs, add_cmd};
+pub use add_cmd::{AddArgs, TakeArgs, add_cmd, take_cmd};
 pub use apply_cmd::{ApplyArgs, apply_cmd};
 pub use bootstrap_cmd::bootstrap_cmd;
 pub use cd_cmd::cd_cmd;

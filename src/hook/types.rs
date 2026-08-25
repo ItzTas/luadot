@@ -52,7 +52,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_a_file_that_changed_records_its_command() {
+    fn only_a_changed_file_records() {
         let mut hooks = Hooks::default();
         hooks.record(SyncOutcome::Created, Some("created"));
         hooks.record(SyncOutcome::Replaced, Some("replaced"));

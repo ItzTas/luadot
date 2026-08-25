@@ -132,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn declares_a_class_with_its_prompt_and_choices() {
+    fn declares_prompt_and_choices() {
         let config = configure(
             r#"
             ld.class({
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_default_outside_the_choices() {
+    fn rejects_an_unlisted_default() {
         let err =
             error(r#"ld.class({ name = "shell", choices = { "zsh", "fish" }, default = "bash" })"#);
 

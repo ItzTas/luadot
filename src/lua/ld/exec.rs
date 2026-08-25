@@ -1,19 +1,9 @@
 use std::process::{Command, ExitStatus, Stdio};
 
-use mlua::Lua;
-
 use super::constants::API;
 use super::parse::external;
-use super::surface;
 
-pub fn run(
-    lua: &Lua,
-    mut command: Command,
-    namespace: &str,
-    display: &str,
-) -> mlua::Result<String> {
-    surface::slow(lua, namespace);
-
+pub fn run(mut command: Command, namespace: &str, display: &str) -> mlua::Result<String> {
     let output = command
         .stdin(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -64,7 +54,6 @@ fn prefix(namespace: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lua::runtime::runtime;
 
     fn shell(line: &str) -> Command {
         let mut command = Command::new("sh");
@@ -73,21 +62,15 @@ mod tests {
     }
 
     #[test]
-    fn yields_the_output_without_its_trailing_newline() {
-        let lua = runtime().unwrap();
-
-        let output = run(&lua, shell("printf 'one\ntwo\n'"), "cmd", "test").unwrap();
+    fn trims_the_trailing_newline() {
+        let output = run(shell("printf 'one\ntwo\n'"), "cmd", "test").unwrap();
 
         assert_eq!(output, "one\ntwo");
     }
 
     #[test]
-    fn reports_the_status_of_a_failing_command() {
-        let lua = runtime().unwrap();
-
-        let err = run(&lua, shell("exit 3"), "cmd", "test")
-            .unwrap_err()
-            .to_string();
+    fn reports_a_failing_status() {
+        let err = run(shell("exit 3"), "cmd", "test").unwrap_err().to_string();
 
         assert!(err.contains("`ld.cmd` `test` exited with status 3"));
     }

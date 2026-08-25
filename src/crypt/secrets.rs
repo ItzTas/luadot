@@ -56,7 +56,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn the_identity_path_is_resolved_against_home() {
+    fn the_identity_path_resolves_against_home() {
         let secrets = Secrets::Keys {
             recipients: Vec::new(),
             identity: Some(Key::File(PathBuf::from("~/.keys/age.txt"))),

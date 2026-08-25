@@ -13,7 +13,7 @@ pub const SHELL_ARG: &str = "-c";
 pub const NAMESPACE_TYPENAME: &str = "ld.cmd";
 
 #[cfg(feature = "meta")]
-pub const DOC: &str = "Runs commands and returns their standard output, trailing newline removed. A non-zero exit stops the script; standard error and standard input stay on the terminal. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.";
+pub const DOC: &str = "Runs commands and returns their standard output, trailing newline removed. A non-zero exit stops the script; standard error and standard input stay on the terminal. Slow: it belongs in `bootstrap.lua` or a setup script.";
 
 #[cfg(feature = "meta")]
 pub const CALL: Signature = Signature {

@@ -14,8 +14,8 @@ ld.rules({
   { match = ".ssh/**", link = "symbolic", conflict = "skip" },
   { match = ".config/nvim/**", conflict = "error" },
   { match = ".config/mako/**", on_change = "makoctl reload" },
-  { match = "**/*.swp", ignore = true },
-  { match = ".cache/**", ignore = true },
+  { match = "**/*.swp", track = "never" },
+  { match = ".cache/**", track = "never" },
 })
 ```
 
@@ -31,7 +31,7 @@ a regular expression, never both. A single rule needs no list around it.
 ```lua
 ld.rules({
   { regex = "^\\.config/(nvim|zsh)/", link = "symbolic" },
-  { regex = "\\.sw[po]$", ignore = true },
+  { regex = "\\.sw[po]$", track = "never" },
 })
 ```
 
@@ -49,8 +49,8 @@ them matches:
 
 ```lua
 ld.rules({
-  { match = { "**/*.tmp", ".cache/**" }, ignore = true },
-  { regex = { "^\\.local/state/", "\\.sw[po]$" }, ignore = true },
+  { match = { "**/*.tmp", ".cache/**" }, track = "never" },
+  { regex = { "^\\.local/state/", "\\.sw[po]$" }, track = "never" },
 })
 ```
 
@@ -61,13 +61,14 @@ All the keys:
 | `link` | `"hard"`, `"symbolic"`, `"copy"` | How the matching files are placed. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the system copy differs. |
 | `on_change` | a command line | Runs after `apply` or `tmpl alt` created or replaced one of those files. |
-| `ignore` | `true`, `false` | Whether the matching files are left unmanaged. |
+| `track` | `"auto"`, `"manual"`, `"never"` | How luadot picks the matching files up. See [tracking](#tracking). |
 | `mode` | three or four octal digits, as a string | The permission bits a matching file is placed with, and put back when they drift. An encrypted file carries `600` without it. |
 | `owner` | `"user"` or `"user:group"` | Who owns a matching file once placed, set through `chown`. |
 | `encrypt` | `true`, `false` | Whether `add` stores the matching files encrypted. |
 | `lfs` | `true`, `false` | Whether the matching files are stored in Git LFS. Takes `match`, not `regex`, and does not go with `encrypt`. |
 | `autocommit` | `true`, `false` | Whether `add`, `rm` and `mv` commit on their own once one of those files is staged. |
 | `autopush` | `true`, `false` | Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back. |
+| `whole` | `true`, `false` | Whether a matching directory is placed whole, as one symlink or one copy, instead of file by file. See [whole directories](#whole-directories). |
 
 Any other key is an error.
 
@@ -76,15 +77,64 @@ Either syntax also matches a directory on behalf of everything under it:
 `.ssh/keys/id_ed25519`.
 
 `ld.rules` accumulates across calls. The last matching rule wins, key by key:
-`{ match = ".cache/**", ignore = true }` followed by
-`{ match = ".cache/keep/**", ignore = false }` ignores everything under
-`~/.cache/` but that one directory. Keys no rule sets fall back to the
-`ld.opt.link` and `ld.opt.conflict` defaults.
+`{ match = ".cache/**", track = "never" }` followed by
+`{ match = ".cache/keep/**", track = "manual" }` leaves everything under
+`~/.cache/` unmanaged but that one directory. Keys no rule sets fall back to
+the `ld.opt.link` and `ld.opt.conflict` defaults.
 
 `on_change` commands are deduplicated and run once per run, at the end: twenty
 changed files under `.config/mako/` reload mako once. A failing command stops
 the run after the files are in place; `--dry-run` prints the command instead
 of running it.
+
+### Tracking
+
+`track` says how a file enters the repository, and `"manual"` is the default:
+it waits for `luadot add` to name it.
+
+```lua
+ld.rules({
+  { match = ".config/nvim/**", track = "auto" },
+  { match = ".config/nvim/spell/**", track = "manual" },
+  { match = "**/*.swp", track = "never" },
+})
+```
+
+`"auto"` hands the file to `luadot add` run with no path, which takes
+everything those rules cover and the repository does not hold yet. `status`
+counts them in a line of its own, so nothing enters the repository behind your
+back. luadot looks under the literal part of the pattern, `~/.config/nvim`
+above, so `"auto"` needs a `match` opening on a name: a pattern starting with
+`*` or a `regex` is refused, since neither says where to look.
+
+`"never"` leaves the matching files out of every command: `add` skips them,
+`status`, `diff` and `apply` never see them, and one already in the repository
+is left where it is. `.git/` is out whatever the rules say.
+
+### Whole directories
+
+```lua
+ld.rules({ match = ".config/nvim", whole = true, link = "symbolic" })
+```
+
+`whole = true` makes `add` store a matching directory as one unit. The tree
+lands in the repository as it is, and the system side becomes a single
+symlink to it, or a copy of it under `link = "copy"`. `link = "hard"` is
+refused, since a directory cannot be hard linked.
+
+With a symlink, a file written under the directory is in the repository the
+moment it exists, with no `add` to run. `status` reports the directory as
+one entry, and `apply` places it as one: missing means the symlink is
+created, anything else follows the `conflict` policy. Under `link = "copy"`,
+`apply` compares the whole tree and replaces the system directory when it
+differs, extra files included; the backup keeps what it removes. `rm` puts a
+real copy back in place of the link before it stops managing the files, and
+only takes the directory whole, never a part of it.
+
+The pattern names the directory itself: `.config/nvim`, not
+`.config/nvim/**`. Every file under a whole directory is stored, so `add`
+refuses the directory when something inside is excluded by a rule or by the
+repository's ignore rules, is encrypted, or is a template.
 
 ### Patterns
 
@@ -415,8 +465,8 @@ ld.print.entry("create", "~/.bashrc", { tone = "good" })
 `ld.on.cd`, `ld.on.class`, `ld.on.clone`, `ld.on.config`, `ld.on.diff`,
 `ld.on.edit`, `ld.on.exec`, `ld.on.git`, `ld.on.init`, `ld.on.mv`,
 `ld.on.push`, `ld.on.rekey`, `ld.on.restore`, `ld.on.rm`, `ld.on.setup`,
-`ld.on.status`,
-`ld.on.sync`, and `ld.on.tmpl.alt` and `ld.on.tmpl.new` for the two `tmpl`
+`ld.on.status`, `ld.on.sync`, `ld.on.take`,
+and `ld.on.tmpl.alt` and `ld.on.tmpl.new` for the two `tmpl`
 actions. `completions`, `doc`, `man` and `meta` describe luadot itself and
 have none.
 
@@ -471,7 +521,7 @@ one at once:
 
 | Field | Holds |
 | --- | --- |
-| `path` | The path as the repository writes it: `.bashrc`. |
+| `path` | The path as you use it: `.bashrc`, and `.netrc` for a secret the repository keeps as `.netrc.age`. |
 | `system` | The absolute path of the system copy. |
 | `side` | `"repository"` for a managed file, `"generated"` for one a template produced. |
 | `state` | Where the file stands; the two commands answer it differently, below. |
@@ -776,7 +826,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked: the word locks with a passphrase, the table with keys. The `identity` takes a path or a command. |
 | `ld.opt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |
 | `ld.crypt(options)` | a table of options | Sets several crypt options at once; only the keys it carries. |
-| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. |
+| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, says how they are `track`ed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. |
 | `ld.task(name, task)` | a name and a table of `about` and `run` | Registers a command of the configuration's own: `luadot <name>` and `luadot task <name>` run its function with the arguments that follow. |
 | `ld.class(class)` | a table declaring a class | Declares a question this machine answers once. In `config.lua` it waits for `bootstrap`, `clone` or `luadot class` to ask; anywhere else it asks straight away and saves the answer. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
@@ -825,6 +875,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.on.setup(options)` | a table of `before` and `after` | Runs a function before and after `setup`. |
 | `ld.on.status(options)` | a table of options | Says what `status` prints, line by line, and runs a function before and after it. |
 | `ld.on.sync(options)` | a table of `before` and `after` | Runs a function before and after `sync`. |
+| `ld.on.take(options)` | a table of `before` and `after` | Runs a function before and after `take`. |
 | `ld.on.tmpl.alt(options)` | a table of `before` and `after` | Runs a function before and after `tmpl alt`. |
 | `ld.on.tmpl.new(options)` | a table of `before` and `after` | Runs a function before and after `tmpl new`. |
 | `ld.print(text, options)` | a string and a table of options | Writes a line to the terminal, styled the way the options ask. |

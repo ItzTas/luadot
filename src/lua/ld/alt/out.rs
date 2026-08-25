@@ -4,7 +4,7 @@ use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::{API, CONFLICT, LINK, MODE, ON_CHANGE};
 use super::super::parse::{chain, conflict_policy, external, link_mode, mode_bits};
-use super::super::surface::{self, Surface};
+use super::super::surface::Surface;
 use super::constants::{CONTENT, DEST, DEST_ALONE, FILE, NAMESPACE, OUT};
 use super::file::handle;
 use crate::files::{Placement, sync_file, write_file};
@@ -13,11 +13,7 @@ use crate::lua::{Content, Output, Scope};
 use crate::utils::dry_run;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, value: Value| {
-        surface::slow_in(lua, &format!("{NAMESPACE}.{OUT}"), Surface::Config);
-
-        output(lua, value)
-    })
+    lua.create_function(output)
 }
 
 pub fn output(lua: &Lua, value: Value) -> mlua::Result<()> {
@@ -147,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn a_script_writes_the_file_where_it_declares_it() {
+    fn a_script_writes_where_it_declares() {
         let root = tempfile::tempdir().unwrap();
         let dest = root.path().join("generated/motd");
 
@@ -180,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_mode_on_a_file_of_the_repository() {
+    fn rejects_a_mode_on_a_repository_file() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
         std::fs::write(dir.join("netrc"), "machine example").unwrap();

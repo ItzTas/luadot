@@ -83,19 +83,28 @@ pub enum Matcher {
     Any(Vec<Matcher>),
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Track {
+    Auto,
+    #[default]
+    Manual,
+    Never,
+}
+
 #[derive(Debug, Clone)]
 pub struct Rule {
     pattern: Matcher,
     link: Option<LinkMode>,
     conflict: Option<ConflictPolicy>,
     on_change: Option<String>,
-    ignore: Option<bool>,
+    track: Option<Track>,
     mode: Option<u32>,
     owner: Option<String>,
     encrypt: Option<bool>,
     lfs: Option<bool>,
     autocommit: Option<bool>,
     autopush: Option<bool>,
+    whole: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -328,14 +337,18 @@ impl Config {
         self.classes.iter().find(|class| class.name == name)
     }
 
-    pub fn is_ignored(&self, relative: &Path) -> bool {
+    pub fn track(&self, relative: &Path) -> Track {
         if inside_git_dir(relative) {
-            return true;
+            return Track::Never;
         }
         self.matching(relative)
-            .filter_map(Rule::ignore)
+            .filter_map(Rule::track)
             .next_back()
-            .unwrap_or(false)
+            .unwrap_or_default()
+    }
+
+    pub fn is_ignored(&self, relative: &Path) -> bool {
+        self.track(relative) == Track::Never
     }
 
     pub fn placement<'a>(&'a self, relative: &'a Path) -> Placement<'a> {
@@ -401,6 +414,25 @@ impl Config {
             .unwrap_or(false)
     }
 
+    pub fn whole(&self, relative: &Path) -> bool {
+        self.matching(relative)
+            .filter_map(Rule::whole)
+            .next_back()
+            .unwrap_or(false)
+    }
+
+    pub fn unit_root(&self, relative: &Path) -> Option<PathBuf> {
+        let mut prefix = PathBuf::new();
+        for component in relative.components() {
+            prefix.push(component);
+            if self.whole(&prefix) {
+                return Some(prefix);
+            }
+        }
+
+        None
+    }
+
     pub fn lfs_patterns(&self) -> Vec<(String, bool)> {
         if !self.lfs {
             return Vec::new();
@@ -415,6 +447,28 @@ impl Config {
             .collect()
     }
 
+    pub fn adoption_roots(&self) -> Vec<PathBuf> {
+        let mut roots: Vec<PathBuf> = self
+            .rules
+            .iter()
+            .filter(|rule| rule.track == Some(Track::Auto))
+            .flat_map(|rule| globs(&rule.pattern))
+            .filter_map(|glob| literal_root(&glob))
+            .collect();
+        roots.sort();
+        roots.dedup();
+
+        let mut kept: Vec<PathBuf> = Vec::new();
+        for root in roots {
+            if kept.iter().any(|covering| root.starts_with(covering)) {
+                continue;
+            }
+            kept.push(root);
+        }
+
+        kept
+    }
+
     fn matching<'a>(&'a self, relative: &'a Path) -> impl DoubleEndedIterator<Item = &'a Rule> {
         self.rules
             .iter()
@@ -422,7 +476,25 @@ impl Config {
     }
 }
 
+impl Track {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Manual => "manual",
+            Self::Never => "never",
+        }
+    }
+}
+
 impl Matcher {
+    pub fn rooted(&self) -> bool {
+        match self {
+            Self::Glob(pattern) => literal_root(pattern.as_str()).is_some(),
+            Self::Regex(_) => false,
+            Self::Any(matchers) => matchers.iter().all(Self::rooted),
+        }
+    }
+
     fn matches(&self, relative: &Path) -> bool {
         match self {
             Self::Glob(pattern) => pattern.matches_path_with(relative, MATCH),
@@ -452,13 +524,14 @@ impl Rule {
             link,
             conflict,
             on_change: None,
-            ignore: None,
+            track: None,
             mode: None,
             owner: None,
             encrypt: None,
             lfs: None,
             autocommit: None,
             autopush: None,
+            whole: None,
         }
     }
 
@@ -467,8 +540,8 @@ impl Rule {
         self
     }
 
-    pub fn with_ignore(mut self, ignore: Option<bool>) -> Self {
-        self.ignore = ignore;
+    pub fn with_track(mut self, track: Option<Track>) -> Self {
+        self.track = track;
         self
     }
 
@@ -502,6 +575,11 @@ impl Rule {
         self
     }
 
+    pub fn with_whole(mut self, whole: Option<bool>) -> Self {
+        self.whole = whole;
+        self
+    }
+
     pub fn pattern(&self) -> &Matcher {
         &self.pattern
     }
@@ -518,8 +596,8 @@ impl Rule {
         self.on_change.as_deref()
     }
 
-    pub fn ignore(&self) -> Option<bool> {
-        self.ignore
+    pub fn track(&self) -> Option<Track> {
+        self.track
     }
 
     pub fn mode(&self) -> Option<u32> {
@@ -544,6 +622,10 @@ impl Rule {
 
     pub fn autopush(&self) -> Option<bool> {
         self.autopush
+    }
+
+    pub fn whole(&self) -> Option<bool> {
+        self.whole
     }
 }
 
@@ -589,6 +671,18 @@ fn globs(matcher: &Matcher) -> Vec<String> {
     }
 }
 
+fn literal_root(glob: &str) -> Option<PathBuf> {
+    let root: PathBuf = glob
+        .split('/')
+        .take_while(|segment| !segment.contains(['*', '?', '[']))
+        .collect();
+
+    match root.as_os_str().is_empty() {
+        true => None,
+        false => Some(root),
+    }
+}
+
 fn inside_git_dir(relative: &Path) -> bool {
     relative
         .components()
@@ -615,7 +709,7 @@ mod tests {
     }
 
     #[test]
-    fn a_placement_gathers_what_the_rules_say_about_a_path() {
+    fn a_placement_gathers_the_rules() {
         let config = crate::lua::from_source(
             r#"ld.rules({ match = ".ssh/**", link = "copy", mode = "0600", owner = "me:wheel" })"#,
         )
@@ -633,7 +727,22 @@ mod tests {
     }
 
     #[test]
-    fn a_regex_covers_a_subtree_through_its_ancestors() {
+    fn a_whole_rule_names_the_directory_it_covers() {
+        let config = crate::lua::from_source(
+            r#"ld.rules({ match = ".config/nvim", whole = true, link = "symbolic" })"#,
+        )
+        .unwrap();
+
+        assert!(config.whole(Path::new(".config/nvim")));
+        assert_eq!(
+            config.unit_root(Path::new(".config/nvim/lua/plugins.lua")),
+            Some(PathBuf::from(".config/nvim"))
+        );
+        assert_eq!(config.unit_root(Path::new(".config/mako/config")), None);
+    }
+
+    #[test]
+    fn a_regex_covers_a_subtree() {
         let matcher = Matcher::Regex(Regex::new(r"^\.ssh$").unwrap());
 
         assert!(matches_path_or_ancestor(
@@ -644,7 +753,7 @@ mod tests {
     }
 
     #[test]
-    fn a_matcher_holding_alternatives_matches_any_of_them() {
+    fn alternatives_match_any_of_them() {
         let matcher = Matcher::Any(vec![
             Matcher::Glob(Pattern::new("**/*.tmp").unwrap()),
             Matcher::Regex(Regex::new(r"\.sw[po]$").unwrap()),

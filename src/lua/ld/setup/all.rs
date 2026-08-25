@@ -4,7 +4,6 @@ use super::super::class;
 use super::super::constants::API;
 use super::super::parse::{chain, external};
 use super::super::path::Paths;
-use super::super::surface;
 use super::constants::{ALL, NAMESPACE};
 use super::scripts::{listing, run};
 use crate::lua::Config;
@@ -15,8 +14,6 @@ pub fn function(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
     let command = format!("`{API}.{NAMESPACE}.{ALL}`");
 
     lua.create_function(move |lua, options: Option<Table>| {
-        surface::slow(lua, &format!("{NAMESPACE}.{ALL}"));
-
         let order = order(&options)?;
         let (repo, names) = listing(&paths, &command)?;
         let classes = class::current(lua);

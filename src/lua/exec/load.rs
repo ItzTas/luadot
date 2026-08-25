@@ -123,7 +123,7 @@ mod tests {
     }
 
     #[test]
-    fn a_source_string_requires_modules_from_the_configuration() {
+    fn a_source_string_requires_modules() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let modules = home.join(".config/luadot").join(MODULES_DIR);
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn runs_a_file_requiring_modules_from_its_own_directory() {
+    fn a_file_requires_from_its_directory() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         std::fs::create_dir_all(&home).unwrap();

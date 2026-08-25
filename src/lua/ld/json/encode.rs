@@ -103,7 +103,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn the_null_value_encodes_as_null_inside_a_table() {
+    fn null_encodes_inside_a_table() {
         assert_eq!(
             eval("return json.encode({ json.null, 1 })").unwrap(),
             "[\n  null,\n  1\n]"

@@ -164,7 +164,7 @@ pub const SIGNATURES: [Signature; 12] = [
         name: PKG_WARN,
         params: &[ENABLED],
         returns: &[],
-        doc: "Whether a call is warned about where it is slow or has no effect. Defaults to `true`.",
+        doc: "Whether a call is warned about where it has no effect. Defaults to `true`.",
     },
     Signature {
         name: REPO_DIR,

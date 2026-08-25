@@ -1,8 +1,8 @@
 use mlua::Lua;
 
 use super::constants::{
-    BOOTSTRAP_NAME, COMMAND_COST, CONFIG_NAME, EXEC_LABEL, EXEC_NAME, SETUP_LABEL, SETUP_NAME,
-    STANDALONE_LABEL, STANDALONE_NAME, TEMPLATE_COST, TEMPLATE_NAME,
+    BOOTSTRAP_NAME, CONFIG_NAME, EXEC_LABEL, EXEC_NAME, SETUP_LABEL, SETUP_NAME, STANDALONE_LABEL,
+    STANDALONE_NAME, TEMPLATE_NAME,
 };
 use crate::lua::bootstrap::constants::BOOTSTRAP_FILE;
 use crate::lua::config::constants::CONFIG_FILE;
@@ -48,14 +48,6 @@ impl Surface {
             Self::Exec => EXEC_LABEL,
         }
     }
-
-    pub fn cost(self) -> Option<&'static str> {
-        match self {
-            Self::Config => Some(COMMAND_COST),
-            Self::Template | Self::Standalone => Some(TEMPLATE_COST),
-            Self::Bootstrap | Self::Setup | Self::Exec => None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -64,7 +56,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_surface_answers_to_a_name_of_its_own() {
+    fn every_surface_has_its_own_name() {
         assert_eq!(
             SURFACES.map(Surface::name),
             [

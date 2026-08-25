@@ -181,7 +181,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_command_reaches_the_page_as_a_subsection() {
+    fn every_command_becomes_a_subsection() {
         let page = page().unwrap();
 
         assert!(page.contains(".SS \"luadot add\""));

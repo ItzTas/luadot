@@ -56,7 +56,7 @@ mod tests {
     }
 
     #[test]
-    fn a_staged_file_becomes_a_commit_carrying_the_message() {
+    fn a_staged_file_becomes_a_commit() {
         let repo = repository();
         stage(repo.path(), "tracked");
 

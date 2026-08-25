@@ -19,7 +19,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_rules_live_where_the_data_directory_mirrors_into_the_repository() {
+    fn rules_live_under_the_data_mirror() {
         let repo = Path::new("/repo");
         let home = home_dir().unwrap();
         let data = data_dir().unwrap();

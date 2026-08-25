@@ -106,7 +106,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn collect_files_skips_the_git_directory() {
+    fn collect_files_skips_git() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::create_dir_all(root.join(".git/objects")).unwrap();
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn collect_entries_keeps_a_template_whole() {
+    fn keeps_a_template_whole() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let template = root.join(".zshrc.luadot");
@@ -139,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn a_standalone_template_is_its_own_entry() {
+    fn a_standalone_template_is_one_entry() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let standalone = root.join(".zprofile.luadot");

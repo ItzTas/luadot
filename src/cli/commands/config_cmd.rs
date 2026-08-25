@@ -79,8 +79,11 @@ fn overrides(rule: &Rule) -> String {
     if let Some(on_change) = rule.on_change() {
         parts.push(format!("on_change=`{on_change}`"));
     }
-    if let Some(ignore) = rule.ignore() {
-        parts.push(format!("ignore={ignore}"));
+    if let Some(track) = rule.track() {
+        parts.push(format!("track={}", track.name()));
+    }
+    if let Some(whole) = rule.whole() {
+        parts.push(format!("whole={whole}"));
     }
 
     if parts.is_empty() {
@@ -119,7 +122,7 @@ mod tests {
     }
 
     #[test]
-    fn overrides_renders_only_the_keys_a_rule_carries() {
+    fn overrides_renders_only_rule_keys() {
         let pattern = glob(".ssh/**");
 
         assert_eq!(overrides(&Rule::new(pattern.clone(), None, None)), "");

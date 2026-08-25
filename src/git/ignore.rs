@@ -87,7 +87,7 @@ mod tests {
     }
 
     #[test]
-    fn the_ignore_file_of_the_repository_counts_once_installed_without_a_gitignore() {
+    fn the_repository_ignore_file_counts() {
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path().join("repo");
         gix::init(&repo).unwrap();
@@ -110,7 +110,7 @@ mod tests {
     }
 
     #[test]
-    fn an_excluded_directory_carries_its_contents() {
+    fn an_excluded_directory_covers_all() {
         let (_dir, repo) = repository(".cache/\n");
         let mut excludes = Excludes::open("add", &repo).unwrap();
 

@@ -259,7 +259,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_options_of_a_record_are_its_setters_made_optional() {
+    fn record_options_are_optional_setters() {
         const SET: [Signature; 1] = [Signature {
             name: "link",
             params: &[Param {

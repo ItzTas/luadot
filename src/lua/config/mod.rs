@@ -20,4 +20,4 @@ pub use report::Report;
 pub use starter::place as place_starter;
 pub use status::{StatusCounts, StatusFile};
 pub use task::Task;
-pub use types::{Class, Config, Matcher, Rule, Shared};
+pub use types::{Class, Config, Matcher, Rule, Shared, Track};

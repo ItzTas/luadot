@@ -68,7 +68,7 @@ mod tests {
     const EXAMPLE: &str = "export EDITOR=<%= ld.class.get(\"editor\") or \"nvim\" %>\n<% for _, dir in ipairs({ \"~/bin\", \"~/.local/bin\" }) do -%>\npath+=(<%= dir %>)\n<% end -%>\n";
 
     #[test]
-    fn the_generated_source_has_the_documented_shape() {
+    fn generated_source_matches_the_docs() {
         let (source, _) = compile(EXAMPLE).unwrap().into_parts();
         let lines: Vec<&str> = source.lines().collect();
 
@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn a_multi_line_tag_keeps_the_lines_that_follow_aligned() {
+    fn a_multi_line_tag_keeps_alignment() {
         let (source, literals) = compile("<% local x =\n1 %>done").unwrap().into_parts();
 
         assert_eq!(source, " local x =\n1 __ld_emit(1);");

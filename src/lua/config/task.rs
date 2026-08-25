@@ -29,7 +29,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_task_hands_its_arguments_to_the_function_as_a_list() {
+    fn a_task_hands_its_arguments_over() {
         let lua = Lua::new();
         let function = lua
             .load(r#"return function(argv) return #argv .. ":" .. table.concat(argv, ",") end"#)

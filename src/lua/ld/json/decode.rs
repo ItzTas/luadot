@@ -67,7 +67,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn an_object_and_its_lists_become_tables() {
+    fn objects_and_lists_become_tables() {
         assert_eq!(
             eval(
                 r#"
@@ -95,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn a_whole_number_is_an_integer_and_the_rest_are_floats() {
+    fn whole_numbers_are_integers() {
         assert_eq!(
             eval(r#"return math.type(json.decode("2")) .. "/" .. math.type(json.decode("2.5"))"#)
                 .unwrap(),
@@ -113,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_nested_past_the_limit_is_refused() {
+    fn nesting_past_the_limit_is_refused() {
         let deep = format!("{}1{}", "[".repeat(70), "]".repeat(70));
 
         let err = eval(&format!(r#"return json.decode("{deep}")"#))

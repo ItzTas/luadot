@@ -55,7 +55,7 @@ mod tests {
     }
 
     #[test]
-    fn the_battery_of_a_peripheral_is_not_the_machines() {
+    fn a_peripheral_battery_does_not_count() {
         let dir = supplies(&[("hidpp_battery_0", "Battery", Some("Device"))]);
 
         assert!(!has_battery(dir.path()));

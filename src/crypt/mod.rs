@@ -12,6 +12,7 @@ mod sync;
 
 pub use ahead::Ahead;
 pub use backend::Backend;
+pub use constants::SECRET_MODE;
 pub use edit::Workspace;
 pub use identity::{Identity, Key, Provider};
 pub use lock::Lock;

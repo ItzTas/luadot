@@ -16,7 +16,7 @@ mod tests {
     use crate::lua::{Content, from_template};
 
     #[test]
-    fn yields_the_bytes_of_a_file_of_the_template() {
+    fn yields_the_bytes_of_a_file() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
         std::fs::write(dir.join("aliases.zsh"), "alias ll='ls -l'\n").unwrap();

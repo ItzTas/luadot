@@ -175,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn every_installed_call_is_written_down_in_the_documentation() {
+    fn every_call_is_documented() {
         let lua = runtime().unwrap();
         install(&lua, Surface::Bootstrap, &paths(), &Classes::default()).unwrap();
 
@@ -186,14 +186,14 @@ mod tests {
     }
 
     #[test]
-    fn a_configuration_call_outside_the_configuration_still_lands() {
+    fn a_call_outside_the_config_lands() {
         let lua = runtime().unwrap();
         install(&lua, Surface::Bootstrap, &paths(), &Classes::default()).unwrap();
 
         lua.load(
             r#"
             ld.opt.link("symbolic")
-            ld.rules({ { match = "*.swp", ignore = true } })
+            ld.rules({ { match = "*.swp", track = "never" } })
             "#,
         )
         .exec()

@@ -1,7 +1,7 @@
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::backup::Backup;
@@ -57,8 +57,15 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
         return Ok(());
     }
 
+    let wholes = whole_roots(&shared, &home, &repo, &args.paths, &entries)?;
     let classes = classes(&entries)?;
     if args.dry_run {
+        for (system, _) in &wholes {
+            output::note(format!(
+                "would restore {} in place of its link",
+                system.display()
+            ));
+        }
         return foresee(&home, &repo, &entries, &classes, &shared);
     }
 
@@ -79,6 +86,10 @@ pub fn rm_cmd(args: RmArgs) -> Result<()> {
             false => None,
         }
     };
+
+    for (system, stored) in &wholes {
+        materialize(system, stored, &mut backup)?;
+    }
 
     let mut counts = Counts::default();
     for entry in &entries {
@@ -221,6 +232,72 @@ fn classes(entries: &[Entry]) -> Result<Classes> {
     }
 
     Ok(state::load()?.classes().clone())
+}
+
+fn whole_roots(
+    shared: &Shared,
+    home: &Path,
+    repo: &Path,
+    args: &[String],
+    entries: &[Entry],
+) -> Result<Vec<(PathBuf, PathBuf)>> {
+    let config = utils::configured("rm", shared)?;
+
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for entry in entries {
+        let Entry::File(file) = entry else {
+            continue;
+        };
+        let logical = crypt::logical(utils::relative(repo, file));
+        let Some(root) = config.unit_root(&logical) else {
+            continue;
+        };
+        if !roots.contains(&root) {
+            roots.push(root);
+        }
+    }
+    if roots.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut asked: Vec<PathBuf> = Vec::new();
+    for arg in args {
+        asked.push(utils::managed_path("rm", home, repo, arg)?);
+    }
+
+    let mut wholes = Vec::new();
+    for root in roots {
+        let stored = repo.join(&root);
+        if !asked.iter().any(|path| stored.starts_with(path)) {
+            bail!(
+                "rm: {} is placed whole; run `luadot rm {}`",
+                root.display(),
+                home.join(&root).display()
+            );
+        }
+        let system = home.join(&root);
+        let linked = metadata(&system)?.is_some_and(|meta| meta.file_type().is_symlink());
+        if linked && points_at(&system, &stored)? {
+            wholes.push((system, stored));
+        }
+    }
+
+    Ok(wholes)
+}
+
+fn materialize(system: &Path, stored: &Path, backup: &mut Option<Backup>) -> Result<()> {
+    if let Some(backup) = backup.as_mut() {
+        backup.save(system)?;
+    }
+    std::fs::remove_file(system)
+        .with_context(|| format!("rm: failed to remove {}", system.display()))?;
+    files::copy_tree("rm", stored, system)?;
+    output::note(format!(
+        "restored {} in place of its link",
+        system.display()
+    ));
+
+    Ok(())
 }
 
 fn detach_file(
@@ -502,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn detach_materializes_a_symlink_pointing_into_the_repository() {
+    fn detach_materializes_a_symlink() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
         let dest = dir.path().join("dest");
@@ -559,7 +636,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_collects_every_file_below_a_managed_directory() {
+    fn plan_collects_a_whole_directory() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -585,7 +662,7 @@ mod tests {
     }
 
     #[test]
-    fn a_template_goes_away_and_leaves_what_it_generated_behind() {
+    fn a_template_leaves_its_output() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -614,7 +691,7 @@ mod tests {
     }
 
     #[test]
-    fn a_link_into_the_template_becomes_a_file_of_its_own() {
+    fn a_template_link_becomes_a_file() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");

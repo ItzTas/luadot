@@ -19,7 +19,7 @@ mod tests {
     use crate::lua::{Command, Custom, Moment, from_source};
 
     #[test]
-    fn a_function_is_kept_for_the_command_it_was_set_on() {
+    fn a_function_is_kept_per_command() {
         let config = from_source(
             r#"ld.on.apply({ before = function() return "applying on " .. ld.sys.host.name end })"#,
         )
@@ -35,7 +35,7 @@ mod tests {
     }
 
     #[test]
-    fn every_function_registered_for_a_moment_is_kept_in_order() {
+    fn functions_are_kept_in_order() {
         let config = from_source(
             r#"
             ld.on.apply({ before = function() return "first" end })
@@ -56,7 +56,7 @@ mod tests {
     }
 
     #[test]
-    fn the_tmpl_actions_are_customized_apart() {
+    fn tmpl_actions_are_kept_apart() {
         let config = from_source(
             r#"
             ld.on.tmpl.alt({ after = function() end })

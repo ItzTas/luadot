@@ -14,7 +14,7 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         let dir = expand(&home, &raw);
         let command = format!("`{API}.{NAMESPACE}.{AT}`");
 
-        lua.create_function(move |lua, args: Variadic<String>| run_in(lua, &dir, &args, &command))
+        lua.create_function(move |_, args: Variadic<String>| run_in(&dir, &args, &command))
     })
 }
 
@@ -24,7 +24,7 @@ mod tests {
     use crate::git::fixture::repository;
 
     #[test]
-    fn runs_git_inside_the_directory_it_was_given() {
+    fn runs_inside_the_given_directory() {
         let repo = repository();
         std::fs::write(repo.path().join("tracked"), "one\n").unwrap();
 

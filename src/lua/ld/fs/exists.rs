@@ -16,7 +16,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn a_dangling_symlink_is_there_and_a_missing_path_is_not() {
+    fn a_dangling_symlink_is_there() {
         let home = tempfile::tempdir().unwrap();
         std::os::unix::fs::symlink("/nowhere", home.path().join("link")).unwrap();
 

@@ -51,7 +51,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_classes_nobody_answered_are_missing() {
+    fn only_unanswered_classes_are_missing() {
         let declared = [class("form-factor"), class("email")];
         let mut state = State::default();
         state.set_class("form-factor", "laptop");

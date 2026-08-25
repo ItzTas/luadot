@@ -2,9 +2,9 @@ use glob::Pattern;
 use mlua::{Table, Value};
 use regex::Regex;
 
-use super::constants::{API, CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX};
+use super::constants::{API, CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX, TRACK_KINDS};
 use crate::files::{ConflictPolicy, LinkMode};
-use crate::lua::Matcher;
+use crate::lua::{Matcher, Track};
 
 pub fn external(message: impl Into<String>) -> mlua::Error {
     mlua::Error::external(message.into())
@@ -147,6 +147,11 @@ pub fn conflict_policy(name: Option<String>) -> mlua::Result<Option<ConflictPoli
         .transpose()
 }
 
+pub fn track(name: Option<String>) -> mlua::Result<Option<Track>> {
+    name.map(|name| lookup(&TRACK_KINDS, &name, "track kind"))
+        .transpose()
+}
+
 fn keys<T>(entries: &[(&str, T)]) -> String {
     entries
         .iter()
@@ -160,7 +165,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mode_bits_reads_three_or_four_octal_digits() {
+    fn mode_bits_reads_octal_digits() {
         assert_eq!(mode_bits("600", "a rule").unwrap(), 0o600);
         assert_eq!(mode_bits("0644", "a rule").unwrap(), 0o644);
         assert_eq!(mode_bits("4755", "a rule").unwrap(), 0o4755);

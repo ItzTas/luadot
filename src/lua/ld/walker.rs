@@ -2,7 +2,8 @@ use tealr::TypeWalker;
 
 use super::constants::{
     BACKEND_DOC, BACKEND_TYPENAME, CONFLICT_DOC, CONFLICT_POLICIES, CONFLICT_TYPENAME,
-    CRYPT_BACKENDS, LINK_MODE_DOC, LINK_MODE_TYPENAME, LINK_MODES,
+    CRYPT_BACKENDS, LINK_MODE_DOC, LINK_MODE_TYPENAME, LINK_MODES, TRACK_DOC, TRACK_KINDS,
+    TRACK_TYPENAME,
 };
 use super::signature::Collect;
 use super::{
@@ -45,6 +46,11 @@ pub fn walker() -> TypeWalker {
             CONFLICT_TYPENAME,
             CONFLICT_DOC,
             CONFLICT_POLICIES.iter().map(|(name, _)| *name),
+        )
+        .choices(
+            TRACK_TYPENAME,
+            TRACK_DOC,
+            TRACK_KINDS.iter().map(|(name, _)| *name),
         )
         .choices(
             BACKEND_TYPENAME,
@@ -229,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn the_description_and_the_installed_interface_carry_the_same_names_kinds_and_calls() {
+    fn description_matches_the_interface() {
         let walker = walker();
         let ld = installed();
         let described = described(&walker);

@@ -312,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn a_row_carries_its_signature_its_arguments_and_its_effect() {
+    fn a_row_carries_the_three_columns() {
         let entries = entries();
         let entry = only(&entries, "opt.link");
 
@@ -325,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn a_namespace_answers_with_every_call_under_it() {
+    fn a_namespace_lists_its_calls() {
         let entries = entries();
         let found = found(&entries, "regex").unwrap();
 
@@ -338,14 +338,14 @@ mod tests {
     }
 
     #[test]
-    fn a_call_the_interface_does_not_carry_is_refused() {
+    fn an_unknown_call_is_refused() {
         let error = found(&entries(), "opt.colour").unwrap_err().to_string();
 
         assert!(error.starts_with("doc: `opt.colour` is not a call"));
     }
 
     #[test]
-    fn a_registered_page_answers_for_its_namespaced_calls_and_nothing_else() {
+    fn a_page_answers_only_its_calls() {
         let page = (
             "/plugins/lazyld/docs/lazyld.md".to_string(),
             "# lazyld\n\n| Call | Arguments | Effect |\n| --- | --- | --- |\n\

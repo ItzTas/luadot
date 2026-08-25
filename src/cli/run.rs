@@ -85,6 +85,7 @@ fn dispatch(cli: Cli) -> Result<()> {
 fn run_command(command: Cmd) -> Result<()> {
     match command {
         Cmd::Add(args) => commands::add_cmd(args),
+        Cmd::Take(args) => commands::take_cmd(args),
         Cmd::Restore(args) => commands::restore_cmd(args),
         Cmd::Apply(args) => commands::apply_cmd(args),
         Cmd::Bootstrap => commands::bootstrap_cmd(),
@@ -142,6 +143,7 @@ fn customized(command: &Cmd) -> Option<Command> {
         Cmd::Init(_) => Some(Command::Init),
         Cmd::Mv(_) => Some(Command::Mv),
         Cmd::Push(_) => Some(Command::Push),
+        Cmd::Take(_) => Some(Command::Take),
         Cmd::Rekey(_) => Some(Command::Rekey),
         Cmd::Restore(_) => Some(Command::Restore),
         Cmd::Rm(_) => Some(Command::Rm),
@@ -165,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn a_tmpl_action_is_customized_on_its_own() {
+    fn a_tmpl_action_is_customized() {
         assert_eq!(
             customized(&parsed(&["luadot", "tmpl", "alt"])),
             Some(Command::TmplAlt)

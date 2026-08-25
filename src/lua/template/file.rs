@@ -93,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn the_machine_and_the_classes_are_reachable() {
+    fn machine_and_classes_are_reachable() {
         let root = tempfile::tempdir().unwrap();
         let mut classes = Classes::default();
         classes.set("form-factor", "laptop");
@@ -113,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn the_alternatives_resolve_next_to_the_file_itself() {
+    fn alternatives_resolve_beside_the_file() {
         let root = tempfile::tempdir().unwrap();
         let beside = root.path().join("repo");
         std::fs::create_dir_all(&beside).unwrap();

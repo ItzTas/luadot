@@ -83,7 +83,7 @@ mod tests {
     use crate::lua::ld::plugin;
 
     #[test]
-    fn a_directory_the_configuration_registered_is_requirable_from_a_setup_script() {
+    fn a_registered_directory_is_requirable() {
         let root = tempfile::tempdir().unwrap();
         let dir = plugin(root.path(), "links", r#"ld.opt.link("symbolic")"#);
         let config = from_source(&format!(r#"ld.rtp.add("{}")"#, dir.display())).unwrap();

@@ -1,5 +1,6 @@
 use crate::crypt::Backend;
 use crate::files::{ConflictPolicy, LinkMode};
+use crate::lua::Track;
 
 pub const API: &str = "ld";
 
@@ -25,6 +26,12 @@ pub const CONFLICT_POLICIES: [(&str, ConflictPolicy); 3] = [
     ("overwrite", ConflictPolicy::Overwrite),
     ("skip", ConflictPolicy::Skip),
     ("error", ConflictPolicy::Error),
+];
+
+pub const TRACK_KINDS: [(&str, Track); 3] = [
+    ("auto", Track::Auto),
+    ("manual", Track::Manual),
+    ("never", Track::Never),
 ];
 
 pub const CRYPT_BACKENDS: [(&str, Backend); 2] = [("age", Backend::Age), ("gpg", Backend::Gpg)];
@@ -77,6 +84,12 @@ pub const CONFLICT_TYPENAME: &str = "ld.Conflict";
 
 #[cfg(feature = "meta")]
 pub const CONFLICT_DOC: &str = "What happens when the system copy differs: it is overwritten, the file is skipped, or the run stops.";
+
+#[cfg(feature = "meta")]
+pub const TRACK_TYPENAME: &str = "ld.Track";
+
+#[cfg(feature = "meta")]
+pub const TRACK_DOC: &str = "How luadot picks a file up: `auto` adds it on its own, `manual` waits for `luadot add`, `never` leaves it alone.";
 
 #[cfg(feature = "meta")]
 pub const BACKEND_TYPENAME: &str = "ld.Backend";
