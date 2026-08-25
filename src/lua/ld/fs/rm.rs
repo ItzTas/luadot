@@ -45,7 +45,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn removes_a_file_a_symlink_or_a_whole_directory_and_says_whether_it_was_there() {
+    fn removes_file_symlink_or_directory() {
         let home = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(home.path().join("plugins/old/lua")).unwrap();
         std::fs::write(home.path().join("plugins/old/lua/old.lua"), "").unwrap();
@@ -67,7 +67,7 @@ mod tests {
     }
 
     #[test]
-    fn the_home_directory_and_what_holds_it_are_refused() {
+    fn refuses_home_and_its_parents() {
         let home = tempfile::tempdir().unwrap();
 
         for path in ["~", "/"] {

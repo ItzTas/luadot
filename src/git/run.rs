@@ -94,7 +94,7 @@ mod tests {
     }
 
     #[test]
-    fn a_failing_command_names_the_subcommand_and_carries_the_error() {
+    fn a_failure_names_the_subcommand() {
         let repo = repository();
 
         let err = quiet("sync", repo.path(), ["no-such-subcommand"])

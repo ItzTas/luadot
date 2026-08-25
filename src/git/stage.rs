@@ -82,7 +82,7 @@ mod tests {
     }
 
     #[test]
-    fn unstaging_records_the_removal_of_a_path_already_gone() {
+    fn unstaging_records_a_missing_path() {
         let repo = repository();
         let file = repo.path().join(".bashrc");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();

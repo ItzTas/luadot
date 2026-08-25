@@ -259,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn a_color_is_read_by_name_by_shade_and_by_hex() {
+    fn a_color_is_read_three_ways() {
         assert_eq!(
             built(r#"return { fg = "cyan" }"#)
                 .unwrap()
@@ -287,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn the_stream_the_indent_and_the_newline_are_read() {
+    fn stream_indent_and_newline_are_read() {
         let message =
             built(r#"return { stream = "stderr", indent = 2, newline = false }"#).unwrap();
 
@@ -307,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn a_mark_function_returning_nothing_is_reported() {
+    fn an_empty_mark_is_reported() {
         let err = built("return { mark = function() end }")
             .unwrap_err()
             .to_string();

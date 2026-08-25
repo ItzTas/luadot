@@ -45,7 +45,7 @@ mod tests {
     }
 
     #[test]
-    fn stored_variant_finds_the_file_on_disk() {
+    fn stored_variant_finds_the_file() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join(".netrc");
         std::fs::write(stored(&target, Backend::Gpg), "cipher").unwrap();

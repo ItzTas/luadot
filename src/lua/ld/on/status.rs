@@ -23,7 +23,7 @@ mod tests {
     use crate::lua::{Command, Custom, Moment, StatusCounts, from_source};
 
     #[test]
-    fn the_report_and_the_moments_are_kept_side_by_side() {
+    fn report_and_moments_live_together() {
         let config = from_source(
             r#"ld.on.status({ summary = false, after = function() return "done" end })"#,
         )
@@ -37,7 +37,7 @@ mod tests {
     }
 
     #[test]
-    fn a_function_is_kept_callable_after_the_configuration_ran() {
+    fn the_function_survives_the_run() {
         let config = from_source(
             r#"ld.on.status({ summary = function(counts)
                  return counts.synced .. "/" .. counts.total .. " synced"

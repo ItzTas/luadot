@@ -81,7 +81,7 @@ mod tests {
     }
 
     #[test]
-    fn a_runtime_error_reports_the_template_line() {
+    fn a_runtime_error_names_the_line() {
         let err = render("line\nline\n<% error(\"boom\") %>")
             .unwrap_err()
             .to_string();

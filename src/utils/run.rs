@@ -139,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn a_function_that_breaks_names_the_command_the_call_and_the_moment() {
+    fn a_failure_names_command_call_moment() {
         let shared = shared(r#"ld.on.tmpl.alt({ before = function() error("broken") end })"#);
 
         let err = format!(

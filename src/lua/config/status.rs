@@ -99,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn a_file_carries_where_it_is_and_what_state_it_is_in() {
+    fn a_file_carries_its_path_and_state() {
         let lua = Lua::new();
         let file = StatusFile::new(
             PathBuf::from(".bashrc"),
@@ -118,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn the_counts_carry_a_number_per_state_and_the_line_they_replace() {
+    fn the_counts_carry_one_per_state() {
         let lua = Lua::new();
         let counts = StatusCounts::new(
             Side::Repository,

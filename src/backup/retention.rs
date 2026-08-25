@@ -52,7 +52,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_count_leaves_everything_beyond_it_over() {
+    fn a_count_reports_the_extra() {
         let retention = Retention::new(Some(2), None);
 
         assert!(!retention.is_empty());
@@ -62,7 +62,7 @@ mod tests {
     }
 
     #[test]
-    fn an_age_becomes_the_oldest_stamp_still_kept() {
+    fn an_age_becomes_the_oldest_stamp() {
         let retention = Retention::new(None, Some(60));
 
         assert!(!retention.is_empty());

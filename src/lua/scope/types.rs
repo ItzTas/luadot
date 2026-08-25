@@ -168,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn a_scope_that_mirrors_nothing_has_no_default_destination() {
+    fn no_mirror_means_no_destination() {
         let scope = Scope::new(
             PathBuf::from("/home/u/.config/luadot"),
             PathBuf::from("/home/u"),

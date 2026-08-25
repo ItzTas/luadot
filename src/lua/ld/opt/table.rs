@@ -15,7 +15,7 @@ mod tests {
     use crate::lua::from_source;
 
     #[test]
-    fn a_table_call_sets_every_option_it_carries() {
+    fn a_table_call_sets_every_option() {
         let config = from_source(
             r#"ld.opt({ link = "symbolic", pkg_warn = false, lfs = false, backup = false, backup_dir = "~/saved", backup_keep = 3, backup_age = "30d", autocommit = true, autopush = true })"#,
         )

@@ -31,7 +31,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn lists_files_and_directories_by_name_in_order() {
+    fn lists_entries_in_order() {
         let home = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(home.path().join("plugins/b")).unwrap();
         std::fs::create_dir_all(home.path().join("plugins/a")).unwrap();

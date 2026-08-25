@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn a_placement_that_fails_leaves_the_destination_and_the_directory_alone() {
+    fn a_failed_placement_leaves_no_trace() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".zshrc");
         std::fs::write(&dest, "mine").unwrap();
@@ -158,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_is_never_replaced_by_a_file() {
+    fn a_directory_is_never_replaced() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".config");
         std::fs::create_dir(&dest).unwrap();
@@ -174,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_destination_gets_its_parents_before_the_staged_file() {
+    fn a_missing_destination_gets_its_parents() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join("nested/deeper/.zshrc");
 

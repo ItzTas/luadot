@@ -128,7 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn a_name_near_a_command_or_a_task_is_suggested() {
+    fn a_near_name_is_suggested() {
         let tasks = ["plug".to_string()];
 
         let err = refusal(&tasks, argv(&["luadot", "stauts"])).unwrap();

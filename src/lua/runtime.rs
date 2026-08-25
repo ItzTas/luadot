@@ -96,7 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn environment_layers_the_vars_over_the_globals() {
+    fn vars_layer_over_the_globals() {
         let lua = runtime().unwrap();
         let vars = lua.create_table().unwrap();
         vars.set("name", "laptop").unwrap();
@@ -112,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn the_own_directories_come_first_and_the_registered_ones_follow_in_order() {
+    fn own_directories_come_first() {
         let lua = runtime().unwrap();
         let default = path(&lua);
 

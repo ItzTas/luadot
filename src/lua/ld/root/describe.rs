@@ -24,7 +24,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_task_key_is_described_in_the_order_it_is_read() {
+    fn every_task_key_is_described() {
         let described: Vec<&str> = TASK_FIELDS.iter().map(|field| field.name).collect();
 
         assert_eq!(described, TASK_KEYS);

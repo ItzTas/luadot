@@ -88,7 +88,7 @@ mod tests {
     }
 
     #[test]
-    fn a_state_written_before_classes_still_loads() {
+    fn an_older_state_still_loads() {
         let state: State = serde_json::from_str(r#"{"repo":"/a/b"}"#).unwrap();
 
         assert_eq!(state.repo(), Some(Path::new("/a/b")));

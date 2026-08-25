@@ -15,7 +15,7 @@ mod tests {
     use crate::lua::from_source;
 
     #[test]
-    fn the_call_form_sets_several_options_at_once() {
+    fn the_call_form_sets_every_option() {
         let config = from_source(
             r#"
             ld.crypt({

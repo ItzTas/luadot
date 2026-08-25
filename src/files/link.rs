@@ -100,7 +100,7 @@ mod tests {
     }
 
     #[test]
-    fn a_hard_link_shares_the_inode_of_the_source() {
+    fn a_hard_link_shares_the_inode() {
         use std::os::unix::fs::MetadataExt;
 
         let dir = tempfile::tempdir().unwrap();
@@ -118,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_preserves_the_mode_of_the_source() {
+    fn copy_preserves_the_mode() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = tempfile::tempdir().unwrap();

@@ -75,7 +75,7 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_file_keeps_its_keys_and_its_lists_grow() {
+    fn existing_keys_stay_and_lists_grow() {
         let existing = r#"{
             "diagnostics.globals": ["vim"],
             "runtime.version": "LuaJIT",
@@ -100,7 +100,7 @@ mod tests {
     }
 
     #[test]
-    fn the_registered_directories_follow_the_definitions_named_through_the_home_directory() {
+    fn directories_follow_the_definitions() {
         let home = Path::new("/home/u");
 
         assert_eq!(

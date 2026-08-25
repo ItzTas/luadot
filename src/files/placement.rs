@@ -161,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn set_on_writes_the_mode_and_the_owner_it_holds() {
+    fn set_on_writes_mode_and_owner() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("file");
         std::fs::write(&file, "x").unwrap();

@@ -182,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn a_hard_link_the_filesystems_refused_reads_as_synced_on_the_next_run() {
+    fn a_refused_hard_link_reads_as_synced() {
         let Some(elsewhere) = other_device() else {
             return;
         };
@@ -215,7 +215,7 @@ mod tests {
     }
 
     #[test]
-    fn creates_a_hard_link_when_destination_is_missing() {
+    fn creates_a_hard_link() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
         let dest = dir.path().join("dest");
@@ -238,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn symbolic_mode_creates_a_symlink_and_detects_it() {
+    fn symbolic_mode_creates_a_symlink() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
         let dest = dir.path().join("dest");
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn a_mode_lands_on_the_placed_file_and_is_put_back_when_it_drifts() {
+    fn a_mode_is_restored_on_drift() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = tempfile::tempdir().unwrap();

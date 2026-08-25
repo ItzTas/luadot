@@ -76,7 +76,7 @@ mod tests {
     }
 
     #[test]
-    fn skip_leaves_the_destination_untouched() {
+    fn skip_leaves_the_destination() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".zshrc");
         std::fs::write(&dest, "stale").unwrap();
@@ -107,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    fn a_file_the_umask_widened_is_narrowed_back() {
+    fn the_umask_is_narrowed_back() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".netrc");
         std::fs::write(&dest, "secret").unwrap();
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn text_status_reports_a_mode_that_diverges() {
+    fn text_status_reports_mode_drift() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".netrc");
         write_file(ConflictPolicy::Overwrite, with_mode(0o644), &dest, "secret").unwrap();

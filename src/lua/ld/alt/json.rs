@@ -32,7 +32,7 @@ mod tests {
     }
 
     #[test]
-    fn a_table_of_names_becomes_an_object_with_sorted_keys() {
+    fn a_named_table_sorts_its_keys() {
         assert_eq!(
             json(r#"return ld.alt.json({ editor = "nvim", gpu = "amd" })"#).unwrap(),
             "{\n  \"editor\": \"nvim\",\n  \"gpu\": \"amd\"\n}"

@@ -269,7 +269,7 @@ mod tests {
     use crate::lua::ld::walker;
 
     #[test]
-    fn the_committed_definitions_are_what_the_description_renders() {
+    fn renders_the_committed_definitions() {
         assert!(
             render(&walker()) == DEFINITIONS,
             "meta/ld.lua is stale; run packaging/meta/update.sh"
@@ -277,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn a_type_reads_the_way_the_language_server_expects() {
+    fn a_type_reads_as_the_server_expects() {
         use crate::lua::ld::{Kind, Param};
 
         let cases: [(Kind, &str); 7] = [

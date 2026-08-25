@@ -94,7 +94,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_settings_file_that_does_not_parse_is_left_alone() {
+    fn an_unparsable_file_is_left_alone() {
         let dir = tempfile::tempdir().unwrap();
         let luarc = dir.path().join(LUARC_FILE);
         std::fs::write(&luarc, "{ // a comment\n}\n").unwrap();

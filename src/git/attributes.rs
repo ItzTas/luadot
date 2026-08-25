@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pattern_naming_a_directory_carries_its_subtree() {
+    fn a_pattern_covers_its_subtree() {
         assert_eq!(
             expanded(".config/nvim"),
             [".config/nvim", ".config/nvim/**"]
@@ -99,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn the_block_keeps_the_lines_written_by_hand() {
+    fn the_block_keeps_handwritten_lines() {
         let current = "* text=auto\n.claude/settings.json merge=claude-settings\n";
 
         let rendered = rendered(current, &tracked(&["Videos/**"]));
@@ -111,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn dropping_every_pattern_takes_the_block_out_again() {
+    fn an_empty_set_removes_the_block() {
         let written = rendered("* text=auto\n", &tracked(&["Videos/**"]));
 
         assert_eq!(rendered(&written, &[]), "* text=auto\n");

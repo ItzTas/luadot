@@ -52,7 +52,7 @@ mod tests {
     }
 
     #[test]
-    fn the_first_card_answers_the_namespace_itself() {
+    fn the_namespace_is_the_first_card() {
         let lua = runtime().unwrap();
         let found = [
             card("intel", "Raptor Lake-P [Iris Xe]", "i915"),

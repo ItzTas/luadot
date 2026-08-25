@@ -104,7 +104,7 @@ mod tests {
     }
 
     #[test]
-    fn repo_path_resolves_dotdot_before_checking_the_home_directory() {
+    fn repo_path_resolves_dotdot_first() {
         let dest = repo_path(
             Path::new("/home/u"),
             Path::new("/repo"),

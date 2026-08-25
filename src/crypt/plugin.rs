@@ -161,7 +161,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_identity_file_names_every_plugin_once() {
+    fn names_every_plugin_once() {
         let contents = concat!(
             "AGE-PLUGIN--1QQQPQ\n",
             "AGE-SECRET-KEY-1QQQPQ\n",

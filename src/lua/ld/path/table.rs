@@ -33,7 +33,7 @@ mod tests {
     use crate::lua::runtime::runtime;
 
     #[test]
-    fn the_data_directory_is_answered_beside_the_others() {
+    fn the_data_directory_is_answered() {
         let lua = runtime().unwrap();
         let paths = Paths::new(
             Path::new("/home/u"),

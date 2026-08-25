@@ -61,7 +61,7 @@ mod tests {
     }
 
     #[test]
-    fn installing_writes_the_filters_into_the_repository() {
+    fn installing_writes_the_filters() {
         let repo = repository();
 
         install("clone", repo.path(), true).unwrap();

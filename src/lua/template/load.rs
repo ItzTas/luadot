@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_the_configuration_registered_is_requirable_from_a_template() {
+    fn a_registered_directory_is_requirable() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".zshrc.luadot");
         let plugin = crate::lua::ld::plugin(root.path(), "greeting", r#"return "hello""#);
@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn a_returned_table_carries_the_whole_descriptor() {
+    fn a_returned_table_is_the_descriptor() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".zshrc.luadot");
         write(&dir, "desktop.zsh", "desktop");
@@ -218,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn the_ld_interface_accumulates_every_file_it_declares() {
+    fn every_declared_file_accumulates() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".zshrc.luadot");
         write(&dir, "laptop.zsh", "laptop");
@@ -241,7 +241,7 @@ mod tests {
     }
 
     #[test]
-    fn render_fills_a_file_of_the_template_with_variables() {
+    fn render_fills_a_file_with_variables() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".config/nvim/init.lua.luadot");
         write(
@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn load_template_runs_the_file_of_the_directory() {
+    fn load_template_runs_the_file() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
@@ -286,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn a_template_selects_a_variant_from_a_class() {
+    fn a_template_selects_by_class() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".zshrc.luadot");
         write(&dir, "laptop.zsh", "laptop");

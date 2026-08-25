@@ -187,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_outside_the_choices_is_reported() {
+    fn a_value_outside_the_choices_fails() {
         let err = checked(&class(), "tablet".to_string())
             .unwrap_err()
             .to_string();

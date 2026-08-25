@@ -110,7 +110,7 @@ mod tests {
     }
 
     #[test]
-    fn the_configured_repository_wins_over_the_remembered_one() {
+    fn the_configured_repository_wins() {
         let dir = tempfile::tempdir().unwrap();
         let configured = dir.path().join("dotfiles");
         let remembered = dir.path().join("repo");
@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn managed_path_errors_when_the_file_is_not_tracked() {
+    fn managed_path_errors_when_untracked() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -145,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn managed_path_finds_the_encrypted_form_of_a_file() {
+    fn managed_path_finds_a_secret() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -159,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn managed_path_prefers_the_managed_file_over_the_template() {
+    fn managed_path_prefers_the_file() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");

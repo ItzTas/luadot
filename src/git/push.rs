@@ -33,7 +33,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_repository_without_a_commit_is_refused() {
+    fn a_push_without_a_commit_is_refused() {
         let dir = tempfile::tempdir().unwrap();
 
         let err = push("sync", dir.path()).unwrap_err().to_string();

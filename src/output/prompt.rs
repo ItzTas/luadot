@@ -114,13 +114,13 @@ mod tests {
     }
 
     #[test]
-    fn a_choice_is_picked_by_its_number_or_its_name() {
+    fn a_choice_is_picked_by_number_or_name() {
         assert_eq!(pick("2", &choices(), None).unwrap(), "laptop");
         assert_eq!(pick(" laptop \n", &choices(), None).unwrap(), "laptop");
     }
 
     #[test]
-    fn an_empty_answer_takes_the_default_when_there_is_one() {
+    fn an_empty_answer_takes_the_default() {
         assert_eq!(pick("\n", &choices(), Some("laptop")).unwrap(), "laptop");
         assert_eq!(
             pick("  ", &[], Some("me@example.com")).unwrap(),
@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn the_label_says_what_the_answer_looks_like() {
+    fn the_label_shows_the_answer_shape() {
         assert_eq!(label("form-factor", &choices(), None), "form-factor [1-2]");
         assert_eq!(
             label("form-factor", &choices(), Some("laptop")),

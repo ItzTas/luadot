@@ -81,7 +81,7 @@ mod tests {
     }
 
     #[test]
-    fn a_template_directory_resolves_into_the_files_it_declares() {
+    fn a_template_resolves_into_its_files() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
@@ -103,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_content_is_compared_against_what_the_system_holds() {
+    fn generated_content_is_compared() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let dest = home.join(".zshrc");
@@ -128,7 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn a_destination_outside_the_home_directory_is_refused() {
+    fn a_destination_outside_home_fails() {
         let err = output_relative(
             "tmpl alt",
             Path::new("/home/u"),
@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn the_output_decides_its_link_and_mode_before_the_rules_do() {
+    fn the_output_wins_over_the_rules() {
         let config = lua::from_source(
             r#"ld.rules({ match = ".netrc", link = "copy", mode = "0640", owner = "me" })"#,
         )

@@ -82,7 +82,7 @@ mod tests {
     }
 
     #[test]
-    fn a_task_is_kept_under_its_name_with_its_function_callable() {
+    fn a_task_is_kept_under_its_name() {
         let config = from_source(
             r#"
             ld.task("plug", {
@@ -103,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn the_name_of_a_command_luadot_has_is_refused() {
+    fn a_command_name_is_refused() {
         let err = error(r#"ld.task("apply", { run = function() end })"#);
 
         assert!(err.contains("`ld.task`: `apply` is a command of luadot's own"));
@@ -122,7 +122,7 @@ mod tests {
     }
 
     #[test]
-    fn a_task_needs_a_function_to_run_and_a_name_the_command_line_takes() {
+    fn a_task_needs_a_name_and_a_function() {
         assert!(
             error(r#"ld.task("plug", { about = "x" })"#)
                 .contains("`ld.task`: `run` takes a function, got nil")

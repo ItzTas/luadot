@@ -121,7 +121,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_template_directory_is_edited_through_its_script() {
+    fn a_template_opens_its_script() {
         let repo = tempfile::tempdir().unwrap();
         let template = repo.path().join(".zshrc.luadot");
         std::fs::create_dir_all(&template).unwrap();

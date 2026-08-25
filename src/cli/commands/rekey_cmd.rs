@@ -179,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn a_secret_moves_to_the_extension_of_the_configured_backend() {
+    fn a_secret_moves_to_the_new_extension() {
         let repo = repo();
         let secrets = secrets(&repo, &[repo.join(".netrc.age")]);
 

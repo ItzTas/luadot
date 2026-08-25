@@ -44,7 +44,7 @@ mod tests {
     }
 
     #[test]
-    fn a_span_is_told_in_the_largest_unit_that_fits() {
+    fn a_span_uses_the_largest_unit() {
         assert_eq!(span(1), "1 second");
         assert_eq!(span(59), "59 seconds");
         assert_eq!(span(60), "1 minute");

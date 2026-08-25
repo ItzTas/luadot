@@ -221,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn a_saved_file_goes_back_to_its_absolute_path() {
+    fn restores_to_the_absolute_path() {
         let dir = Path::new("/data/backups/100");
 
         assert_eq!(
@@ -236,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn a_file_the_system_lost_comes_back_as_created() {
+    fn a_lost_file_comes_back_created() {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let saved = backed(&dir, &root.path().join("home/.zshrc"));
@@ -250,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn restoring_over_a_hard_link_leaves_the_other_file_alone() {
+    fn restoring_spares_the_linked_file() {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let home = root.path().join("home");
