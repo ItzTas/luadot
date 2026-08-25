@@ -1424,6 +1424,39 @@ fn edit_leaves_no_plaintext() {
 }
 
 #[test]
+fn edit_hands_the_editor_a_private_plaintext() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    let recorded = root.path().join("mode");
+    std::fs::create_dir_all(&repo).unwrap();
+    let bin = fake_age(root.path());
+    executable(
+        &bin.join("mode-editor"),
+        &format!(
+            "#!/bin/sh\nstat -c '%a' \"$1\" > {}\nprintf 'x\\n' >> \"$1\"\n",
+            recorded.display()
+        ),
+    );
+    crypt_config(&home);
+    write(&home.join(".netrc"), "machine example password hunter2\n");
+    write_state(&home, &repo);
+
+    luadot_with_tools(&home, &bin)
+        .args(["add", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    luadot_with_tools(&home, &bin)
+        .env("EDITOR", "mode-editor")
+        .args(["edit", home.join(".netrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    assert_eq!(read(&recorded).trim(), "600");
+}
+
+#[test]
 fn rekey_uses_the_new_recipients() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

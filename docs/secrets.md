@@ -35,9 +35,9 @@ as encrypted from then on, whatever the rules say later.
   command. The report names the file as you use it, `.netrc` and not
   `.netrc.age`.
 - `edit` decrypts to a private temporary directory (`0700`, under
-  `$XDG_RUNTIME_DIR` when it exists), opens the editor, re-encrypts and
-  removes the plaintext, even when the editor exits badly. An unchanged file
-  is left alone.
+  `$XDG_RUNTIME_DIR` when it exists) and writes the plaintext `600` there,
+  opens the editor, re-encrypts and removes it, even when the editor exits
+  badly. An unchanged file is left alone.
 - `rm` deletes the ciphertext; when the system copy is missing it decrypts one
   last time to leave the plaintext behind.
 - Conflict policies compare the decrypted content against the system.
