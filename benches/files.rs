@@ -4,7 +4,7 @@ use std::hint::black_box;
 use std::path::Path;
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use luadot::files::{self, ConflictPolicy, LinkMode};
+use luadot::files::{self, ConflictPolicy, LinkMode, Placement};
 use support::{FILE_COUNTS, Fixture};
 use tempfile::TempDir;
 
@@ -53,7 +53,8 @@ fn status(c: &mut Criterion) {
                 b.iter(|| {
                     for (source, dest) in pairs {
                         black_box(
-                            files::file_status(LinkMode::Hard, source, dest).expect("a status"),
+                            files::file_status(Placement::new(LinkMode::Hard), source, dest)
+                                .expect("a status"),
                         );
                     }
                 });
@@ -95,7 +96,13 @@ fn sync(c: &mut Criterion) {
 fn place_all(fixture: &Fixture, dest: &Path, mode: LinkMode) {
     for file in fixture.files() {
         let target = dest.join(fixture.relative(file));
-        files::sync_file(ConflictPolicy::Overwrite, mode, file, &target).expect("a synced file");
+        files::sync_file(
+            ConflictPolicy::Overwrite,
+            Placement::new(mode),
+            file,
+            &target,
+        )
+        .expect("a synced file");
     }
 }
 

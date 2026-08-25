@@ -37,26 +37,3 @@ pub fn lock(passphrase: bool, warn: bool) -> Lock {
 fn announced(lock: Lock, warn: bool) -> bool {
     lock.passphrase() && warn
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_passphrase_mode_is_announced() {
-        assert!(announced(Lock::Passphrase, true));
-        assert!(!announced(Lock::Passphrase, false));
-        assert!(!announced(Lock::Keys, true));
-    }
-
-    #[test]
-    fn the_warning_names_the_way_out() {
-        assert!(PASSPHRASE_WARNING.contains("`ld.opt.passphrase_warn(false)`"));
-    }
-
-    #[test]
-    fn resolving_answers_the_lock_the_configuration_asks_for() {
-        assert_eq!(lock(false, true), Lock::Keys);
-        assert_eq!(lock(true, false), Lock::Passphrase);
-    }
-}

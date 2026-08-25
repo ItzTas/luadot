@@ -7,6 +7,7 @@ use super::super::repo::require;
 use super::super::surface;
 use super::constants::{ALL, LIST, NAMESPACE};
 use super::{all, list, scripts};
+use crate::lua::Config;
 
 pub fn table(lua: &Lua, paths: &Paths) -> mlua::Result<Table> {
     let setup = lua.create_table()?;
@@ -29,7 +30,8 @@ fn run(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
 
         let repo = require(paths.repo(), &command)?;
         let classes = class::current(lua);
+        let shared = Config::shared(lua)?;
 
-        scripts::run(&paths, &command, repo, &name, &classes)
+        scripts::run(&paths, &command, repo, &name, &classes, &shared)
     })
 }

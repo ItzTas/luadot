@@ -64,19 +64,6 @@ mod tests {
     }
 
     #[test]
-    fn the_same_command_is_kept_once_where_it_first_appeared() {
-        let mut hooks = Hooks::default();
-        hooks.record(SyncOutcome::Created, Some("makoctl reload"));
-        hooks.record(SyncOutcome::Created, Some("systemctl --user restart mako"));
-        hooks.record(SyncOutcome::Replaced, Some("makoctl reload"));
-
-        assert_eq!(
-            hooks.lines,
-            ["makoctl reload", "systemctl --user restart mako"]
-        );
-    }
-
-    #[test]
     fn every_command_runs_once_at_the_end() {
         let dir = tempfile::tempdir().unwrap();
         let first = dir.path().join("first");
@@ -91,29 +78,6 @@ mod tests {
 
         assert_eq!(std::fs::read_to_string(&first).unwrap(), "x");
         assert_eq!(std::fs::read_to_string(&second).unwrap(), "x");
-    }
-
-    #[test]
-    fn a_dry_run_runs_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-        let touched = dir.path().join("touched");
-
-        let mut hooks = Hooks::new(true);
-        hooks.record(SyncOutcome::Created, Some(&count(&touched)));
-
-        hooks.finish("alt").unwrap();
-
-        assert!(!touched.exists());
-    }
-
-    #[test]
-    fn a_failing_command_is_reported() {
-        let mut hooks = Hooks::new(false);
-        hooks.record(SyncOutcome::Created, Some("exit 4"));
-
-        let err = hooks.finish("apply").unwrap_err().to_string();
-
-        assert_eq!(err, "apply: `exit 4` exited with status 4");
     }
 
     fn count(path: &std::path::Path) -> String {

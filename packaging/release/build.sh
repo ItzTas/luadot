@@ -31,7 +31,6 @@ declare -A completion_files=(
 host=$(uname -m)
 [ -n "${rust_targets[$host]+set}" ] || die "$host is not a released architecture"
 
-export RUSTUP_TOOLCHAIN=stable
 export RUSTFLAGS="${RUSTFLAGS:-} -C strip=symbols"
 export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
 export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
@@ -54,11 +53,15 @@ for shell in "${!completion_files[@]}"; do
 		>"$completions/${completion_files[$shell]}"
 done
 
+manual="$dist/luadot.1"
+"target/${rust_targets[$host]}/release/luadot" man >"$manual"
+
 for arch in "${!rust_targets[@]}"; do
 	stage="$dist/luadot-$pkgver-$arch"
 	install -Dm0755 "target/${rust_targets[$arch]}/release/luadot" "$stage/luadot"
 	install -Dm0644 LICENSE "$stage/LICENSE"
 	install -Dm0644 vendor/lpeg/LICENSE "$stage/LICENSE.lpeg"
+	install -Dm0644 "$manual" "$stage/luadot.1"
 	install -d "$stage/completions"
 	install -m0644 "$completions"/* "$stage/completions/"
 	tar -C "$dist" -czf "$dist/luadot-$pkgver-$arch.tar.gz" "luadot-$pkgver-$arch"
@@ -66,4 +69,4 @@ for arch in "${!rust_targets[@]}"; do
 	echo "release: packed luadot-$pkgver-$arch.tar.gz"
 done
 
-rm -rf "$completions"
+rm -rf "$completions" "$manual"

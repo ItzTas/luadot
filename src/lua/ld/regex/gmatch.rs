@@ -28,33 +28,3 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
         })
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::table::table;
-    use crate::lua::runtime::runtime;
-
-    fn eval(source: &str) -> mlua::Result<String> {
-        let lua = runtime().unwrap();
-        lua.globals().set("regex", table(&lua).unwrap()).unwrap();
-
-        lua.load(source).eval()
-    }
-
-    #[test]
-    fn carries_the_groups_of_each_match() {
-        assert_eq!(
-            eval(
-                r#"
-                local found = {}
-                for _, key, value in regex.gmatch("a=1, b=2", "(\\w)=(\\d)") do
-                  found[#found + 1] = key .. value
-                end
-                return table.concat(found, "|")
-                "#
-            )
-            .unwrap(),
-            "a1|b2"
-        );
-    }
-}

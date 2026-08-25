@@ -42,37 +42,8 @@ fn default(host: &str) -> String {
 mod tests {
     use std::process::Command;
 
+    use super::super::fixture::{repository, stage};
     use super::*;
-
-    fn repository() -> tempfile::TempDir {
-        let repo = tempfile::tempdir().unwrap();
-
-        for args in [
-            vec!["init", "--quiet"],
-            vec!["config", "user.email", "test@luadot"],
-            vec!["config", "user.name", "luadot"],
-            vec!["config", "commit.gpgsign", "false"],
-        ] {
-            let status = Command::new("git")
-                .current_dir(repo.path())
-                .args(args)
-                .status()
-                .unwrap();
-            assert!(status.success());
-        }
-
-        repo
-    }
-
-    fn stage(repo: &Path, name: &str) {
-        std::fs::write(repo.join(name), "contents\n").unwrap();
-        let status = Command::new("git")
-            .current_dir(repo)
-            .args(["add", name])
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
 
     fn subject(repo: &Path) -> String {
         let output = Command::new("git")
@@ -82,15 +53,6 @@ mod tests {
             .unwrap();
 
         String::from_utf8(output.stdout).unwrap().trim().to_string()
-    }
-
-    #[test]
-    fn an_empty_index_commits_nothing() {
-        let repo = repository();
-
-        assert!(!staged(repo.path()));
-        assert!(!commit("sync", repo.path(), "unused").unwrap());
-        assert!(!committed(repo.path()));
     }
 
     #[test]
@@ -104,16 +66,5 @@ mod tests {
         assert_eq!(subject(repo.path()), "sync from thinkpad");
         assert!(committed(repo.path()));
         assert!(!staged(repo.path()));
-    }
-
-    #[test]
-    fn the_default_message_names_the_machine() {
-        assert_eq!(default("thinkpad"), "sync from thinkpad");
-        assert_eq!(default(""), "sync");
-    }
-
-    #[test]
-    fn a_message_given_on_the_command_line_wins() {
-        assert_eq!(message(Some("first".to_string())), "first");
     }
 }

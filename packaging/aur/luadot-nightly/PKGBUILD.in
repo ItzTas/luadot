@@ -12,7 +12,7 @@ depends=('gcc-libs' 'glibc')
 makedepends=('cargo' 'cmake')
 provides=("$_pkgname=$pkgver")
 conflicts=("$_pkgname")
-options=('!lto')
+options=('!lto' '!debug')
 _registry='https://gitlab.digitalventura.com.br/api/v4/projects/luadot%2Fluadot/packages/generic/luadot'
 _version=@VERSION@
 _srcdir="$_pkgname-$pkgver"
@@ -45,4 +45,7 @@ package() {
 	"target/release/$_pkgname" completions bash >"$pkgdir/usr/share/bash-completion/completions/$_pkgname"
 	"target/release/$_pkgname" completions zsh >"$pkgdir/usr/share/zsh/site-functions/_$_pkgname"
 	"target/release/$_pkgname" completions fish >"$pkgdir/usr/share/fish/vendor_completions.d/$_pkgname.fish"
+
+	install -d "$pkgdir/usr/share/man/man1"
+	"target/release/$_pkgname" man >"$pkgdir/usr/share/man/man1/$_pkgname.1"
 }

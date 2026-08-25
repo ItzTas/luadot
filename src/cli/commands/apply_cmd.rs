@@ -4,20 +4,58 @@ use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::crypt;
-use crate::files::{self, SyncOutcome};
+use crate::files::{self, ConflictPolicy, FileStatus, SyncOutcome};
 use crate::lua::Config;
 use crate::output;
 use crate::utils::{self, Run, Workspace};
 
 struct Secrets<'a> {
     config: &'a Config,
-    lock: crypt::Lock,
-    identity: crypt::Identity,
+    ahead: crypt::Ahead,
+}
+
+struct Target<'a> {
+    config: &'a Config,
+    relative: &'a Path,
+    dest: &'a Path,
+    policy: ConflictPolicy,
+}
+
+impl<'a> Target<'a> {
+    fn new(config: &'a Config, relative: &'a Path, dest: &'a Path) -> Self {
+        Self {
+            config,
+            relative,
+            dest,
+            policy: config.conflict_policy(relative),
+        }
+    }
+
+    fn settle(
+        &self,
+        run: &mut Run,
+        status: Result<FileStatus>,
+        sync: impl FnOnce() -> Result<SyncOutcome>,
+    ) -> Result<SyncOutcome> {
+        let dest = self.dest;
+        let status =
+            status.with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
+        let predicted = files::predict(self.policy, status, dest)
+            .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
+
+        run.settle(
+            predicted,
+            self.relative,
+            dest,
+            self.config.on_change(self.relative),
+            || sync().with_context(|| format!("apply: failed to apply {}", dest.display())),
+        )
+    }
 }
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(value_name = "PATH", help = "Narrow the run to this file or directory")]
     pub path: Option<String>,
     #[arg(
         short = 'n',
@@ -29,6 +67,7 @@ pub struct ApplyArgs {
 
 pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("apply")?;
+    let config = utils::configured("apply", &config)?;
 
     let root = utils::managed_root("apply", &home, &repo, args.path.as_deref())?;
 
@@ -40,14 +79,16 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
         return Ok(());
     }
 
+    let lock = config.crypt_lock();
+    let mut identity = config.crypt_identity(&home);
+    require_plugins(&repo, &files, lock, &mut identity)?;
+
     let mut secrets = Secrets {
         config: &config,
-        lock: config.crypt_lock(),
-        identity: config.crypt_identity(&home),
+        ahead: crypt::Ahead::new("apply", lock, identity, sources(&repo, &files)),
     };
-    require_plugins(&repo, &files, &mut secrets)?;
 
-    let mut run = Run::open("apply", args.dry_run, &home, &config)?;
+    let mut run = Run::open("apply", args.dry_run, &config)?;
 
     let mut created = 0u32;
     let mut replaced = 0u32;
@@ -68,10 +109,7 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
             )?,
             None => {
                 let dest = utils::system_path(&home, &repo, file)?;
-                match utils::is_root(relative) {
-                    true => place_root(&config, relative, file, &dest, &mut run)?,
-                    false => place_home(&config, relative, file, &dest, &mut run)?,
-                }
+                place_file(&config, relative, file, &dest, &mut run)?
             }
         };
 
@@ -96,7 +134,22 @@ pub fn apply_cmd(args: ApplyArgs) -> Result<()> {
     Ok(())
 }
 
-fn require_plugins(repo: &Path, files: &[PathBuf], secrets: &mut Secrets) -> Result<()> {
+fn sources(repo: &Path, files: &[PathBuf]) -> Vec<(crypt::Backend, PathBuf)> {
+    files
+        .iter()
+        .filter_map(|file| {
+            let (_, backend) = crypt::split(utils::relative(repo, file))?;
+            Some((backend, file.clone()))
+        })
+        .collect()
+}
+
+fn require_plugins(
+    repo: &Path,
+    files: &[PathBuf],
+    lock: crypt::Lock,
+    identity: &mut crypt::Identity,
+) -> Result<()> {
     let decrypts = files.iter().any(|file| {
         matches!(
             crypt::split(utils::relative(repo, file)),
@@ -107,39 +160,22 @@ fn require_plugins(repo: &Path, files: &[PathBuf], secrets: &mut Secrets) -> Res
         return Ok(());
     }
 
-    crypt::require_identity_plugins(
-        "apply",
-        crypt::Backend::Age,
-        secrets.lock,
-        secrets.identity.path("apply")?,
-    )
+    crypt::require_identity_plugins("apply", crypt::Backend::Age, lock, identity.path("apply")?)
 }
 
-fn place_home(
+fn place_file(
     config: &Config,
     relative: &Path,
     file: &Path,
     dest: &Path,
     run: &mut Run,
 ) -> Result<SyncOutcome> {
-    let mode = config.link_mode(relative);
-    let policy = config.conflict_policy(relative);
+    let target = Target::new(config, relative, dest);
+    let placement = config.placement(relative);
 
-    let status = files::file_status(mode, file, dest)
-        .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
-    let predicted = files::predict(policy, status, dest)
-        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
-
-    run.settle(
-        predicted,
-        relative,
-        dest,
-        config.on_change(relative),
-        || {
-            files::sync_file(policy, mode, file, dest)
-                .with_context(|| format!("apply: failed to apply {}", dest.display()))
-        },
-    )
+    target.settle(run, files::file_status(placement, file, dest), || {
+        files::sync_file(target.policy, placement, file, dest)
+    })
 }
 
 fn place_encrypted(
@@ -153,95 +189,18 @@ fn place_encrypted(
 ) -> Result<SyncOutcome> {
     let config = secrets.config;
     let dest = utils::system_path(home, repo, &repo.join(stripped))?;
-    let policy = config.conflict_policy(stripped);
 
-    let contents = crypt::decrypt(
-        "apply",
-        backend,
-        secrets.lock,
-        secrets.identity.path("apply")?,
-        file,
-    )
-    .with_context(|| format!("apply: failed to decrypt {}", file.display()))?;
+    let contents = secrets
+        .ahead
+        .take(backend, file)
+        .with_context(|| format!("apply: failed to decrypt {}", file.display()))?;
 
-    if utils::is_root(stripped) {
-        return place_root_secret(config, stripped, &contents, &dest, run);
-    }
+    let target = Target::new(config, stripped, &dest);
+    let placement = config.placement(stripped);
 
-    let status = crypt::plain_status("apply", &contents, &dest)
-        .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
-    let predicted = files::predict(policy, status, &dest)
-        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
-
-    run.settle(
-        predicted,
-        stripped,
-        &dest,
-        config.on_change(stripped),
-        || {
-            crypt::place("apply", policy, &contents, &dest)
-                .with_context(|| format!("apply: failed to apply {}", dest.display()))
-        },
-    )
-}
-
-fn place_root_secret(
-    config: &Config,
-    relative: &Path,
-    contents: &[u8],
-    dest: &Path,
-    run: &mut Run,
-) -> Result<SyncOutcome> {
-    let policy = config.conflict_policy(relative);
-    let mode = config.mode(relative);
-
-    let status = crypt::escalated_status("apply", contents, dest, mode)
-        .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
-    let predicted = files::predict(policy, status, dest)
-        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
-
-    run.settle(
-        predicted,
-        relative,
-        dest,
-        config.on_change(relative),
-        || {
-            crypt::place_system(
-                "apply",
-                policy,
-                contents,
-                dest,
-                mode,
-                config.owner(relative),
-            )
-            .with_context(|| format!("apply: failed to apply {}", dest.display()))
-        },
-    )
-}
-
-fn place_root(
-    config: &Config,
-    relative: &Path,
-    file: &Path,
-    dest: &Path,
-    run: &mut Run,
-) -> Result<SyncOutcome> {
-    let policy = config.conflict_policy(relative);
-    let mode = config.mode(relative);
-
-    let status = files::escalated_status(file, dest, mode)
-        .with_context(|| format!("apply: failed to inspect {}", dest.display()))?;
-    let predicted = files::predict(policy, status, dest)
-        .with_context(|| format!("apply: failed to apply {}", dest.display()))?;
-
-    run.settle(
-        predicted,
-        relative,
-        dest,
-        config.on_change(relative),
-        || {
-            files::sync_system(policy, file, dest, mode, config.owner(relative))
-                .with_context(|| format!("apply: failed to apply {}", dest.display()))
-        },
+    target.settle(
+        run,
+        crypt::plain_status("apply", &contents, &dest, placement.mode()),
+        || crypt::place("apply", target.policy, placement, &contents, &dest),
     )
 }

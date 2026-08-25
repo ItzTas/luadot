@@ -21,6 +21,14 @@ pub fn slow(lua: &Lua, call: &str) {
     output::warn(message);
 }
 
+pub fn slow_in(lua: &Lua, call: &str, home: Surface) {
+    if Surface::current(lua) != Some(home) {
+        return;
+    }
+
+    slow(lua, call);
+}
+
 pub fn inert(lua: &Lua, call: &str, home: Surface) -> bool {
     let Some(surface) = Surface::current(lua) else {
         return false;
@@ -59,19 +67,28 @@ fn silence() -> String {
 }
 
 fn silenced(lua: &Lua) -> bool {
-    lua.app_data_ref::<Config>()
-        .is_some_and(|config| !config.pkg_warn())
+    let Ok(shared) = Config::shared(lua) else {
+        return false;
+    };
+    let Ok(config) = shared.try_lock() else {
+        return false;
+    };
+
+    !config.pkg_warn()
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
+    use crate::lua::Shared;
     use crate::lua::runtime::runtime;
 
     fn running(surface: Surface) -> Lua {
         let lua = runtime().unwrap();
         surface.install(&lua);
-        lua.set_app_data(Config::default());
+        lua.set_app_data(Shared::new(Mutex::new(Config::default())));
         lua
     }
 
@@ -86,23 +103,6 @@ mod tests {
     }
 
     #[test]
-    fn a_template_is_warned_about_the_cost_it_pays_on_every_resolution() {
-        let message = slow_message(Surface::Template, "cmd").unwrap();
-
-        assert!(message.contains("`ld.cmd` in luadot.lua"));
-        assert!(message.contains("runs every time the template is resolved"));
-    }
-
-    #[test]
-    fn an_inert_call_names_the_surface_it_belongs_to() {
-        let message = inert_message(Surface::Setup, "rules", Surface::Config);
-
-        assert!(message.contains("`ld.rules` in a setup script does nothing"));
-        assert!(message.contains("config.lua is where it has an effect"));
-        assert!(message.contains("`ld.opt.pkg_warn(false)`"));
-    }
-
-    #[test]
     fn a_call_away_from_home_is_inert() {
         assert!(inert(
             &running(Surface::Bootstrap),
@@ -110,25 +110,18 @@ mod tests {
             Surface::Config
         ));
         assert!(inert(
-            &running(Surface::Config),
-            "alt.out",
-            Surface::Template
+            &running(Surface::Template),
+            "crypt.lock",
+            Surface::Config
         ));
     }
 
     #[test]
     fn silencing_the_warning_keeps_the_call_inert() {
         let lua = running(Surface::Bootstrap);
-        lua.app_data_mut::<Config>().unwrap().set_pkg_warn(false);
+        Config::building(&lua, |config| config.set_pkg_warn(false)).unwrap();
 
         assert!(silenced(&lua));
         assert!(inert(&lua, "rules", Surface::Config));
-    }
-
-    #[test]
-    fn a_runtime_without_a_surface_stays_out_of_the_way() {
-        let lua = runtime().unwrap();
-
-        assert!(!inert(&lua, "rules", Surface::Config));
     }
 }

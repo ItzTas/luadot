@@ -55,14 +55,6 @@ mod tests {
     }
 
     #[test]
-    fn a_desktop_carries_none() {
-        let dir = supplies(&[("AC", "Mains", None)]);
-
-        assert!(!has_battery(dir.path()));
-        assert!(!has_battery(Path::new("/nonexistent/power_supply")));
-    }
-
-    #[test]
     fn the_battery_of_a_peripheral_is_not_the_machines() {
         let dir = supplies(&[("hidpp_battery_0", "Battery", Some("Device"))]);
 

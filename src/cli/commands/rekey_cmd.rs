@@ -10,7 +10,7 @@ use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct RekeyArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(value_name = "PATH", help = "Narrow the run to this file or directory")]
     pub path: Option<String>,
     #[arg(
         short = 'n',
@@ -29,6 +29,7 @@ struct Secret {
 
 pub fn rekey_cmd(args: RekeyArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("rekey")?;
+    let config = utils::configured("rekey", &config)?;
 
     let root = utils::managed_root("rekey", &home, &repo, args.path.as_deref())?;
     let files = utils::managed_files("rekey", &repo, &root, |relative| {
@@ -63,9 +64,19 @@ pub fn rekey_cmd(args: RekeyArgs) -> Result<()> {
         )?;
     }
 
+    let mut ahead = crypt::Ahead::new(
+        "rekey",
+        lock,
+        identity,
+        secrets
+            .iter()
+            .map(|secret| (secret.backend, secret.file.clone()))
+            .collect(),
+    );
+
     for secret in &secrets {
         let target = target(&repo, secret, backend);
-        rekey(&config, lock, &mut identity, secret, &target)?;
+        rekey(&config, lock, &mut ahead, secret, &target)?;
         output::entry(
             Tone::Good,
             "rekeyed",
@@ -122,18 +133,13 @@ fn foresee(repo: &Path, secrets: &[Secret], backend: crypt::Backend) -> Result<(
 fn rekey(
     config: &Config,
     lock: crypt::Lock,
-    identity: &mut crypt::Identity,
+    ahead: &mut crypt::Ahead,
     secret: &Secret,
     target: &Path,
 ) -> Result<()> {
-    let contents = crypt::decrypt(
-        "rekey",
-        secret.backend,
-        lock,
-        identity.path("rekey")?,
-        &secret.file,
-    )
-    .with_context(|| format!("rekey: failed to decrypt {}", secret.file.display()))?;
+    let contents = ahead
+        .take(secret.backend, &secret.file)
+        .with_context(|| format!("rekey: failed to decrypt {}", secret.file.display()))?;
 
     let mut staging = target.as_os_str().to_os_string();
     staging.push(".tmp");
@@ -173,41 +179,13 @@ mod tests {
     }
 
     #[test]
-    fn only_the_encrypted_files_are_collected() {
-        let repo = repo();
-        let files = [
-            repo.join("home/.bashrc"),
-            repo.join("home/.netrc.age"),
-            repo.join("root/etc/wireguard/wg0.conf.gpg"),
-        ];
-
-        let secrets = secrets(&repo, &files);
-
-        assert_eq!(
-            secrets,
-            [
-                Secret {
-                    file: repo.join("home/.netrc.age"),
-                    stripped: PathBuf::from("home/.netrc"),
-                    backend: crypt::Backend::Age,
-                },
-                Secret {
-                    file: repo.join("root/etc/wireguard/wg0.conf.gpg"),
-                    stripped: PathBuf::from("root/etc/wireguard/wg0.conf"),
-                    backend: crypt::Backend::Gpg,
-                },
-            ]
-        );
-    }
-
-    #[test]
     fn a_secret_moves_to_the_extension_of_the_configured_backend() {
         let repo = repo();
-        let secrets = secrets(&repo, &[repo.join("home/.netrc.age")]);
+        let secrets = secrets(&repo, &[repo.join(".netrc.age")]);
 
         assert_eq!(
             target(&repo, &secrets[0], crypt::Backend::Gpg),
-            repo.join("home/.netrc.gpg")
+            repo.join(".netrc.gpg")
         );
     }
 }

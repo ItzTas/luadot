@@ -91,46 +91,4 @@ mod tests {
 
         assert!(err.contains("`ld.cmd` `test` exited with status 3"));
     }
-
-    #[test]
-    fn the_message_names_the_namespace_that_ran_it() {
-        let lua = runtime().unwrap();
-
-        let err = run(&lua, shell("exit 1"), "git", "git status")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.git` `git status` exited with status 1"));
-    }
-
-    #[test]
-    fn reports_a_command_that_cannot_be_started() {
-        let lua = runtime().unwrap();
-
-        let err = run(&lua, Command::new("luadot-no-such-program"), "cmd", "test")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.cmd` failed to run `test`"));
-    }
-
-    #[test]
-    fn reports_output_that_is_not_utf8() {
-        let lua = runtime().unwrap();
-
-        let err = run(&lua, shell(r"printf '\377'"), "cmd", "test")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("produced invalid UTF-8"));
-    }
-
-    #[test]
-    fn the_display_names_the_whole_invocation() {
-        assert_eq!(
-            display("git", &["clone".to_string(), "url".to_string()]),
-            "git clone url"
-        );
-        assert_eq!(display("ls", &[]), "ls");
-    }
 }

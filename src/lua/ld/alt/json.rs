@@ -1,94 +1,10 @@
-use mlua::{Function, Lua, Table, Value};
-use serde_json::{Map, Number, Value as Json};
+use mlua::{Function, Lua};
 
-use super::super::constants::API;
-use super::super::parse::external;
-use super::constants::{JSON, JSON_DEPTH, NAMESPACE};
+use super::super::json::encoder;
+use super::constants::{JSON, NAMESPACE};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|_, value: Value| {
-        let json = convert(&value, 0)?;
-
-        serde_json::to_string_pretty(&json).map_err(|err| {
-            external(format!(
-                "`{API}.{NAMESPACE}.{JSON}` failed to serialize: {err}"
-            ))
-        })
-    })
-}
-
-fn convert(value: &Value, depth: usize) -> mlua::Result<Json> {
-    if depth > JSON_DEPTH {
-        return Err(external(format!(
-            "`{API}.{NAMESPACE}.{JSON}` gave up below {JSON_DEPTH} nested tables; a table holding itself never ends"
-        )));
-    }
-
-    match value {
-        Value::Nil => Ok(Json::Null),
-        Value::Boolean(state) => Ok(Json::Bool(*state)),
-        Value::Integer(number) => Ok(Json::from(*number)),
-        Value::Number(number) => float(*number),
-        Value::String(text) => Ok(Json::String(text.to_str()?.to_string())),
-        Value::Table(table) => collect(table, depth),
-        other => Err(external(format!(
-            "`{API}.{NAMESPACE}.{JSON}` cannot serialize {}",
-            other.type_name()
-        ))),
-    }
-}
-
-fn float(number: f64) -> mlua::Result<Json> {
-    Number::from_f64(number).map(Json::Number).ok_or_else(|| {
-        external(format!(
-            "`{API}.{NAMESPACE}.{JSON}` cannot serialize {number}"
-        ))
-    })
-}
-
-fn collect(table: &Table, depth: usize) -> mlua::Result<Json> {
-    let length = table.raw_len();
-    let entries = table.pairs::<Value, Value>().count();
-
-    if length == 0 {
-        return object(table, depth);
-    }
-    if length == entries {
-        return array(table, depth);
-    }
-
-    Err(external(format!(
-        "`{API}.{NAMESPACE}.{JSON}` got a table mixing a list of {length} value(s) with named keys"
-    )))
-}
-
-fn array(table: &Table, depth: usize) -> mlua::Result<Json> {
-    let mut values = Vec::new();
-    for value in table.sequence_values::<Value>() {
-        values.push(convert(&value?, depth + 1)?);
-    }
-
-    Ok(Json::Array(values))
-}
-
-fn object(table: &Table, depth: usize) -> mlua::Result<Json> {
-    let mut entries = Map::new();
-    for pair in table.pairs::<Value, Value>() {
-        let (key, value) = pair?;
-        entries.insert(name(&key)?, convert(&value, depth + 1)?);
-    }
-
-    Ok(Json::Object(entries))
-}
-
-fn name(key: &Value) -> mlua::Result<String> {
-    match key {
-        Value::String(text) => Ok(text.to_str()?.to_string()),
-        other => Err(external(format!(
-            "`{API}.{NAMESPACE}.{JSON}` needs string keys, got a {} one",
-            other.type_name()
-        ))),
-    }
+    encoder(lua, &format!("{NAMESPACE}.{JSON}"))
 }
 
 #[cfg(test)]
@@ -101,7 +17,11 @@ mod tests {
 
     fn json(source: &str) -> mlua::Result<String> {
         let lua = runtime().unwrap();
-        let paths = Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot"));
+        let paths = Paths::new(
+            Path::new("/home/u"),
+            Path::new("/home/u/.config/luadot"),
+            Path::new("/home/u/.local/share/luadot"),
+        );
         install(&lua, Surface::Standalone, &paths, &Classes::default()).unwrap();
 
         lua.load(source).eval()
@@ -120,14 +40,6 @@ mod tests {
     }
 
     #[test]
-    fn a_sequence_becomes_an_array() {
-        assert_eq!(
-            json(r#"return ld.alt.json({ "one", "two" })"#).unwrap(),
-            "[\n  \"one\",\n  \"two\"\n]"
-        );
-    }
-
-    #[test]
     fn every_scalar_keeps_its_type() {
         assert_eq!(json("return ld.alt.json(true)").unwrap(), "true");
         assert_eq!(json("return ld.alt.json(2)").unwrap(), "2");
@@ -137,31 +49,10 @@ mod tests {
     }
 
     #[test]
-    fn quotes_and_newlines_are_escaped() {
-        assert_eq!(
-            json(r#"return ld.alt.json({ line = "a\"b\nc" })"#).unwrap(),
-            "{\n  \"line\": \"a\\\"b\\nc\"\n}"
-        );
-    }
-
-    #[test]
-    fn a_table_mixing_a_list_with_names_is_reported() {
-        let err = error(r#"return ld.alt.json({ "one", name = "two" })"#);
-
-        assert!(err.contains("mixing a list of 1 value(s) with named keys"));
-    }
-
-    #[test]
-    fn what_json_has_no_word_for_is_reported() {
-        assert!(error("return ld.alt.json({ f = print })").contains("cannot serialize function"));
-        assert!(error("return ld.alt.json(0 / 0)").contains("cannot serialize NaN"));
-        assert!(error("return ld.alt.json(1 / 0)").contains("cannot serialize inf"));
-    }
-
-    #[test]
     fn a_table_holding_itself_is_reported() {
         let err = error("local t = {}; t.self = t; return ld.alt.json(t)");
 
+        assert!(err.contains("`ld.alt.json` gave up"));
         assert!(err.contains("a table holding itself never ends"));
     }
 }

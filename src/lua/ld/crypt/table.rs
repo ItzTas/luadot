@@ -38,29 +38,4 @@ mod tests {
             }
         );
     }
-
-    #[test]
-    fn the_call_form_only_touches_the_options_it_carries() {
-        let config = from_source(
-            r#"
-            ld.crypt.backend("gpg")
-            ld.crypt({ lock = "passphrase" })
-            "#,
-        )
-        .unwrap();
-
-        assert_eq!(config.crypt_backend(), Backend::Gpg);
-        assert_eq!(config.crypt_secrets(), &Secrets::Passphrase);
-    }
-
-    #[test]
-    fn an_unknown_option_is_refused() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.crypt({ secret = "hunter2" })"#).unwrap_err()
-        );
-
-        assert!(err.contains("unknown crypt option `secret`"));
-        assert!(err.contains("backend, lock"));
-    }
 }

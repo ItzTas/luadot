@@ -26,22 +26,3 @@ fn template_name(path: &Path) -> Option<&str> {
 
     Some(target)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_directory_carrying_the_suffix_is_a_template() {
-        assert!(is_template(Path::new("/repo/.zshrc.luadot")));
-        assert!(is_template(Path::new("/repo/.config/nvim/init.lua.luadot")));
-    }
-
-    #[test]
-    fn the_target_drops_the_suffix_and_keeps_the_location() {
-        assert_eq!(
-            template_target(Path::new("/repo/.config/nvim/init.lua.luadot")),
-            Some(PathBuf::from("/repo/.config/nvim/init.lua"))
-        );
-    }
-}

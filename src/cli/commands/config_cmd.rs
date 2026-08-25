@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{Args, Subcommand};
 
 use crate::lua::{self, Config, Rule};
@@ -44,6 +44,7 @@ fn show() -> Result<()> {
 
     let file = lua::config_path()?;
     let config = lua::load_config()?;
+    let config = utils::configured("config", &config)?;
 
     output::field("repository", repo);
     output::field("config", file.display());
@@ -95,17 +96,15 @@ fn path() -> Result<()> {
 }
 
 fn repo() -> Result<()> {
-    let repo = utils::require_repo("config", lua::load_config()?.repo_dir())?;
+    let config = lua::load_config()?;
+    let repo = utils::require_repo("config", utils::configured("config", &config)?.repo_dir())?;
     output::line(repo.display());
     Ok(())
 }
 
 fn edit() -> Result<()> {
     let file = lua::config_path()?;
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("config: failed to create {}", parent.display()))?;
-    }
+    lua::place_starter("config", &file)?;
 
     utils::open("config", &file)
 }
@@ -139,16 +138,6 @@ mod tests {
                 Some(crate::files::ConflictPolicy::Skip)
             )),
             "  link=hard conflict=skip"
-        );
-    }
-
-    #[test]
-    fn overrides_renders_an_ignored_rule() {
-        let pattern = glob("*.swp");
-
-        assert_eq!(
-            overrides(&Rule::new(pattern, None, None).with_ignore(Some(true))),
-            "  ignore=true"
         );
     }
 }

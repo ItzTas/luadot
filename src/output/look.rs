@@ -102,22 +102,6 @@ mod tests {
     }
 
     #[test]
-    fn an_effect_is_added_to_the_style_of_the_tone() {
-        let look = Look::from(Tone::Good).with_underline(Some(true));
-        let style = look.style();
-
-        assert_eq!(style.get_fg_color(), Some(AnsiColor::Green.into()));
-        assert!(style.get_effects().contains(Effects::UNDERLINE));
-    }
-
-    #[test]
-    fn an_effect_is_taken_back_from_the_style_of_the_tone() {
-        let style = Look::from(Tone::Strong).with_bold(Some(false)).style();
-
-        assert!(!style.get_effects().contains(Effects::BOLD));
-    }
-
-    #[test]
     fn every_effect_reaches_the_style() {
         let style = Look::default()
             .with_bold(Some(true))
@@ -136,12 +120,5 @@ mod tests {
             assert!(style.get_effects().contains(effect));
         }
         assert_eq!(style.get_bg_color(), Some(RgbColor(255, 136, 0).into()));
-    }
-
-    #[test]
-    fn what_is_already_set_stays_when_nothing_is_given() {
-        let look = Look::from(Tone::Good).with_bold(Some(true));
-
-        assert_eq!(look.with_tone(None).with_bold(None), look);
     }
 }

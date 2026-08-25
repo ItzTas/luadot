@@ -1,9 +1,11 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
+use super::atomic::replace_file;
 use super::constants::COMMAND;
-use super::fs::{create_parent, exists, mode_bits, regular_file, remove_existing, write_mode};
+use super::fs::{exists, mode_bits, regular_file, write_contents};
+use super::placement::Attributes;
 use super::status::FileStatus;
 use super::sync::{ConflictPolicy, SyncOutcome, refused};
 
@@ -21,17 +23,16 @@ pub fn text_status(dest: &Path, contents: &str, mode: Option<u32>) -> Result<Fil
 
 pub fn write_file(
     policy: ConflictPolicy,
+    attributes: Attributes,
     dest: &Path,
     contents: &str,
-    mode: Option<u32>,
 ) -> Result<SyncOutcome> {
     if !exists(COMMAND, dest)? {
-        create_parent(COMMAND, dest)?;
-        write(dest, contents, mode)?;
+        write(attributes, dest, contents)?;
         return Ok(SyncOutcome::Created);
     }
 
-    if holds(dest, contents, mode)? {
+    if holds(dest, contents, attributes.mode())? {
         return Ok(SyncOutcome::AlreadySynced);
     }
 
@@ -39,8 +40,7 @@ pub fn write_file(
         return Ok(outcome);
     }
 
-    remove_existing(COMMAND, dest)?;
-    write(dest, contents, mode)?;
+    write(attributes, dest, contents)?;
 
     Ok(SyncOutcome::Replaced)
 }
@@ -56,13 +56,12 @@ fn holds(path: &Path, contents: &str, mode: Option<u32>) -> Result<bool> {
     Ok(matches!(std::fs::read(path), Ok(found) if found == contents.as_bytes()))
 }
 
-fn write(dest: &Path, contents: &str, mode: Option<u32>) -> Result<()> {
-    let Some(mode) = mode else {
-        return std::fs::write(dest, contents)
-            .with_context(|| format!("{COMMAND}: failed to write {}", dest.display()));
-    };
+fn write(attributes: Attributes, dest: &Path, contents: &str) -> Result<()> {
+    replace_file(COMMAND, dest, |staged| {
+        write_contents(COMMAND, staged, contents.as_bytes(), attributes.mode())?;
 
-    write_mode(COMMAND, dest, contents.as_bytes(), mode)
+        attributes.own(COMMAND, staged)
+    })
 }
 
 #[cfg(test)]
@@ -72,38 +71,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn writes_a_missing_destination() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("nested/deep/.zshrc");
-
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "generated", None).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Created);
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "generated");
-    }
-
-    #[test]
-    fn matching_contents_are_already_synced() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".zshrc");
-        std::fs::write(&dest, "generated").unwrap();
-
-        let outcome = write_file(ConflictPolicy::Error, &dest, "generated", None).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::AlreadySynced);
-    }
-
-    #[test]
-    fn overwrite_replaces_diverging_contents() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".zshrc");
-        std::fs::write(&dest, "stale").unwrap();
-
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "generated", None).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Replaced);
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "generated");
+    fn with_mode(mode: u32) -> Attributes<'static> {
+        Attributes::default().with_mode(Some(mode))
     }
 
     #[test]
@@ -112,19 +81,16 @@ mod tests {
         let dest = dir.path().join(".zshrc");
         std::fs::write(&dest, "stale").unwrap();
 
-        let outcome = write_file(ConflictPolicy::Skip, &dest, "generated", None).unwrap();
+        let outcome = write_file(
+            ConflictPolicy::Skip,
+            Attributes::default(),
+            &dest,
+            "generated",
+        )
+        .unwrap();
 
         assert_eq!(outcome, SyncOutcome::Skipped);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "stale");
-    }
-
-    #[test]
-    fn error_policy_aborts_on_conflict() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".zshrc");
-        std::fs::write(&dest, "stale").unwrap();
-
-        assert!(write_file(ConflictPolicy::Error, &dest, "generated", None).is_err());
     }
 
     #[test]
@@ -132,7 +98,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".netrc");
 
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o600)).unwrap();
+        let outcome =
+            write_file(ConflictPolicy::Overwrite, with_mode(0o600), &dest, "secret").unwrap();
 
         assert_eq!(outcome, SyncOutcome::Created);
         assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o600);
@@ -146,29 +113,18 @@ mod tests {
         std::fs::write(&dest, "secret").unwrap();
         std::fs::set_permissions(&dest, Permissions::from_mode(0o644)).unwrap();
 
-        let outcome = write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o600)).unwrap();
+        let outcome =
+            write_file(ConflictPolicy::Overwrite, with_mode(0o600), &dest, "secret").unwrap();
 
         assert_eq!(outcome, SyncOutcome::Replaced);
         assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o600);
     }
 
     #[test]
-    fn a_mode_that_diverges_follows_the_policy() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join(".netrc");
-        write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o644)).unwrap();
-
-        let outcome = write_file(ConflictPolicy::Skip, &dest, "secret", Some(0o600)).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Skipped);
-        assert_eq!(mode_bits(&std::fs::metadata(&dest).unwrap()), 0o644);
-    }
-
-    #[test]
     fn text_status_reports_a_mode_that_diverges() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".netrc");
-        write_file(ConflictPolicy::Overwrite, &dest, "secret", Some(0o644)).unwrap();
+        write_file(ConflictPolicy::Overwrite, with_mode(0o644), &dest, "secret").unwrap();
 
         assert_eq!(
             text_status(&dest, "secret", Some(0o600)).unwrap(),

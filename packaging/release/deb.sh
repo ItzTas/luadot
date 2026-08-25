@@ -54,6 +54,8 @@ for arch in "${!debian_archs[@]}"; do
 		"$tree/usr/share/zsh/vendor-completions/_luadot"
 	install -Dm0644 "$source/completions/luadot.fish" \
 		"$tree/usr/share/fish/vendor_completions.d/luadot.fish"
+	install -Dm0644 "$source/luadot.1" "$tree/usr/share/man/man1/luadot.1"
+	gzip -9n "$tree/usr/share/man/man1/luadot.1"
 
 	installed_size=$(du -ks "$tree" | cut -f 1)
 	glibc=$(glibc_floor "$source/luadot")

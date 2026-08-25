@@ -1,11 +1,32 @@
 [package]
 name = "luadot"
-version = "0.1.0"
+version = "0.1.0-nightly.13"
 edition = "2024"
+rust-version = "1.87"
 description = "A dotfiles manager configured in Lua"
 build = "build/main.rs"
 repository = "https://github.com/ItzTas/luadot"
+documentation = "https://github.com/ItzTas/luadot/tree/main/docs"
+readme = "README.md"
 license = "MIT"
+keywords = ["dotfiles", "lua", "cli", "config", "dotfile-manager"]
+categories = ["command-line-utilities", "config"]
+exclude = [
+  "/.cargo",
+  "/.claude",
+  "/.githooks",
+  "/.github",
+  "/.gitlab",
+  "/CLAUDE.md",
+  "/ROADMAP.md",
+  "/cog.toml",
+  "/deny.toml",
+  "/flake.lock",
+  "/flake.nix",
+  "/internal",
+  "/nix",
+  "/packaging",
+]
 
 [lib]
 bench = false
@@ -15,14 +36,24 @@ name = "luadot"
 path = "src/main.rs"
 bench = false
 
+[[bin]]
+name = "luadot-meta"
+path = "src/bin/meta.rs"
+required-features = ["meta"]
+bench = false
+
+[features]
+meta = ["dep:tealr"]
+
 [dependencies]
 anstream = "1.0.0"
 anstyle = "1.0.14"
-anyhow = "1.0.102"
-clap = { version = "4.6.6", features = ["derive"] }
+anyhow = "1.0.104"
+clap = { version = "4.6.6", features = ["derive", "string"] }
 clap_complete = "4.6.9"
+clap_mangen = "0.3.3"
 etcetera = "0.11.0"
-gix = { version = "0.84.0", features = ["blocking-network-client", "blocking-http-transport-reqwest-rust-tls"] }
+gix = { version = "0.84.0", features = ["blocking-network-client", "blocking-http-transport-reqwest-rust-tls", "interrupt"] }
 glob = "0.3.4"
 mlua = { version = "0.11.6", features = ["lua54", "vendored", "send"] }
 prodash = { version = "31.0.0", features = [
@@ -34,12 +65,18 @@ prodash = { version = "31.0.0", features = [
 regex = "1.13.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tealr = { version = "0.11.0", optional = true, default-features = false }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [build-dependencies]
 cc = "1.2.63"
 lua-src = "550.0.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"

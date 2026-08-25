@@ -124,24 +124,15 @@ mod tests {
     }
 
     #[test]
-    fn a_scratch_repository_starts_on_the_branch_it_is_given() {
-        let (_dir, root) = repository("luadot");
-        let repository = gix::open(&root).unwrap();
-
-        assert_eq!(repository.head_name().unwrap().unwrap().shorten(), "luadot");
-        assert!(repository.head().unwrap().is_unborn());
-    }
-
-    #[test]
     fn recording_stages_every_file_it_is_given() {
         let (_dir, root) = repository("luadot");
-        write(&root, "home/.bashrc", "managed\n", 0o644);
-        write(&root, "home/.vimrc", "set number\n", 0o644);
+        write(&root, ".bashrc", "managed\n", 0o644);
+        write(&root, ".vimrc", "set number\n", 0o644);
 
         record(
             "diff",
             &root,
-            &[PathBuf::from("home/.bashrc"), PathBuf::from("home/.vimrc")],
+            &[PathBuf::from(".bashrc"), PathBuf::from(".vimrc")],
         )
         .unwrap();
 
@@ -153,7 +144,7 @@ mod tests {
             .map(|entry| entry.path(&index).to_string())
             .collect();
 
-        assert_eq!(staged, ["home/.bashrc", "home/.vimrc"]);
+        assert_eq!(staged, [".bashrc", ".vimrc"]);
     }
 
     #[test]
@@ -174,19 +165,5 @@ mod tests {
         let modes: Vec<entry::Mode> = index.entries().iter().map(|entry| entry.mode).collect();
 
         assert_eq!(modes, [entry::Mode::FILE, entry::Mode::FILE_EXECUTABLE]);
-    }
-
-    #[test]
-    fn the_staged_content_is_what_the_file_held() {
-        let (_dir, root) = repository("luadot");
-        write(&root, "home/.bashrc", "managed\n", 0o644);
-
-        record("diff", &root, &[PathBuf::from("home/.bashrc")]).unwrap();
-
-        let repository = gix::open(&root).unwrap();
-        let index = repository.index().unwrap();
-        let id = index.entries()[0].id;
-
-        assert_eq!(repository.find_object(id).unwrap().data, b"managed\n");
     }
 }

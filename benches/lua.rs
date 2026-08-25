@@ -2,9 +2,11 @@ mod support;
 
 use std::hint::black_box;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use luadot::lua;
+use luadot::lua::Config;
 use luadot::state::Classes;
 use support::{Fixture, OUTPUT_COUNT, write};
 
@@ -20,6 +22,7 @@ fn templates(c: &mut Criterion) {
     let mut group = c.benchmark_group("template");
     let fixture = Fixture::new(0);
     let classes = Classes::default();
+    let config = Arc::new(Mutex::new(Config::default()));
     let scripts = [
         ("startup", STARTUP.to_string()),
         ("file", PICK.to_string()),
@@ -34,8 +37,15 @@ fn templates(c: &mut Criterion) {
         group.bench_function(*name, |b| {
             b.iter(|| {
                 black_box(
-                    lua::load_template("alt", fixture.home(), fixture.repo(), &dir, &classes)
-                        .expect("a resolved template"),
+                    lua::load_template(
+                        "alt",
+                        fixture.home(),
+                        fixture.repo(),
+                        &dir,
+                        &classes,
+                        &config,
+                    )
+                    .expect("a resolved template"),
                 )
             });
         });
@@ -47,8 +57,15 @@ fn templates(c: &mut Criterion) {
     group.bench_function("standalone", |b| {
         b.iter(|| {
             black_box(
-                lua::load_template_file("alt", fixture.home(), fixture.repo(), &file, &classes)
-                    .expect("a resolved standalone template"),
+                lua::load_template_file(
+                    "alt",
+                    fixture.home(),
+                    fixture.repo(),
+                    &file,
+                    &classes,
+                    &config,
+                )
+                .expect("a resolved standalone template"),
             )
         });
     });

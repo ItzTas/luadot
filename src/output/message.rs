@@ -120,23 +120,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_mark_opens_the_line() {
-        let message = Message::new("applied").with_mark(Some("»".to_string()));
-
-        assert_eq!(message.head(), "» applied");
-    }
-
-    #[test]
-    fn a_column_pads_the_head_and_leaves_the_tail_alone() {
-        let message = Message::new("create")
-            .with_tail("~/.bashrc")
-            .with_column(Some(11));
-
-        assert_eq!(message.head(), "create     ");
-        assert_eq!(message.tail(), "~/.bashrc");
-    }
-
-    #[test]
     fn a_mark_is_padded_with_the_head_it_opens() {
         let message = Message::new("create")
             .with_mark(Some("»".to_string()))

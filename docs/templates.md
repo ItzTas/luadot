@@ -8,18 +8,15 @@ resolves both; `apply` walks past them.
 
 ```
 ~/dotfiles/
-├── home/
-│   ├── .zshrc.luadot/                 -- produces ~/.zshrc
-│   │   ├── luadot.lua
-│   │   ├── laptop.zsh
-│   │   └── desktop.zsh
-│   ├── .config/nvim/init.lua.luadot/  -- produces ~/.config/nvim/init.lua
-│   │   ├── luadot.lua
-│   │   └── init.tmpl.lua
-│   ├── .zprofile.luadot               -- a standalone template, produces ~/.zprofile
-│   └── .vimrc                         -- a plain managed file
-└── root/
-    └── etc/motd.luadot                -- produces /etc/motd
+├── .zshrc.luadot/                 -- produces ~/.zshrc
+│   ├── luadot.lua
+│   ├── laptop.zsh
+│   └── desktop.zsh
+├── .config/nvim/init.lua.luadot/  -- produces ~/.config/nvim/init.lua
+│   ├── luadot.lua
+│   └── init.tmpl.lua
+├── .zprofile.luadot               -- a standalone template, produces ~/.zprofile
+└── .vimrc                         -- a plain managed file
 ```
 
 The destination is the template's own path without the suffix, so the
@@ -39,9 +36,12 @@ luadot tmpl new -f ~/.zprofile         -- ~/.zprofile.luadot, a standalone templ
 ```
 
 The template stays where it was written and the repository links it, so
-`~/.zshrc.luadot/luadot.lua` and `~/dotfiles/home/.zshrc.luadot/luadot.lua`
-are the same file. Files you put in a directory template afterwards are yours
-to `add`. A relative path resolves against the current directory and has to
+`~/.zshrc.luadot/luadot.lua` and `~/dotfiles/.zshrc.luadot/luadot.lua`
+are the same file. Files put in a directory template afterwards need
+`luadot add`. A directory template also gets a `.luarc.json` pointing
+lua-language-server at `~/.local/share/luadot/meta`, the definitions
+`luadot meta install` writes, so `luadot.lua` completes from either path; see
+[editor support](ld.md#editor-support). A relative path resolves against the current directory and has to
 land inside your home directory. Both forms resolve to an empty file until you
 write them, and neither replaces anything already there.
 
@@ -51,7 +51,7 @@ write them, and neither replaces anything already there.
 by returning the same table:
 
 ```lua
--- home/.zshrc.luadot/luadot.lua
+-- .zshrc.luadot/luadot.lua
 return {
   content = (ld.sys.host.name == "thinkpad") and ld.alt.file("laptop.zsh")
       or ld.alt.file("desktop.zsh"),
@@ -60,7 +60,7 @@ return {
 ```
 
 ```lua
--- home/.config/nvim/init.lua.luadot/luadot.lua
+-- .config/nvim/init.lua.luadot/luadot.lua
 ld.alt.out({ content = ld.alt.render("init.tmpl.lua", { leader = " " }) })
 ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 ```
@@ -74,21 +74,19 @@ ld.alt.out({ dest = "~/.config/nvim/host.lua", content = "vim.g.host = ' '\n" })
 | `ld.alt.read(name)` | a path | What that file holds, as a string, never run. |
 | `ld.alt.exists(name)` | a path | Whether that file is there. |
 | `ld.alt.glob(pattern)` | a pattern | The names of the files it matches, sorted, named the way `ld.alt.read` takes them. |
-| `ld.alt.json(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. |
+| `ld.alt.json(value)` | a table or a scalar | That value as JSON, indented, with sorted keys; the same call as `ld.json.encode`. |
 
-The rest of the [ld interface](ld.md) is there too: `ld.sys`, `ld.class.get`,
-`ld.cmd`, `ld.git`, `ld.argv`, `ld.print`, `ld.path` (whose `dir` is the
-template's own directory).
+The rest of the [ld interface](ld.md) is there too.
 
-A declared file carries what it needs and nothing else:
+The keys a declared file takes:
 
 | Key | Values | Effect |
 | --- | --- | --- |
 | `content` | a string or an `ld.alt.file` | What lands on the system: a string is written, a file is linked. Required. |
-| `dest` | a path | Where it lands; `~/` and a relative path both start at your home directory. Defaults to the mirrored path. |
-| `link` | `"hard"`, `"symbolic"`, `"copy"` | How an `ld.alt.file` is placed. Defaults to the configured mode. A destination under `/` is always a copy. |
+| `dest` | a path | Where it lands; `~/` and a relative path both start at your home directory, and it has to stay inside it. Defaults to the mirrored path. |
+| `link` | `"hard"`, `"symbolic"`, `"copy"` | How an `ld.alt.file` is placed. Defaults to the configured mode. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the destination already holds something else. Defaults to the configured policy. |
-| `mode` | three or four octal digits, as a string | The permissions of the generated file, `"600"` for one holding a secret. Defaults to what your umask gives. Only for generated content: an `ld.alt.file` keeps its own mode. |
+| `mode` | three or four octal digits, as a string | The permissions of the generated file, `"600"` for one holding a secret. Defaults to the `mode` rule covering the destination, then to what your umask gives. Only for generated content: an `ld.alt.file` keeps its own mode, or the one a rule sets. |
 | `on_change` | a command line | Runs through `sh -c` after the file is created or replaced, and only then. Wins over an `on_change` rule matching the same path. |
 
 Returning a string or an `ld.alt.file` is shorthand for a table carrying only
@@ -124,7 +122,7 @@ The template's own `lua/` directory is requirable, and so is
 bytes:
 
 ```lua
--- home/.zshrc.luadot/luadot.lua
+-- .zshrc.luadot/luadot.lua
 local parts = {}
 for _, name in ipairs(ld.alt.glob("conf.d/*.zsh")) do
   parts[#parts + 1] = ld.alt.read(name)
@@ -156,8 +154,8 @@ return ld.alt.json({
 
 ## Secrets and reloads
 
-A generated file inherits your umask, wrong for a secret; `mode` fixes it. A
-daemon reading a file has to be told it changed; `on_change` does:
+A generated file inherits your umask; `mode` sets the permission bits
+instead. `on_change` runs a command once the file is written:
 
 ```lua
 ld.alt.out({
@@ -205,12 +203,11 @@ path+=(<%= dir %>)
 | `<%%` | a literal `<%` |
 | `%%>` | a literal `%>`, inside a tag |
 
-The tags are EJS's, with EJS's meanings. There is one output tag and it is
-always raw: a dotfile is not HTML, so nothing is escaped. Beware the slurping
-pair: `<%_` and `_%>` eat newlines too, welding the previous or the next line
-onto the tag's own, so an unindented `<%` closed by `-%>` is the everyday
-recipe. A comment closes on `%>` alone, so a `<%# ... %>` on a line of its own
-leaves a blank line behind; `<% --[[ ... ]] -%>` takes its line with it.
+The tags are EJS's, with EJS's meanings. The single output tag is raw; nothing
+is escaped. `<%_` and `_%>` strip newlines as well as spaces, joining the
+previous or the next line onto the tag's own, so `<%` closed by `-%>` is the
+usual pair. A comment closes on `%>` alone, so a `<%# ... %>` on a line of its
+own leaves a blank line behind; `<% --[[ ... ]] -%>` takes its line with it.
 Errors report the template's own line, an output tag holding `nil` is an error
 rather than the word `nil` in the file, and a `%>` inside a Lua string,
 comment or long bracket does not close the tag.
@@ -233,17 +230,18 @@ is missing is what needs the directory:
 
 | Missing | Reason |
 | --- | --- |
-| several outputs | there is no `ld.alt.out` to call |
+| several outputs | the file renders to one string, which is the file it produces |
 | `dest`, `link`, `conflict` | no table to carry them; `ld.rules` in `config.lua` still applies |
 | `require` of its own `lua/` directory | there is no directory; `~/.config/luadot/lua/` is still requirable |
-| `ld.alt.*` | inert, warned; `ld.alt.json` is the exception, it needs no directory |
 
-`ld.path.dir` is `nil`, since there is no template directory; `ld.path.repo`
-still reaches a file shared elsewhere in the repository.
+`ld.alt.*` reads the files sitting next to the `.luadot` file, which is what
+`ld.path.dir` names; `ld.path.repo` still reaches a file shared elsewhere in
+the repository. `ld.alt.out` writes where its `dest` says instead of adding an
+output, since the rendered string is already the file this template produces.
 
 ## The other commands
 
-A template is one thing, not the files it holds:
+Each command treats a template as a single unit:
 
 | Command | On a template |
 | --- | --- |
@@ -255,22 +253,21 @@ A template is one thing, not the files it holds:
 
 `status --templates` and `diff --templates` resolve the templates the way
 `tmpl alt --dry-run` does: `luadot.lua` runs, `ld.cmd` and the rest run with
-it, nothing is written. That is why they take a flag: a template asking a
-password store for a token has no business doing it on every `luadot status`.
-`diff --templates` puts the generated file under `generated/` rather than
-`repository/`, since what a template produces is not in the repository.
+it, nothing is written. The flag keeps that off every `luadot status`, since a
+template can reach a password store or the network. `diff --templates` puts
+the generated file under `generated/` rather than `repository/`.
 
 `rm`, `edit`, `status` and `diff` reach a template through the path it
-produces (`luadot rm ~/.zshrc` takes out `home/.zshrc.luadot/`); the
+produces (`luadot rm ~/.zshrc` takes out `.zshrc.luadot/`); the
 template's own path works as well. `rm` backs up every file the template holds
 before removing it and leaves the system alone: a generated file stays where
 it is, and a symlink pointing into the template becomes a file of its own.
 
 ## Editor support
 
-An editor sees `.luadot`, not `.zsh`, so highlighting needs a nudge. Neovim
-already ships the grammar this format parses as,
-`tree-sitter-embedded-template`, the `eruby`/`ejs` one:
+An editor sees `.luadot`, not `.zsh`, so the filetype has to be registered.
+Neovim ships the grammar this format parses as,
+`tree-sitter-embedded-template` (the `eruby`/`ejs` one):
 
 ```lua
 vim.filetype.add({ pattern = { [".*%.luadot"] = "luadot" } })

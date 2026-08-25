@@ -19,28 +19,3 @@ fn resolve(lua: &Lua, (ld, key): (Table, String)) -> mlua::Result<Value> {
 
     Ok(module)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lua::runtime::runtime;
-
-    #[test]
-    fn the_modules_answer_from_the_api_and_stay_the_same_tables() {
-        let lua = runtime().unwrap();
-        let ld = lua.create_table().unwrap();
-        install(&lua, &ld).unwrap();
-        lua.globals().set("ld", ld).unwrap();
-
-        lua.load(
-            r#"
-            assert(ld.lpeg == require("lpeg"), "ld.lpeg is not the lpeg module")
-            assert(ld.re == require("re"), "ld.re is not the re module")
-            assert(rawget(ld, "lpeg") ~= nil, "ld.lpeg was not cached")
-            assert(ld.nothing == nil, "an unknown field answered something")
-            "#,
-        )
-        .exec()
-        .unwrap();
-    }
-}

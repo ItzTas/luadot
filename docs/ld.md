@@ -2,7 +2,8 @@
 
 `~/.config/luadot/config.lua` (or `$XDG_CONFIG_HOME/luadot/config.lua`) runs
 before every command and configures luadot through the global `ld`. Without
-the file, the defaults apply.
+the file, the defaults apply. `luadot init` and `luadot config edit` write a
+commented starter there when it is missing.
 
 ```lua
 ld.opt.link("hard")
@@ -10,16 +11,15 @@ ld.opt.link("hard")
 ld.opt.conflict("overwrite")
 
 ld.rules({
-  { match = "home/.ssh/**", link = "symbolic", conflict = "skip" },
-  { match = "home/.config/nvim/**", conflict = "error" },
-  { match = "home/.config/mako/**", on_change = "makoctl reload" },
+  { match = ".ssh/**", link = "symbolic", conflict = "skip" },
+  { match = ".config/nvim/**", conflict = "error" },
+  { match = ".config/mako/**", on_change = "makoctl reload" },
   { match = "**/*.swp", ignore = true },
-  { match = "home/.cache/**", ignore = true },
+  { match = ".cache/**", ignore = true },
 })
 ```
 
-It is a normal Lua script: conditionals per machine, loops building pattern
-lists, local helper functions. Options also take a table form, which sets only
+Options also take a table form, which sets only
 the keys it carries: `ld.opt({ link = "symbolic" })`. The full list of calls
 is [at the end of this page](#every-call).
 
@@ -30,14 +30,14 @@ a regular expression, never both. A single rule needs no list around it.
 
 ```lua
 ld.rules({
-  { regex = "^home/\\.config/(nvim|zsh)/", link = "symbolic" },
+  { regex = "^\\.config/(nvim|zsh)/", link = "symbolic" },
   { regex = "\\.sw[po]$", ignore = true },
 })
 ```
 
 The expression is [Rust's regex syntax][regex], matched against the path as
 written, with `/` as the separator and no anchoring of its own: `nvim` covers
-every path carrying that word, `^home/\.ssh/` only what sits under `~/.ssh/`.
+every path carrying that word, `^\.ssh/` only what sits under `~/.ssh/`.
 Lua escapes a backslash as `\\`, so a literal dot is `"\\."`. There are no
 backreferences and no lookaround, which keeps every match linear in the length
 of the path.
@@ -49,32 +49,35 @@ them matches:
 
 ```lua
 ld.rules({
-  { match = { "**/*.tmp", "home/.cache/**" }, ignore = true },
-  { regex = { "^home/\\.local/state/", "\\.sw[po]$" }, ignore = true },
+  { match = { "**/*.tmp", ".cache/**" }, ignore = true },
+  { regex = { "^\\.local/state/", "\\.sw[po]$" }, ignore = true },
 })
 ```
 
-The other nine keys, all optional:
+All the keys:
 
 | Key | Values | Effect |
 | --- | --- | --- |
-| `link` | `"hard"`, `"symbolic"`, `"copy"` | How the matching files are placed. Files under `root/` are always copies, whatever it says. |
+| `link` | `"hard"`, `"symbolic"`, `"copy"` | How the matching files are placed. |
 | `conflict` | `"overwrite"`, `"skip"`, `"error"` | Answer when the system copy differs. |
 | `on_change` | a command line | Runs after `apply` or `tmpl alt` created or replaced one of those files. |
 | `ignore` | `true`, `false` | Whether the matching files are left unmanaged. |
-| `mode` | three or four octal digits, as a string | The permission bits a matching file under `root/` is placed with. An encrypted file carries `600` without it. |
-| `owner` | `"user"` or `"user:group"` | Who owns a matching file under `root/`. |
+| `mode` | three or four octal digits, as a string | The permission bits a matching file is placed with, and put back when they drift. An encrypted file carries `600` without it. |
+| `owner` | `"user"` or `"user:group"` | Who owns a matching file once placed, set through `chown`. |
 | `encrypt` | `true`, `false` | Whether `add` stores the matching files encrypted. |
-| `autocommit` | `true`, `false` | Whether `add` and `rm` commit on their own once one of those files is staged. |
+| `lfs` | `true`, `false` | Whether the matching files are stored in Git LFS. Takes `match`, not `regex`, and does not go with `encrypt`. |
+| `autocommit` | `true`, `false` | Whether `add`, `rm` and `mv` commit on their own once one of those files is staged. |
 | `autopush` | `true`, `false` | Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back. |
 
+Any other key is an error.
+
 Either syntax also matches a directory on behalf of everything under it:
-`{ match = "home/.ssh" }` and `{ regex = "^home/\\.ssh$" }` both cover
-`home/.ssh/keys/id_ed25519`.
+`{ match = ".ssh" }` and `{ regex = "^\\.ssh$" }` both cover
+`.ssh/keys/id_ed25519`.
 
 `ld.rules` accumulates across calls. The last matching rule wins, key by key:
-`{ match = "home/.cache/**", ignore = true }` followed by
-`{ match = "home/.cache/keep/**", ignore = false }` ignores everything under
+`{ match = ".cache/**", ignore = true }` followed by
+`{ match = ".cache/keep/**", ignore = false }` ignores everything under
 `~/.cache/` but that one directory. Keys no rule sets fall back to the
 `ld.opt.link` and `ld.opt.conflict` defaults.
 
@@ -85,37 +88,102 @@ of running it.
 
 ### Patterns
 
-Patterns are relative to the repository root: `home/.config/nvim/init.lua` is
-the pattern for `~/.config/nvim/init.lua`, `root/etc/pacman.conf` the one for
-`/etc/pacman.conf`.
+Patterns are relative to the repository root, which mirrors your home
+directory: `.config/nvim/init.lua` is the pattern for
+`~/.config/nvim/init.lua`.
 
 - `*` matches within a single path segment, `**` crosses segments.
 - A pattern naming a directory covers everything under it.
-- The repository's `.git` directory is always ignored.
+- The repository's `.git` directory is always ignored; everything else at the
+  top level, its `.gitignore` included, is a dotfile. See
+  [the repository](repository.md#the-repositorys-own-files).
 
-## One interface everywhere
+### Git LFS
+
+`lfs = true` stores the matching files in Git LFS. luadot writes the patterns
+into the repository's `.local/share/luadot/git/attributes`, between two
+markers:
+
+```
+# luadot:lfs
+Videos/** filter=lfs diff=lfs merge=lfs -text
+# /luadot:lfs
+```
+
+Lines outside the markers stay as they are, and dropping the rules takes the
+block back out. `add` writes that file, stages it, copies it into
+`.git/info/attributes` and runs `git lfs install --local` on the repository;
+`clone` installs the filters, copies the attributes and runs `git lfs pull`
+once the checkout is done, so a fresh clone ends with the contents instead of
+the pointers.
+[The repository](repository.md#the-repositorys-own-files) says why the file is
+not a `.gitattributes`.
+
+Each pattern becomes two lines, the pattern itself and `<pattern>/**`, because a
+rule naming a directory covers everything under it. A pattern with no `/` is
+anchored at the repository root, since an attributes file would otherwise match
+it at any depth.
+
+A later rule with `lfs = false` unsets the attributes for what it matches. The
+key needs `match`, since git attributes have no regular expressions, and no
+rule sets `encrypt` and `lfs` at once. `ld.opt.lfs(false)` holds the whole thing
+back, and without `git-lfs` on your PATH `add` says so and stores the files as
+they are.
+
+Files already committed keep the contents they went in with until `git add
+--renormalize .` rewrites them as pointers.
+
+## Scripts and surfaces
 
 Every script luadot runs carries the same `ld`: `config.lua`, `bootstrap.lua`,
-the setup scripts, a template's `luadot.lua` and `luadot exec`. What changes
-is what a call does once it runs:
+the setup scripts, a template's `luadot.lua` and `luadot exec`. A call does the
+same thing wherever it runs, on the one configuration the command is using, so
+a setup script that `config.lua` invokes and a template that `tmpl alt`
+resolves both write into it. `ld.surface` says which of them is running:
+`"config"`, `"bootstrap"`, `"setup"`, `"template"`, `"standalone"` for a
+`.luadot` file, or `"exec"`. `config.lua` runs before every command, so a
+script that must avoid slow work reads `ld.surface` first.
 
 | Call | Where it has an effect | Elsewhere |
 | --- | --- | --- |
-| `ld.rules`, `ld.opt.link`, `ld.opt.backup`, `ld.opt.backup_dir`, `ld.opt.backup_keep`, `ld.opt.backup_age`, `ld.opt.conflict`, `ld.opt.repo_dir`, `ld.crypt.backend`, `ld.crypt.lock`, `ld.class`, `ld.on.status`, `ld.on.diff` | `config.lua`, which builds the configuration | does nothing, warns |
-| `ld.alt.out`, `ld.alt.file`, `ld.alt.render`, `ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob` | `luadot.lua`, which produces a template's files | does nothing and yields `nil` (`false` for `ld.alt.exists`), warns |
-| `ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
-| `ld.opt.pkg_warn`, `ld.opt.passphrase_warn`, `ld.setup.list`, `ld.class.get`, `ld.alt.json`, `ld.argv`, `ld.sys`, `ld.path`, `ld.print`, `ld.regex` | everywhere | |
+| `ld.crypt.backend`, `ld.crypt.lock` | `config.lua`, which builds the configuration | does nothing, warns |
+| `ld.task`, `ld.doc.page` | `config.lua`, which the command reads them from | does nothing, warns |
+| `ld.cmd`, `ld.git`, `ld.git.clone`, `ld.git.at`, `ld.pkg.install`, `ld.setup`, `ld.setup.all` | everywhere | warns where it is slow |
+| `ld.alt.out` | everywhere | warns in `config.lua`, where it writes its file before every command |
+| everything else | everywhere | |
 
-A call away from where it has an effect is not an error; it runs, does nothing
-and says so:
+`ld.crypt` is the one exception. luadot reads the lock once, before it touches
+any file, so a script cannot change it halfway through a run. A crypt call
+elsewhere is not an error; it runs, does nothing and says so:
 
 ```
-luadot: `ld.rules` in a setup script does nothing; config.lua is where it has an
-effect (silence it with `ld.opt.pkg_warn(false)`)
+luadot: `ld.crypt.lock` in a setup script does nothing; config.lua is where it
+has an effect (silence it with `ld.opt.pkg_warn(false)`)
 ```
 
-`ld.path` carries `home` and `config` everywhere, `repo` once a repository is
-set, and `dir` inside a template or a setup directory. Inside `config.lua`
+The order the scripts run in decides what wins. `config.lua` runs first, then
+the command, and `tmpl alt` resolves one template at a time while it is already
+placing files, so an option the second template sets never reaches what the
+first one produced. The same goes for what a run reads once at the start:
+`ld.opt.repo_dir` picks the repository before anything else runs, and the
+backup options are read when the run opens its backup directory.
+
+`ld.alt` resolves its files against the directory the running script lives in,
+which is the template directory inside a template and `ld.path.dir` anywhere
+else. Outside a template `ld.alt.out` writes its file where `dest` says and
+applies `mode`, `conflict` and `on_change`; it takes no backup, and a
+`--dry-run` writes nothing.
+
+Declaring a class in `config.lua` collects it for `bootstrap`, `clone` and
+`class` to ask about later. Declaring one anywhere else asks straight away when
+the machine has no answer yet and writes the answer to the state, so
+`ld.class.get` reads it for the rest of the run.
+
+`ld.path` carries `home`, `config` and `data` everywhere, `repo` once a
+repository is set, and `dir`, the directory of the script that is running.
+`data` is `~/.local/share/luadot` (or `$XDG_DATA_HOME/luadot`), where the
+state, the backups and the default repository live; luadot owns no other
+subdirectory there, so a plugin manager can pick its own. Inside `config.lua`
 itself, `ld.path.repo` is the repository known before the file ran, so it does
 not answer for an `ld.opt.repo_dir` set in that same file; every script that
 runs afterwards gets the resolved one.
@@ -134,8 +202,8 @@ end
 | --- | --- |
 | `ld.sys.host` | `name`, `os` and `arch` of the machine. |
 | `ld.sys.gpu` | `vendor`, `name` and `driver` of the first card, and every card as a list. |
-| `ld.sys.ram` | The memory of the machine, in bytes, exactly as the kernel reports it. |
-| `ld.sys.has_battery()` | `true` on a machine with a battery of its own, `false` on one without. |
+| `ld.sys.ram` | The memory of the machine, in bytes. |
+| `ld.sys.has_battery()` | `true` on a machine with a battery of its own. |
 
 `ld.sys.gpu.vendor` is a short name (`nvidia`, `amd`, `intel`), or the PCI
 identifier when the vendor is not a known one. `ld.sys.gpu.name` is the model
@@ -148,15 +216,14 @@ for _, card in ipairs(ld.sys.gpu) do
 end
 ```
 
-`ld.sys.has_battery()` tells a laptop from a desktop and ignores the battery
-of a mouse or a keyboard. `ld.sys.ram` is the kernel's raw `MemTotal`, a
-little under the installed memory (the firmware keeps a slice); rounding is up
-to the configuration: `math.ceil(ld.sys.ram / 1024 ^ 3)`.
+`ld.sys.has_battery()` ignores the battery of a mouse or a keyboard.
+`ld.sys.ram` is the kernel's `MemTotal`, a little under the installed memory;
+round it in the configuration: `math.ceil(ld.sys.ram / 1024 ^ 3)`.
 
 ## Classes
 
-A class is a question the machine answers once: which of two setups this one
-is, what mail address its git commits carry. The configuration declares it,
+A class is a question the machine answers once, such as which setup it runs or
+which mail address its git commits carry. The configuration declares it,
 `luadot class` answers it, every script reads the answer back.
 
 ```lua
@@ -186,7 +253,7 @@ answered reads as `nil`, so a fallback is plain Lua:
 
 ```lua
 if ld.class.get("form-factor") == "laptop" then
-  ld.rules({ { match = "home/.config/tlp/**", link = "symbolic" } })
+  ld.rules({ { match = ".config/tlp/**", link = "symbolic" } })
 end
 ```
 
@@ -236,8 +303,8 @@ end
 
 `ld.cmd` runs a command and returns its standard output, trailing newline
 removed. Called directly it hands the whole line to `sh`, so pipes, globs and
-redirection work. Indexed by a program name it runs the program itself with
-no shell in the way, so every argument stays literal:
+redirection work. Indexed by a program name it runs the program directly,
+with no shell, so every argument stays literal:
 
 ```lua
 local branch = ld.cmd("git -C " .. ld.path.repo .. " branch --show-current")
@@ -252,9 +319,9 @@ luadot: `ld.cmd` `chsh -s /usr/bin/zsh` exited with status 1
 ```
 
 Only standard output is captured; standard error and standard input stay on
-the terminal, so diagnostics show up and a password prompt still works. When a
-non-zero status is an answer rather than a failure, handle it in the shell
-form: `ld.cmd("systemctl is-enabled ufw || true")`.
+the terminal, so a password prompt still works. When a non-zero status is an
+answer rather than a failure, handle it in the shell form:
+`ld.cmd("systemctl is-enabled ufw || true")`.
 
 ## Running git
 
@@ -272,6 +339,20 @@ A call before a repository is set stops instead of running git somewhere else:
 ```
 luadot: `ld.git`: no repository set; run `luadot clone <url>` first
 ```
+
+Two calls reach other repositories. `ld.git.clone(url, dir, options)` clones
+into a directory that is empty or missing, through the same library
+`luadot clone` uses, so it needs no `git` binary; `options` takes a `branch`
+to check out and a `depth` of history to fetch. `ld.git.at(dir)` hands back
+the call `ld.git` is, bound to that directory instead of the managed
+repository:
+
+```lua
+ld.git.clone("https://github.com/someone/lazyld", "~/.local/share/luadot/plugins/lazyld", { depth = 1 })
+ld.git.at("~/.local/share/luadot/plugins/lazyld")("fetch", "--tags")
+```
+
+`~` and a relative directory resolve against your home directory in both.
 
 ## Printing
 
@@ -329,17 +410,46 @@ ld.print.entry("create", "~/.bashrc", { tone = "good" })
 
 ## Customizing a command
 
-`ld.on` replaces what a command prints. One call per command, `ld.on.status`
-and `ld.on.diff`, both made of the same three pieces:
+`ld.on` carries one call per command, taking a table. Every command that runs
+`config.lua` has one: `ld.on.add`, `ld.on.apply`, `ld.on.bootstrap`,
+`ld.on.cd`, `ld.on.class`, `ld.on.clone`, `ld.on.config`, `ld.on.diff`,
+`ld.on.edit`, `ld.on.exec`, `ld.on.git`, `ld.on.init`, `ld.on.mv`,
+`ld.on.push`, `ld.on.rekey`, `ld.on.restore`, `ld.on.rm`, `ld.on.setup`,
+`ld.on.status`,
+`ld.on.sync`, and `ld.on.tmpl.alt` and `ld.on.tmpl.new` for the two `tmpl`
+actions. `completions`, `doc`, `man` and `meta` describe luadot itself and
+have none.
+
+Two keys are common to all of them:
+
+| Key | Takes | Effect |
+| --- | --- | --- |
+| `before` | a function, or `false` | Runs once `config.lua` ran, before the command does anything. |
+| `after` | a function, or `false` | Runs once the command is done. A command that fails stops before it. |
+
+```lua
+ld.on.apply({
+  before = function() return "applying on " .. ld.sys.host.name end,
+  after = function() ld.cmd("notify-send 'dotfiles applied'") end,
+})
+```
+
+Whatever a function returns is written as a line; a function returning nothing
+writes nothing. Calls add up: every function registered for a moment
+runs, in the order it was registered, and the first one that fails stops the
+command there. `false` drops the functions registered so far, so a module can
+take back what an earlier one set. Every command is customized apart. A dry
+run runs them too; `ld.argv.args` carries the flag. A call outside
+`config.lua` lands on the run in progress: `before` has passed by then,
+`after` still runs.
+
+`status` and `diff` take three more keys, which replace what they print:
 
 | Key | Takes | Effect |
 | --- | --- | --- |
 | `entry` | a function, or `false` | Runs for every file the command inspected, in place of the line it would have written and, in `status`, in place of the sections grouping them. |
 | `summary` | a function, a string, or `false` | Replaces the line each side opens with. |
 | `render` | a function, or `false` | Runs once, with every one of those files, and takes the whole report over. |
-
-Whatever a function returns is written as a line; a function returning nothing
-writes nothing, which suits one printing for itself with `ld.print`:
 
 ```lua
 ld.on.status({
@@ -354,14 +464,14 @@ ld.on.status({
 
 `false` silences its piece: `ld.on.status({ summary = false })` leaves each
 side with its header alone. A second call replaces only the keys it carries,
-and the two commands are customized apart.
+so the last one to set `entry`, `summary` or `render` owns it.
 
 `entry` and `render` are handed the same table, one file at a time or every
 one at once:
 
 | Field | Holds |
 | --- | --- |
-| `path` | The path as the repository writes it: `home/.bashrc`. |
+| `path` | The path as the repository writes it: `.bashrc`. |
 | `system` | The absolute path of the system copy. |
 | `side` | `"repository"` for a managed file, `"generated"` for one a template produced. |
 | `state` | Where the file stands; the two commands answer it differently, below. |
@@ -371,7 +481,7 @@ one at once:
 `state` is `"synced"`, `"missing"`, `"unlinked"`, `"differs"` or
 `"unreadable"`. Every inspected file reaches `entry` and `render`, synced ones
 included: the built-in report leaves those out and groups the rest into
-sections, a customized one gets a flat list and decides for itself.
+sections; a customized one gets a flat list.
 
 ```lua
 ld.on.status({
@@ -463,14 +573,14 @@ end)
 
 `ld.regex.split` cuts a text on every match; `ld.regex.escape` turns a literal
 into an expression matching itself. The syntax is documented at
-<https://docs.rs/regex/latest/regex/#syntax>: leading `\\` because Lua strings
-eat one of them, linear time on any input, no backreferences or lookaround as
-the price.
+<https://docs.rs/regex/latest/regex/#syntax>. A backslash is written `\\`
+because Lua strings consume one, and matching is linear in the length of the
+input, with no backreferences and no lookaround.
 
 ## Parsing with LPeg
 
 LPeg 1.1.0 is compiled into the binary, so `require("lpeg")` and its `re`
-companion work everywhere the configuration runs, nothing to install:
+companion work everywhere the configuration runs:
 
 ```lua
 local lpeg = require("lpeg")
@@ -489,17 +599,18 @@ local name = re.match("neovim@0.11.2", "{%a+}")
 ```
 
 `ld.lpeg` and `ld.re` are the same two modules for a file without the
-`require` lines. Neither is loaded until first reached, so a configuration
-that never mentions them pays nothing. Both are the upstream modules,
+`require` lines. Neither is loaded until first reached. Both are the upstream
+modules,
 documented at <https://www.inf.puc-rio.br/~roberto/lpeg/> and
 <https://www.inf.puc-rio.br/~roberto/lpeg/re.html>.
 
 ## Slow calls
 
-`ld.cmd`, `ld.git`, `ld.pkg.install`, `ld.setup` and `ld.setup.all` reach
-other programs, which takes seconds to minutes. `config.lua` runs before every
-command, so a call to one of them there slows every command down. They belong
-in `bootstrap.lua`, which runs once; elsewhere a warning says so:
+`ld.cmd`, `ld.git`, `ld.git.clone`, `ld.git.at`, `ld.pkg.install`, `ld.setup`
+and `ld.setup.all` reach other programs or the network, which takes seconds
+to minutes. `config.lua` runs before every command, so a call to one of them
+there slows every command down. They belong in `bootstrap.lua`, which runs
+once; elsewhere a warning says so:
 
 ```
 luadot: `ld.pkg.install` in config.lua runs before every command and will slow all
@@ -535,6 +646,64 @@ require("editors")
 `config.lua` to pass along, or exposes functions. The same directory is on the
 module path of every template, so a helper written once is reached from both.
 
+## Plugins
+
+luadot ships no plugin manager and reads no plugin spec. The calls below are
+what a manager written in Lua needs, and what its plugins reach from every
+script luadot runs.
+
+A plugin is a directory. `lua/` holds what `require` finds once the directory
+is registered, `meta/` an optional `---@meta` file for the editor, `docs/` an
+optional page for `luadot doc`. Nothing else is read and nothing is
+discovered: fetching, naming, pinning and ordering are left to the manager.
+
+| Call | Gives a manager |
+| --- | --- |
+| `ld.rtp.add(dir)` | `require` for `<dir>/lua/`, in this script and in every script the command runs after it, behind the configuration's own `lua/`. |
+| `ld.path.data` | A place to install into, `~/.local/share/luadot`; luadot owns no subdirectory there a manager might pick. |
+| `ld.git.clone(url, dir, options)`, `ld.git.at(dir)` | Cloning and running git outside the managed repository; the clone needs no `git` binary. |
+| `ld.fs` | `exists`, `is_dir`, `mkdir`, `ls`, `rm`, `read` and `write`, resolved against your home directory instead of a template. |
+| `ld.json.encode(value)`, `ld.json.decode(text)` | A lockfile out and in. |
+| `ld.task(name, task)` | A command line: `luadot <name>` runs the function it registers. |
+| `ld.doc.page(path)` | A page `luadot doc` answers from. |
+| `ld.surface` | Which script is running, so network work waits for `bootstrap.lua`. |
+
+A manager's bootstrap then looks like this:
+
+```lua
+local root = ld.path.data .. "/plugins"
+
+if not ld.fs.is_dir(root .. "/lazyld") then
+  ld.git.clone("https://github.com/someone/lazyld", root .. "/lazyld")
+end
+
+ld.rtp.add(root .. "/lazyld")
+
+require("lazyld").setup({
+  { "someone/luadot-secrets" },
+  { "someone/laptop-only", when = ld.class.get("form-factor") == "laptop" },
+})
+```
+
+That costs one `stat` per command once the manager is installed, and a clone
+on a machine without it. A lockfile the manager keeps next to `config.lua` is
+versioned by `luadot add` like everything else under `~/.config/luadot/`, so
+every other machine checks out the same pinned revisions.
+
+Registering is a `config.lua` act. `ld.rtp.add` from a template or a setup
+script reaches the rest of that run, but `ld.task` and `ld.doc.page` only take
+effect from `config.lua`, and say so elsewhere. `completions`, `man` and a
+bare `meta` describe luadot itself, never read the configuration, and see no
+plugin.
+
+A plugin is Lua only: `package.loadlib` and the C module searchers are closed,
+so it cannot load a shared library. It is still arbitrary code running inside
+`config.lua`, before every command, with `io` and `os` in reach and beside the
+calls that decrypt secrets and write into your home directory. luadot does not
+sandbox it. Pinning every plugin to a revision in the manager's lockfile and
+updating only when asked is the only mitigation; read what a plugin does
+before installing it.
+
 ## exec
 
 `luadot exec` runs Lua with the same `ld` interface, from a string or a
@@ -548,11 +717,46 @@ luadot exec ~/scripts/report.lua --json
 The argument is a `.lua` path when it names an existing file or ends in
 `.lua`, and Lua source otherwise. Everything after it reaches the script
 through `ld.argv.args`. A file requires modules from the `lua/` directory next
-to it, a source string from the one in your configuration directory. Neither
-runs `config.lua` first: `exec` is a scratchpad, not a command that configures
-anything.
+to it, a source string from the one in your configuration directory.
+`config.lua` runs first either way, as before every command, so `ld.on.exec`
+reaches both. What an `exec` script sets goes no further than that run.
+
+## Editor support
+
+`luadot init` and `luadot clone` write `~/.local/share/luadot/meta/ld.lua`,
+lua-language-server definitions of every call on this page, and a `.luarc.json`
+in `~/.config/luadot/` that loads them from there. Completion and hover text
+then work in `config.lua`, `bootstrap.lua` and the setup scripts; a template
+gets its own `.luarc.json` from `tmpl new`, so its `luadot.lua` completes from
+either path. The repository gets none: it mirrors your home directory, and a
+`.luarc.json` at its top would land in `~`. When writing them fails, those two
+commands warn and carry on; `luadot meta install` does the same work on its
+own:
+
+```
+luadot meta install
+luadot meta install ~/scripts
+```
+
+A directory of your own takes the settings instead of the configuration
+directory; the definitions stay where they are. An existing `.luarc.json`
+keeps its keys: `workspace.library` and `runtime.path` gain the entries they
+lack, `runtime.version` becomes `Lua 5.4`. Every directory `ld.rtp.add`
+registered lands in `workspace.library` too, so the `lua/` of a plugin
+resolves its `require` and a `meta/` it ships completes its own calls. One that does not parse is left
+alone, and the settings are printed for you to merge by hand. The definitions
+come out of the binary, and every command rewrites the file when the binary
+carries different ones, so an upgrade needs no action; `luadot meta` prints
+them alone.
+
+`ld.cmd.<program>` completes for any name, since the program is only known at
+the call.
 
 ## Every call
+
+`luadot doc opt.link` writes the row of a call in the terminal, `luadot doc
+opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
+--list` the names alone.
 
 | Call | Arguments | Effect |
 | --- | --- | --- |
@@ -563,16 +767,18 @@ anything.
 | `ld.opt.backup_age(span)` | a span like `"30d"`, in `s`, `m`, `h`, `d` or `w` | How long a backup is kept; the ones older than that are dropped. Defaults to keeping them forever. |
 | `ld.opt.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
-| `ld.opt.autocommit(enabled)` | `true`, `false` | Whether `add` and `rm` commit what they staged. Defaults to `false`. |
+| `ld.opt.autocommit(enabled)` | `true`, `false` | Whether `add`, `rm` and `mv` commit what they staged. Defaults to `false`. |
 | `ld.opt.autopush(enabled)` | `true`, `false` | Whether that commit is pushed too, committing first. Defaults to `false`. |
+| `ld.opt.lfs(enabled)` | `true`, `false` | Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH. |
 | `ld.opt.repo_dir(path)` | a directory | The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory. |
 | `ld.opt(options)` | a table of options | Sets several options at once; only the keys it carries. |
 | `ld.crypt.backend(name)` | `"age"`, `"gpg"` | Tool used to encrypt and decrypt managed files. Defaults to `"age"`. |
 | `ld.crypt.lock(lock)` | `"passphrase"`, or a table of `recipients` and `identity` | How secrets are locked: the word locks with a passphrase, the table with keys. The `identity` takes a path or a command. |
 | `ld.opt.passphrase_warn(enabled)` | `true`, `false` | Whether passphrase mode says it is weaker than keys. Defaults to `true`. |
 | `ld.crypt(options)` | a table of options | Sets several crypt options at once; only the keys it carries. |
-| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` of system files, marks them as never managed, marks them as encrypted, and commits and pushes them on their own. |
-| `ld.class(class)` | a table declaring a class | Declares a question this machine answers once, through `luadot class`. |
+| `ld.rules(rules)` | a rule or a list of them | Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. |
+| `ld.task(name, task)` | a name and a table of `about` and `run` | Registers a command of the configuration's own: `luadot <name>` and `luadot task <name>` run its function with the arguments that follow. |
+| `ld.class(class)` | a table declaring a class | Declares a question this machine answers once. In `config.lua` it waits for `bootstrap`, `clone` or `luadot class` to ask; anywhere else it asks straight away and saves the answer. |
 | `ld.class.get(name)` | a class name | The answer this machine gave, `nil` when it gave none. |
 | `ld.pkg.install(packages)` | a package name or a list of them | Installs packages through the system package manager. |
 | `ld.setup(name)` | a setup name | Runs one setup script: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. |
@@ -581,11 +787,46 @@ anything.
 | `ld.cmd(line)` | a command line | Runs it through `sh` and returns what it printed. |
 | `ld.cmd.<program>(args...)` | the arguments of that program | Runs the program itself and returns what it printed. |
 | `ld.git(args...)` | the arguments of a git command | Runs git inside the repository and returns what it printed. |
+| `ld.git.clone(url, dir, options)` | a url, a directory, and an optional table of `branch` and `depth` | Clones a repository into that directory, outside the managed one, without the `git` binary. |
+| `ld.git.at(dir)(args...)` | a directory, then the arguments of a git command | Runs git inside that directory and returns what it printed. |
 | `ld.argv` | none | `name` and `args` of the command being run. |
+| `ld.surface` | none | Which script is running: `"config"`, `"bootstrap"`, `"setup"`, `"template"`, `"standalone"` or `"exec"`. |
 | `ld.sys` | none | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
-| `ld.path` | none | `home`, `config`, `repo` and `dir`, where they exist. |
-| `ld.on.status(options)` | a table of options | Says what `status` prints, line by line. |
-| `ld.on.diff(options)` | a table of options | Says what `diff` prints and which program compares the two sides. |
+| `ld.path` | none | `home`, `config`, `data`, `repo` and `dir`, where they exist. |
+| `ld.rtp.add(dir)` | a directory | Puts `<dir>/lua/` on the module path of this script and of every script the command runs after it, behind the configuration's own `lua/`. |
+| `ld.json.encode(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both. |
+| `ld.json.decode(text)` | a JSON text | The value the text holds: an object or a list as a table, a whole number as an integer, `null` as `ld.json.null`. |
+| `ld.json.null` | none | What a JSON `null` decodes to and encodes from, since `nil` cannot sit in a table. |
+| `ld.fs.exists(path)` | a path | Whether something is there: a file, a directory, or a symlink whatever it points at. |
+| `ld.fs.is_dir(path)` | a path | Whether a directory is there. |
+| `ld.fs.mkdir(path)` | a path | Creates the directory and every one leading to it. |
+| `ld.fs.ls(path)` | a directory | The names inside it, sorted. |
+| `ld.fs.rm(path)` | a path | Removes a file, a symlink, or a directory with everything under it; `true` when something was there. |
+| `ld.fs.read(path)` | a path | What the file holds. |
+| `ld.fs.write(path, text)` | a path and a string | Writes the text over the file, creating the directories leading to it. |
+| `ld.doc.page(path)` | a markdown page | Registers a page `luadot doc` answers from: every table row whose first cell is a namespaced call in backticks. |
+| `ld.on.add(options)` | a table of `before` and `after` | Runs a function before and after `add`. |
+| `ld.on.apply(options)` | a table of `before` and `after` | Runs a function before and after `apply`. |
+| `ld.on.bootstrap(options)` | a table of `before` and `after` | Runs a function before and after `bootstrap`. |
+| `ld.on.cd(options)` | a table of `before` and `after` | Runs a function before and after `cd`. |
+| `ld.on.class(options)` | a table of `before` and `after` | Runs a function before and after `class`. |
+| `ld.on.clone(options)` | a table of `before` and `after` | Runs a function before and after `clone`. |
+| `ld.on.config(options)` | a table of `before` and `after` | Runs a function before and after `config`. |
+| `ld.on.diff(options)` | a table of options | Says what `diff` prints and which program compares the two sides, and runs a function before and after it. |
+| `ld.on.edit(options)` | a table of `before` and `after` | Runs a function before and after `edit`. |
+| `ld.on.exec(options)` | a table of `before` and `after` | Runs a function before and after `exec`. |
+| `ld.on.git(options)` | a table of `before` and `after` | Runs a function before and after `git`. |
+| `ld.on.init(options)` | a table of `before` and `after` | Runs a function before and after `init`. |
+| `ld.on.mv(options)` | a table of `before` and `after` | Runs a function before and after `mv`. |
+| `ld.on.push(options)` | a table of `before` and `after` | Runs a function before and after `push`. |
+| `ld.on.rekey(options)` | a table of `before` and `after` | Runs a function before and after `rekey`. |
+| `ld.on.restore(options)` | a table of `before` and `after` | Runs a function before and after `restore`. |
+| `ld.on.rm(options)` | a table of `before` and `after` | Runs a function before and after `rm`. |
+| `ld.on.setup(options)` | a table of `before` and `after` | Runs a function before and after `setup`. |
+| `ld.on.status(options)` | a table of options | Says what `status` prints, line by line, and runs a function before and after it. |
+| `ld.on.sync(options)` | a table of `before` and `after` | Runs a function before and after `sync`. |
+| `ld.on.tmpl.alt(options)` | a table of `before` and `after` | Runs a function before and after `tmpl alt`. |
+| `ld.on.tmpl.new(options)` | a table of `before` and `after` | Runs a function before and after `tmpl new`. |
 | `ld.print(text, options)` | a string and a table of options | Writes a line to the terminal, styled the way the options ask. |
 | `ld.print.note(text)`, `ld.print.warn(text)`, `ld.print.error(text)` | a string and a table of options | The same line carrying `luadot:`; the last two on the error stream. |
 | `ld.print.section(title)`, `ld.print.entry(label, text)`, `ld.print.field(name, value)` | strings and a table of options | A title over a blank line, a labelled line, a named value. |

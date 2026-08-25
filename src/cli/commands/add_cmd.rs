@@ -5,20 +5,27 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 
 use crate::crypt;
-use crate::files;
+use crate::files::{self, ConflictPolicy, LinkMode, Placement};
 use crate::git;
 use crate::lua::Config;
-use crate::output;
+use crate::output::{self, Tone};
 use crate::utils::{self, Workspace};
+
+use super::super::constants::ADD_LABEL;
 
 #[derive(Debug, Args)]
 pub struct AddArgs {
-    #[arg(value_name = "PATH", required = true)]
+    #[arg(
+        value_name = "PATH",
+        required = true,
+        help = "The files or directories to start managing"
+    )]
     pub paths: Vec<String>,
 }
 
 pub fn add_cmd(args: AddArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("add")?;
+    let config = utils::configured("add", &config)?;
 
     let pairs = plan(&home, &repo, &args.paths, &config)?;
     let lock = config.crypt_lock();
@@ -27,13 +34,50 @@ pub fn add_cmd(args: AddArgs) -> Result<()> {
     let mut added = Vec::with_capacity(pairs.len());
     for (source, dest) in pairs {
         link_into_repo(&config, lock, &repo, &source, &dest)?;
+        output::entry(
+            Tone::Good,
+            ADD_LABEL,
+            utils::relative(&repo, &dest).display(),
+        );
         added.push(dest);
     }
 
+    track_in_lfs(&config, &repo)?;
     git::stage("add", &repo, &added)?;
+    report(&added);
 
     let automatic = utils::automatic(&config, &repo, &added);
     git::auto("add", &repo, automatic.commits, automatic.pushes)
+}
+
+fn report(added: &[PathBuf]) {
+    if added.is_empty() {
+        output::note("nothing to add, the rules leave every path out");
+        return;
+    }
+
+    output::note(format!("added {} file(s)", added.len()));
+}
+
+fn track_in_lfs(config: &Config, repo: &Path) -> Result<()> {
+    let patterns = config.lfs_patterns();
+    if !patterns.is_empty() {
+        if !git::lfs_available() {
+            output::warn("git-lfs is not on your PATH, the files it tracks are stored as they are");
+        }
+        git::install_lfs("add", repo, config.lfs())?;
+    }
+    if !git::sync_attributes("add", repo, &patterns)? {
+        return Ok(());
+    }
+    git::refresh_info("add", repo)?;
+
+    let path = git::attributes_path("add", repo)?;
+    if path.exists() {
+        return git::stage("add", repo, &[path]);
+    }
+
+    git::unstage("add", repo, &[path])
 }
 
 fn require_plugins(
@@ -85,6 +129,9 @@ fn collect(
     config: &Config,
     excludes: &mut git::Excludes,
 ) -> Result<Vec<(PathBuf, PathBuf)>> {
+    utils::managed_relative(home, &source)
+        .with_context(|| format!("add: cannot manage {}", source.display()))?;
+
     if source.is_dir() {
         check_gitignore(home, &source, git::Kind::Directory, excludes)?;
         return collect_dir(home, repo, &source, config, excludes);
@@ -160,7 +207,7 @@ fn check_gitignore(
     }
 
     bail!(
-        "add: {} lands on {}, which the repository's .gitignore excludes",
+        "add: {} lands on {}, which the repository's ignore rules exclude",
         source.display(),
         relative.display()
     )
@@ -246,10 +293,18 @@ fn link_into_repo(
             dest,
         );
     }
-    if utils::is_root(relative) {
-        return files::import_system(source, dest);
+
+    let placement = config.placement(relative);
+    if placement.link() != LinkMode::Symbolic {
+        return files::link(placement.link(), source, dest);
     }
-    files::link(config.link_mode(relative), source, dest)
+
+    store_and_point_at(placement, source, dest)
+}
+
+fn store_and_point_at(placement: Placement, system: &Path, stored: &Path) -> Result<()> {
+    files::link(LinkMode::Copy, system, stored)?;
+    files::sync_file(ConflictPolicy::Overwrite, placement, stored, system).map(|_| ())
 }
 
 #[cfg(test)]
@@ -259,11 +314,6 @@ mod tests {
 
     fn arg(path: &Path) -> String {
         path.to_string_lossy().into_owned()
-    }
-
-    fn gitignore(repo: &Path, rules: &str) {
-        gix::init(repo).unwrap();
-        std::fs::write(repo.join(".gitignore"), rules).unwrap();
     }
 
     #[test]
@@ -277,52 +327,14 @@ mod tests {
         std::fs::write(&kept, "a").unwrap();
         std::fs::write(&ignored, "b").unwrap();
 
-        let config =
-            lua::from_source(r#"ld.rules({ match = "home/*.swp", ignore = true })"#).unwrap();
+        let config = lua::from_source(r#"ld.rules({ match = "*.swp", ignore = true })"#).unwrap();
         let pairs = plan(&home, &repo, &[arg(&kept), arg(&ignored)], &config).unwrap();
 
-        assert_eq!(pairs, vec![(kept, repo.join("home/.vimrc"))]);
+        assert_eq!(pairs, vec![(kept, repo.join(".vimrc"))]);
     }
 
     #[test]
-    fn plan_refuses_a_file_the_gitignore_excludes() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        gitignore(&repo, "home/*.swp\n");
-        let source = home.join(".vimrc.swp");
-        std::fs::write(&source, "b").unwrap();
-
-        let err = plan(&home, &repo, &[arg(&source)], &Config::default())
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("home/.vimrc.swp"));
-        assert!(err.contains(".gitignore"));
-    }
-
-    #[test]
-    fn plan_refuses_a_file_a_template_already_produces() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::create_dir_all(repo.join("home/.zshrc.luadot")).unwrap();
-        let source = home.join(".zshrc");
-        std::fs::write(&source, "handwritten\n").unwrap();
-
-        let err = plan(&home, &repo, &[arg(&source)], &Config::default())
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("add: "));
-        assert!(err.contains("is produced by"));
-        assert!(err.contains(".zshrc.luadot"));
-    }
-
-    #[test]
-    fn plan_maps_a_system_file_under_the_root_prefix() {
+    fn plan_refuses_a_file_outside_the_home_directory() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -330,12 +342,18 @@ mod tests {
         std::fs::create_dir_all(source.parent().unwrap()).unwrap();
         std::fs::write(&source, "x").unwrap();
 
-        let pairs = plan(&home, &repo, &[arg(&source)], &Config::default()).unwrap();
+        let err = format!(
+            "{:#}",
+            plan(&home, &repo, &[arg(&source)], &Config::default()).unwrap_err()
+        );
 
-        let relative = source.strip_prefix("/").unwrap();
         assert_eq!(
-            pairs,
-            vec![(source.clone(), repo.join("root").join(relative))]
+            err,
+            format!(
+                "add: cannot manage {}: outside your home directory {}",
+                source.display(),
+                home.display()
+            )
         );
     }
 
@@ -351,13 +369,13 @@ mod tests {
         let config = lua::from_source(
             r#"
             ld.crypt.backend("gpg")
-            ld.rules({ match = "home/.netrc", encrypt = true })
+            ld.rules({ match = ".netrc", encrypt = true })
             "#,
         )
         .unwrap();
         let pairs = plan(&home, &repo, &[arg(&source)], &config).unwrap();
 
-        assert_eq!(pairs, vec![(source, repo.join("home/.netrc.gpg"))]);
+        assert_eq!(pairs, vec![(source, repo.join(".netrc.gpg"))]);
     }
 
     #[test]
@@ -377,78 +395,9 @@ mod tests {
         assert_eq!(
             pairs,
             vec![
-                (init, repo.join("home/.config/nvim/init.lua")),
-                (plugins, repo.join("home/.config/nvim/lua/plugins.lua")),
+                (init, repo.join(".config/nvim/init.lua")),
+                (plugins, repo.join(".config/nvim/lua/plugins.lua")),
             ]
-        );
-    }
-
-    #[test]
-    fn plan_errors_when_source_is_missing() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let missing = home.join("missing");
-
-        let err = plan(&home, &repo, &[arg(&missing)], &Config::default())
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("is not a file or directory"));
-    }
-
-    #[test]
-    fn plan_errors_when_destination_exists() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::create_dir_all(repo.join("home")).unwrap();
-        std::fs::write(repo.join("home/.bashrc"), "old").unwrap();
-        let source = home.join(".bashrc");
-        std::fs::write(&source, "new").unwrap();
-
-        let err = plan(&home, &repo, &[arg(&source)], &Config::default())
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("already exists"));
-    }
-
-    #[test]
-    fn plan_errors_on_duplicate_destinations() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&home).unwrap();
-        let source = home.join(".bashrc");
-        std::fs::write(&source, "x").unwrap();
-
-        let err = plan(
-            &home,
-            &repo,
-            &[arg(&source), arg(&source)],
-            &Config::default(),
-        )
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("more than once"));
-    }
-
-    #[test]
-    fn link_into_repo_copies_a_system_file() {
-        use std::os::unix::fs::MetadataExt;
-
-        let dir = tempfile::tempdir().unwrap();
-        let repo = dir.path().join("repo");
-        let source = dir.path().join("pacman.conf");
-        let dest = repo.join("root/etc/pacman.conf");
-        std::fs::write(&source, "conf").unwrap();
-
-        link_into_repo(&Config::default(), crypt::Lock::Keys, &repo, &source, &dest).unwrap();
-
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "conf");
-        assert_ne!(
-            std::fs::metadata(&source).unwrap().ino(),
-            std::fs::metadata(&dest).unwrap().ino()
         );
     }
 }

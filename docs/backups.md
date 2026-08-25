@@ -2,35 +2,46 @@
 
 Every file luadot writes over is copied aside first: `apply` and `tmpl alt`
 save what they replace, `rm` saves the repository entry it deletes and the
-system symlink it writes over. `add` takes no backup, since it never replaces
-anything.
+system symlink it writes over. `add` takes no backup.
 
 ```
 luadot: applied 12 file(s) (0 created, 1 replaced, 11 unchanged, 0 skipped)
 luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
 ```
 
-One directory per run, named after the millisecond it ran, holding the saved
-files under the same `home/` and `root/` layout the repository uses, so a
-replaced `/etc` file is saved and restored like any other. A symlink is kept
-as a symlink; nothing is written for a file that was created rather than
-replaced.
+One directory per run, named after the millisecond it ran, holding each saved
+file under its absolute path: `/home/u/.zshrc` is kept at
+`<run>/home/u/.zshrc`, and the repository entry `rm` deletes under the
+repository's own path. A symlink is kept as a symlink; nothing is written for
+a file that was created rather than replaced.
 
 ## restore
 
 `luadot restore` puts the most recent backup back, asking first and listing
 what is about to land. A backup is reached by its name, `-l` (or `--list`)
-lists them, `-y` answers the question upfront, `-n` reports what would be put
-back:
+lists them, `-l <backup>` lists the files one holds, `-y` answers the question
+upfront, `-n` reports what would be put back.
+
+Each file is printed with the system path it lands on and what happens there,
+`create` when the path is gone and `replace` when it is still in place:
 
 ```
 $ luadot restore --list
-1786677956412  2 minutes ago  1 file(s)
+1786677956412  2 minutes ago  2 file(s)
 1786590012773  1 day ago      4 file(s)
 
+$ luadot restore --list 1786677956412
+1786677956412  2 minutes ago  2 file(s)
+  /home/u/.zshrc
+  /home/u/.vimrc
+
 $ luadot restore
-  home/.zshrc
-Put 1 file(s) of backup 1786677956412 back? [y/N]
+replace    /home/u/.zshrc
+create     /home/u/.vimrc
+Put 2 file(s) of backup 1786677956412 back? [y/N] y
+replaced   /home/u/.zshrc
+created    /home/u/.vimrc
+luadot: restored 2 file(s) from backup 1786677956412 (1 created, 1 replaced)
 ```
 
 Restoring writes plain copies, so the files it touches stop being linked to
@@ -58,6 +69,5 @@ luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
 luadot: dropped 1 backup(s), keeping the 10 most recent
 ```
 
-The limits count whole backups, not the files inside them: a run either keeps
-everything it saved or is dropped as a whole, never left half there. Without a
-limit the directory grows on every run and pruning is yours to do.
+The limits count whole backups, not the files inside them: a run is kept
+entirely or dropped entirely. Without a limit nothing is pruned.

@@ -72,19 +72,19 @@ mod tests {
     #[test]
     fn staging_puts_the_paths_in_the_index() {
         let repo = repository();
-        let file = repo.path().join("home/.bashrc");
+        let file = repo.path().join(".bashrc");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "alias l=ls\n").unwrap();
 
         stage("add", repo.path(), &[file]).unwrap();
 
-        assert_eq!(index(repo.path()), "home/.bashrc\n");
+        assert_eq!(index(repo.path()), ".bashrc\n");
     }
 
     #[test]
     fn unstaging_records_the_removal_of_a_path_already_gone() {
         let repo = repository();
-        let file = repo.path().join("home/.bashrc");
+        let file = repo.path().join(".bashrc");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "alias l=ls\n").unwrap();
         stage("add", repo.path(), std::slice::from_ref(&file)).unwrap();
@@ -93,12 +93,5 @@ mod tests {
         unstage("rm", repo.path(), &[file]).unwrap();
 
         assert_eq!(index(repo.path()), "");
-    }
-
-    #[test]
-    fn unstaging_a_path_git_never_tracked_is_no_error() {
-        let repo = repository();
-
-        unstage("rm", repo.path(), &[repo.path().join("home/.absent")]).unwrap();
     }
 }

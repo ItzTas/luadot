@@ -3,11 +3,12 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::load::destination;
-use super::types::{Content, Output};
+use crate::lua::Shared;
 use crate::lua::constants::MODULES_DIR;
 use crate::lua::embed;
-use crate::lua::ld::{API, Paths, Surface, install};
+use crate::lua::ld::{API, Paths, Surface, extend_module_path, install, share};
 use crate::lua::runtime::{add_module_path, environment, runtime};
+use crate::lua::scope::{Content, Output};
 use crate::state::Classes;
 use crate::utils;
 
@@ -17,33 +18,45 @@ pub fn load_template_file(
     repo: &Path,
     path: &Path,
     classes: &Classes,
+    config: &Shared,
 ) -> Result<Output> {
     let source = std::fs::read_to_string(path)
         .with_context(|| format!("{command}: failed to read {}", path.display()))?;
-    let config = utils::config_dir()
+    let dirs = utils::config_dir()
         .with_context(|| format!("{command}: failed to locate the configuration"))?;
+    let data = utils::data_dir()
+        .with_context(|| format!("{command}: failed to locate the data directory"))?;
+    let paths = Paths::new(home, &dirs, &data).with_repo(Some(repo));
 
-    render(command, home, repo, &config, path, &source, classes)
+    render(command, home, repo, &paths, path, &source, classes, config)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render(
     command: &str,
     home: &Path,
     repo: &Path,
-    config: &Path,
+    paths: &Paths,
     path: &Path,
     source: &str,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<Output> {
     let dest = destination(command, home, repo, path)?;
     let chunk = embed::compile(source)
         .with_context(|| format!("{command}: failed to compile {}", path.display()))?;
 
     let lua = runtime().with_context(|| format!("{command}: failed to start the Lua runtime"))?;
-    let paths = Paths::new(home, config).with_repo(Some(repo));
+    let mut paths = paths.clone();
+    if let Some(dir) = path.parent() {
+        paths = paths.with_dir(dir);
+    }
     install(&lua, Surface::Standalone, &paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
-    add_module_path(&lua, config)
+    share(&lua, shared);
+    extend_module_path(&lua)
+        .with_context(|| format!("{command}: failed to reach the registered modules"))?;
+    add_module_path(&lua, paths.config())
         .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
 
     let rendered = environment(&lua, None)
@@ -55,6 +68,14 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::lua::{Config, Shared};
+
+    fn configuration() -> Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
     use std::path::Path;
 
     use super::*;
@@ -68,7 +89,7 @@ mod tests {
         }
         std::fs::write(&path, source).unwrap();
 
-        load_template_file("alt", &home, &repo, &path, classes)
+        load_template_file("alt", &home, &repo, &path, classes, &configuration())
     }
 
     #[test]
@@ -79,7 +100,7 @@ mod tests {
 
         let output = load(
             root.path(),
-            "home/.zshrc.luadot",
+            ".zshrc.luadot",
             "<%= type(ld.sys.host.name) %> on a <%= ld.class.get(\"form-factor\") %>",
             &classes,
         )
@@ -92,84 +113,23 @@ mod tests {
     }
 
     #[test]
-    fn the_template_directory_calls_are_inert() {
+    fn the_alternatives_resolve_next_to_the_file_itself() {
         let root = tempfile::tempdir().unwrap();
+        let beside = root.path().join("repo");
+        std::fs::create_dir_all(&beside).unwrap();
+        std::fs::write(beside.join("aliases.zsh"), "alias ll='ls -l'").unwrap();
 
         let output = load(
             root.path(),
-            "home/.zshrc.luadot",
-            "<% ld.alt.out({ content = \"x\" }) %><%= tostring(ld.alt.file(\"nope\")) %> <%= tostring(ld.path.dir) %>",
-            &Classes::default(),
-        )
-        .unwrap();
-
-        assert_eq!(output.content(), &Content::Text("nil nil".to_string()));
-    }
-
-    #[test]
-    fn modules_of_the_configuration_are_requirable() {
-        let root = tempfile::tempdir().unwrap();
-        let config = root.path().join("config");
-        std::fs::create_dir_all(config.join(MODULES_DIR)).unwrap();
-        std::fs::write(
-            config.join(MODULES_DIR).join("shell.lua"),
-            r#"return { editor = "nvim" }"#,
-        )
-        .unwrap();
-
-        let output = render(
-            "alt",
-            &root.path().join("home"),
-            &root.path().join("repo"),
-            &config,
-            &root.path().join("repo/home/.zshrc.luadot"),
-            "export EDITOR=<%= require(\"shell\").editor %>\n",
+            ".zshrc.luadot",
+            "<%= ld.alt.read(\"aliases.zsh\") %> in <%= ld.path.dir %>",
             &Classes::default(),
         )
         .unwrap();
 
         assert_eq!(
             output.content(),
-            &Content::Text("export EDITOR=nvim\n".to_string())
+            &Content::Text(format!("alias ll='ls -l' in {}", beside.display()))
         );
-    }
-
-    #[test]
-    fn a_bare_name_has_nothing_to_define_it() {
-        let root = tempfile::tempdir().unwrap();
-
-        let err = format!(
-            "{:#}",
-            load(
-                root.path(),
-                "home/.zshrc.luadot",
-                "export EDITOR=<%= editor %>\n",
-                &Classes::default(),
-            )
-            .unwrap_err()
-        );
-
-        assert!(err.contains("alt: failed to run"));
-        assert!(err.contains("was nil"));
-    }
-
-    #[test]
-    fn a_broken_template_reports_the_command_and_the_file() {
-        let root = tempfile::tempdir().unwrap();
-
-        let err = format!(
-            "{:#}",
-            load(
-                root.path(),
-                "home/.zshrc.luadot",
-                "fine\n<%= missing() %>\n",
-                &Classes::default(),
-            )
-            .unwrap_err()
-        );
-
-        assert!(err.contains("alt: failed to run"));
-        assert!(err.contains(".zshrc.luadot"));
-        assert!(err.contains(":2:"));
     }
 }

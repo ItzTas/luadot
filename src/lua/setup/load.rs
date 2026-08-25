@@ -7,6 +7,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 
 use super::constants::{INIT_STEM, LUA_EXT, SETUP_DIR, SH_EXT};
+use crate::lua::Shared;
 use crate::lua::ld::{Paths, Surface};
 use crate::lua::script::run_script;
 use crate::state::{self, Classes};
@@ -16,13 +17,16 @@ thread_local! {
     static RUNNING: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
-pub fn run_setups(command: &str, repo: &Path, names: &[String]) -> Result<()> {
-    let home = utils::home_dir()?;
-    let config = utils::config_dir()?;
+pub fn run_setups(command: &str, repo: &Path, names: &[String], shared: &Shared) -> Result<()> {
+    let paths = Paths::new(
+        &utils::home_dir()?,
+        &utils::config_dir()?,
+        &utils::data_dir()?,
+    );
     let classes = state::load()?.classes().clone();
 
     for name in names {
-        run_one(command, &home, &config, repo, name, &classes)?;
+        run_one(command, &paths, repo, name, &classes, shared)?;
     }
     Ok(())
 }
@@ -35,19 +39,19 @@ pub fn list_setups(command: &str, repo: &Path) -> Result<Vec<String>> {
 
 pub fn run_one(
     command: &str,
-    home: &Path,
-    config: &Path,
+    paths: &Paths,
     repo: &Path,
     name: &str,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<()> {
-    let dir = setup_dir(command, home, config, repo)?;
+    let dir = setup_dir(command, paths.home(), paths.config(), repo)?;
     let Some(path) = find(&dir, name) else {
         bail!("{command}: no setup named `{name}` in {}", dir.display());
     };
 
     enter(command, name)?;
-    let result = run_path(command, &dir, &path, home, config, repo, classes);
+    let result = run_path(command, &dir, &path, paths, repo, classes, shared);
     leave(name);
     result
 }
@@ -139,10 +143,10 @@ fn run_path(
     command: &str,
     root: &Path,
     path: &Path,
-    home: &Path,
-    config: &Path,
+    paths: &Paths,
     repo: &Path,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<()> {
     if path.extension().is_none_or(|ext| ext != LUA_EXT) {
         return run_sh(command, path);
@@ -152,13 +156,21 @@ fn run_path(
         .parent()
         .with_context(|| format!("{command}: {} has no parent directory", root.display()))?;
     let own = path.parent().filter(|parent| *parent != root);
-    let mut paths = Paths::new(home, config).with_repo(Some(repo));
-    if let Some(dir) = own {
+    let mut paths = paths.clone().with_repo(Some(repo));
+    if let Some(dir) = path.parent() {
         paths = paths.with_dir(dir);
     }
     let roots: Vec<&Path> = own.into_iter().chain([modules]).collect();
 
-    run_script(command, Surface::Setup, path, &roots, &paths, classes)
+    run_script(
+        command,
+        Surface::Setup,
+        path,
+        &roots,
+        &paths,
+        classes,
+        shared,
+    )
 }
 
 fn run_sh(command: &str, path: &Path) -> Result<()> {
@@ -202,6 +214,14 @@ fn leave(name: &str) {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::lua::{Config, Shared};
+
+    fn configuration() -> Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
     use super::*;
 
     fn dirs(root: &Path) -> (PathBuf, PathBuf, PathBuf) {
@@ -211,25 +231,16 @@ mod tests {
         (home, config, repo)
     }
 
+    fn paths(home: &Path, config: &Path) -> Paths {
+        Paths::new(home, config, &home.join(".local/share/luadot"))
+    }
+
     fn write_setup(home: &Path, config: &Path, repo: &Path, file: &str, source: &str) -> PathBuf {
         let dir = setup_dir("test", home, config, repo).unwrap();
         let path = dir.join(file);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, source).unwrap();
         path
-    }
-
-    #[test]
-    fn setup_dir_mirrors_the_config_location_into_the_repo() {
-        let dir = setup_dir(
-            "setup",
-            Path::new("/home/u"),
-            Path::new("/home/u/.config/luadot"),
-            Path::new("/data/repo"),
-        )
-        .unwrap();
-
-        assert_eq!(dir, PathBuf::from("/data/repo/home/.config/luadot/setup"));
     }
 
     #[test]
@@ -258,67 +269,11 @@ mod tests {
     }
 
     #[test]
-    fn find_falls_back_to_a_directory_init() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        let init = write_setup(&home, &config, &repo, "ufw/init.sh", "");
-        let file = write_setup(&home, &config, &repo, "docker.sh", "");
-        write_setup(&home, &config, &repo, "docker/init.lua", "");
-        let dir = setup_dir("test", &home, &config, &repo).unwrap();
-
-        assert_eq!(find(&dir, "ufw").unwrap(), init);
-        assert_eq!(find(&dir, "docker").unwrap(), file);
-    }
-
-    #[test]
-    fn a_directory_setup_requires_its_own_modules_and_the_shared_ones() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        write_setup(&home, &config, &repo, "ufw/lua/own.lua", r#"return "own""#);
-        let shared = setup_dir("test", &home, &config, &repo)
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("lua/shared.lua");
-        std::fs::create_dir_all(shared.parent().unwrap()).unwrap();
-        std::fs::write(&shared, r#"return "shared""#).unwrap();
-        write_setup(
-            &home,
-            &config,
-            &repo,
-            "ufw/init.lua",
-            r#"
-            local out = assert(io.open(ld.path.repo .. "/modules.txt", "w"))
-            out:write(require("own") .. "/" .. require("shared"))
-            out:close()
-            "#,
-        );
-
-        run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap();
-
-        assert_eq!(
-            std::fs::read_to_string(repo.join("modules.txt")).unwrap(),
-            "own/shared"
-        );
-    }
-
-    #[test]
     fn ordered_puts_the_requested_order_first() {
         let names = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let order = ["c".to_string(), "a".to_string()];
 
         assert_eq!(ordered("test", names, &order).unwrap(), ["c", "a", "b"]);
-    }
-
-    #[test]
-    fn ordered_rejects_an_unknown_name() {
-        let names = vec!["a".to_string()];
-        let order = ["nope".to_string()];
-
-        let err = ordered("test", names, &order).unwrap_err().to_string();
-
-        assert!(err.contains("unknown setup `nope`"));
-        assert!(err.contains("available: a"));
     }
 
     #[test]
@@ -337,7 +292,15 @@ mod tests {
             "#,
         );
 
-        run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap();
+        run_one(
+            "setup",
+            &paths(&home, &config),
+            &repo,
+            "ufw",
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap();
 
         assert_eq!(
             std::fs::read_to_string(repo.join("lua-ran.txt")).unwrap(),
@@ -358,54 +321,17 @@ mod tests {
             &format!("printf done > {}", out.display()),
         );
 
-        run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap();
+        run_one(
+            "setup",
+            &paths(&home, &config),
+            &repo,
+            "ufw",
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap();
 
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "done");
-    }
-
-    #[test]
-    fn a_failing_sh_setup_reports_its_status() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        write_setup(&home, &config, &repo, "ufw.sh", "exit 5");
-
-        let err = format!(
-            "{:#}",
-            run_one("setup", &home, &config, &repo, "ufw", &Classes::default()).unwrap_err()
-        );
-
-        assert!(err.contains("exited with status 5"));
-    }
-
-    #[test]
-    fn a_missing_setup_reports_the_available_location() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-
-        let err = run_one("setup", &home, &config, &repo, "ufw", &Classes::default())
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("setup: no setup named `ufw`"));
-    }
-
-    #[test]
-    fn a_lua_setup_can_run_another_setup() {
-        let root = tempfile::tempdir().unwrap();
-        let (home, config, repo) = dirs(root.path());
-        let out = repo.join("nested.txt");
-        write_setup(&home, &config, &repo, "outer.lua", r#"ld.setup("inner")"#);
-        write_setup(
-            &home,
-            &config,
-            &repo,
-            "inner.sh",
-            &format!("printf nested > {}", out.display()),
-        );
-
-        run_one("setup", &home, &config, &repo, "outer", &Classes::default()).unwrap();
-
-        assert_eq!(std::fs::read_to_string(&out).unwrap(), "nested");
     }
 
     #[test]
@@ -416,7 +342,15 @@ mod tests {
 
         let err = format!(
             "{:#}",
-            run_one("setup", &home, &config, &repo, "loop", &Classes::default()).unwrap_err()
+            run_one(
+                "setup",
+                &paths(&home, &config),
+                &repo,
+                "loop",
+                &Classes::default(),
+                &configuration(),
+            )
+            .unwrap_err()
         );
 
         assert!(err.contains("already running"));

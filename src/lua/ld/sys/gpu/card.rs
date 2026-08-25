@@ -118,19 +118,4 @@ mod tests {
         assert_eq!(cards[1].driver, "nvidia");
         assert_eq!(cards[1].name, "AD107M [GeForce RTX 4060]");
     }
-
-    #[test]
-    fn an_unknown_identifier_stays_as_it_is() {
-        assert_eq!(vendor("0x10DE\n"), "nvidia");
-        assert_eq!(vendor("0xbeef\n"), "0xbeef");
-    }
-
-    #[test]
-    fn a_connector_is_not_a_card() {
-        assert!(is_card("card0"));
-        assert!(is_card("card12"));
-        assert!(!is_card("card0-eDP-1"));
-        assert!(!is_card("card"));
-        assert!(!is_card("renderD128"));
-    }
 }

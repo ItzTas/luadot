@@ -3,6 +3,7 @@ use std::path::Path;
 use super::super::parse::chain;
 use super::super::path::Paths;
 use super::super::repo::require;
+use crate::lua::Shared;
 use crate::lua::setup;
 use crate::state::Classes;
 
@@ -19,6 +20,7 @@ pub fn run(
     repo: &Path,
     name: &str,
     classes: &Classes,
+    shared: &Shared,
 ) -> mlua::Result<()> {
-    setup::run_one(command, paths.home(), paths.config(), repo, name, classes).map_err(chain)
+    setup::run_one(command, paths, repo, name, classes, shared).map_err(chain)
 }

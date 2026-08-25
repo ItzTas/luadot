@@ -2,20 +2,15 @@ use std::path::Path;
 
 use mlua::{Function, Lua, Table};
 
-use super::super::surface::{self, Surface};
-use super::constants::{EXPAND, NAMESPACE};
+use super::constants::EXPAND;
 use super::file::{failed, read, resolve};
 use crate::lua::embed;
 use crate::lua::runtime::environment;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, (name, vars): (String, Option<Table>)| {
-        if surface::inert(lua, &format!("{NAMESPACE}.{EXPAND}"), Surface::Template) {
-            return Ok(None);
-        }
-
         let path = resolve(lua, &name, EXPAND)?;
-        expand(lua, &path, vars).map(Some)
+        expand(lua, &path, vars)
     })
 }
 
@@ -36,19 +31,8 @@ fn expand(lua: &Lua, path: &Path, vars: Option<Table>) -> mlua::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
-
+    use super::super::fixture::{error, template};
     use crate::lua::{Content, from_template};
-
-    fn template(root: &Path) -> PathBuf {
-        let dir = root.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    fn error(dir: &Path, source: &str) -> String {
-        format!("{:#}", from_template(dir, source).unwrap_err())
-    }
 
     #[test]
     fn the_vars_and_the_interface_stay_in_scope() {
@@ -69,40 +53,6 @@ mod tests {
         assert_eq!(
             outputs[0].content(),
             &Content::Text("export EDITOR=nvim\nhost is a string\n".to_string())
-        );
-    }
-
-    #[test]
-    fn a_missing_file_is_reported() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = error(&dir, r#"return ld.alt.expand("missing.tmpl")"#);
-
-        assert!(err.contains("`ld.alt.expand`"));
-        assert!(err.contains("found no file `missing.tmpl`"));
-    }
-
-    #[test]
-    fn a_template_expands_another_one() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("header.tmpl.zsh"), "# <%= title %>\n").unwrap();
-        std::fs::write(
-            dir.join("zshrc.tmpl.zsh"),
-            "<%= ld.alt.expand(\"header.tmpl.zsh\", { title = \"zsh\" }) -%>\nexport EDITOR=<%= editor %>\n",
-        )
-        .unwrap();
-
-        let outputs = from_template(
-            &dir,
-            r#"return ld.alt.expand("zshrc.tmpl.zsh", { editor = "nvim" })"#,
-        )
-        .unwrap();
-
-        assert_eq!(
-            outputs[0].content(),
-            &Content::Text("# zsh\nexport EDITOR=nvim\n".to_string())
         );
     }
 
@@ -144,29 +94,5 @@ mod tests {
 
         assert!(err.contains("partial.tmpl"));
         assert!(err.contains(":2:"));
-    }
-
-    #[test]
-    fn a_broken_template_reports_its_own_line() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("broken.tmpl"), "fine\n<%= missing() %>\n").unwrap();
-
-        let err = error(&dir, r#"return ld.alt.expand("broken.tmpl")"#);
-
-        assert!(err.contains("`ld.alt.expand` failed to run"));
-        assert!(err.contains(":2:"));
-    }
-
-    #[test]
-    fn an_unterminated_tag_is_a_compile_error() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("broken.tmpl"), "text\n<% x = 1").unwrap();
-
-        let err = error(&dir, r#"return ld.alt.expand("broken.tmpl")"#);
-
-        assert!(err.contains("`ld.alt.expand` failed to compile"));
-        assert!(err.contains("line 2"));
     }
 }

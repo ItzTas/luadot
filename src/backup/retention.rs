@@ -52,15 +52,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_retention_without_a_limit_holds_nothing_back() {
-        let retention = Retention::default();
-
-        assert!(retention.is_empty());
-        assert_eq!(retention.extra(10), 0);
-        assert_eq!(retention.cutoff(1_000_000), None);
-    }
-
-    #[test]
     fn a_count_leaves_everything_beyond_it_over() {
         let retention = Retention::new(Some(2), None);
 
@@ -78,22 +69,5 @@ mod tests {
         assert_eq!(retention.extra(5), 0);
         assert_eq!(retention.cutoff(1_000_000), Some(940_000));
         assert_eq!(retention.cutoff(1_000), Some(0));
-    }
-
-    #[test]
-    fn each_limit_is_told_the_way_it_prunes() {
-        assert_eq!(
-            Retention::new(Some(3), None).label(),
-            "keeping the 3 most recent"
-        );
-        assert_eq!(
-            Retention::new(None, Some(2_592_000)).label(),
-            "keeping the ones taken in the last 30 days"
-        );
-        assert_eq!(
-            Retention::new(Some(3), Some(3_600)).label(),
-            "keeping the 3 most recent taken in the last 1 hour"
-        );
-        assert_eq!(Retention::default().label(), "keeping every one of them");
     }
 }

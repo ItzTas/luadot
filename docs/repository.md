@@ -1,59 +1,84 @@
 # The repository
 
-The repository mirrors the machine under two directories: `home/` holds what
-lives in your home directory, `root/` the rest of the filesystem, path for
-path. `add` chooses between them by the path it is given:
+The repository mirrors your home directory, path for path: `add` puts
+`~/.zshrc` at `.zshrc` and `~/.config/nvim/init.lua` at
+`.config/nvim/init.lua`, and `apply` puts them back. A path outside your home
+directory is refused:
 
 ```
-luadot add ~/.zshrc          -- lands in home/.zshrc
-luadot add /etc/pacman.conf  -- lands in root/etc/pacman.conf
+$ luadot add /etc/pacman.conf
+add: cannot manage /etc/pacman.conf: outside your home directory /home/u
 ```
 
-Anything at the top level outside the two directories (the repository's own
-README, a license) is never applied anywhere.
+## The repository's own files
+
+The mirror reaches the top level, so the rules git needs for the repository
+cannot sit there. They live in `~/.local/share/luadot/git/`, a
+directory managed like any other: `ignore` holds what a `.gitignore` would,
+`attributes` what a `.gitattributes` would, and `luadot add` on either puts it
+in the repository like any dotfile. Every command copies the repository's copy
+of each into `.git/info/exclude` and `.git/info/attributes`, between a
+`# luadot` and a `# /luadot` line, where git reads them for that clone with no
+file in the tree; lines outside the markers are left alone. `add` keeps the
+`# luadot:lfs` block of `attributes` in step with the rules carrying
+`lfs = true` and stages it, leaving the lines outside that block alone.
+
+`clone` copies both before anything else and pulls the LFS contents the
+attributes name, so a fresh clone needs nothing more. A clone made with plain
+`git` reads neither until a luadot command runs in it.
+
+A `.gitignore` or `.gitattributes` at the top of the repository is a dotfile
+like any other and lands in `~`; git reads it for the repository all the same,
+so keep the repository's rules in `~/.local/share/luadot/git/` instead.
+`.gitmodules` has no other place: git reads it at the top only, so a
+repository with submodules keeps it there and `apply` puts a copy in `~`,
+where git ignores it. Anything else at the top level, a README or a license,
+needs an `ignore` rule:
+
+```lua
+ld.rules({ match = { "README.md", "LICENSE" }, ignore = true })
+```
+
+Only `.git/` stays out, whatever the rules say. luadot writes nothing of its
+own at the top level: the `.luarc.json` that `init`, `clone` and `meta
+install` produce goes to `~/.config/luadot/`, since one at the repository root
+would land in `~`.
 
 ## What git refuses to keep
 
-`add` reads the repository's `.gitignore` before it writes anything: a file
-git would never track would sit outside every commit and be gone on the next
-clone. A path named on the command line that lands on an excluded destination
-stops the run:
+`add` reads the repository's ignore rules before it writes anything. A path
+named on the command line that lands on an excluded destination stops the run:
 
 ```
 $ luadot add ~/.cache
-add: /home/u/.cache lands on home/.cache, which the repository's .gitignore excludes
+add: /home/u/.cache lands on .cache, which the repository's ignore rules exclude
 ```
 
-Walking a directory is quieter: the excluded files are left out and the rest
-is added, so `luadot add ~/.config/nvim` brings the configuration in and
-leaves the logs behind. Nested `.gitignore` files, negated patterns,
-`.git/info/exclude` and the global excludes file all count, exactly as git
-reads them; a repository git does not track excludes nothing.
+Walking a directory does not stop: the excluded files are left out and the
+rest is added, so `luadot add ~/.config/nvim` brings the configuration in and
+leaves the logs behind. The repository's `ignore`, nested `.gitignore` files,
+negated patterns, `.git/info/exclude` and the global excludes file all count,
+exactly as git reads them.
 
-## System files
+## Mode and owner
 
-Files under `root/` go through the same commands, with two differences.
-
-They are always plain copies, never links: a hard link would leave the
-repository's copy owned by root, and a symlink into your home directory breaks
-while your home is unavailable.
-
-Writing them usually takes privilege: every operation is tried as you first,
-and only when the filesystem answers "permission denied" does luadot run
-`sudo` for that one file (`install` to place it, `cat` to read it). A run that
-never touches a privileged path never asks for a password.
-
-Mode and owner come from the rules:
+Two rule keys set the permissions and the ownership of a placed file, whatever
+`link` says:
 
 ```lua
 ld.rules({
-  { match = "root/etc/**", mode = "0644", owner = "root:root" },
-  { match = "root/etc/sudoers.d/**", mode = "0440" },
+  { match = ".ssh/**", mode = "0600" },
+  { match = ".local/bin/**", mode = "0755", owner = "me:wheel" },
 })
 ```
 
-Without a `mode`, the repository file's own permission bits are applied.
-Without an `owner`, the file belongs to whoever wrote it: you when no
-privilege was needed, root when sudo was. `status` reports a system file it
-cannot read as `unreadable` and moves on; `apply` and `diff` read it through
-`sudo cat`.
+`mode` is the permission bits, three or four octal digits. A file carrying
+other bits reports as `differs`, `diff` prints both modes, and `apply` puts
+the bits back. Git keeps only the executable bit, so this is how a key stays
+`600` after a clone. A hard link or a symlink shares its inode with the
+repository's copy, so the bits land there too. Without a `mode`, a copy gets
+the repository file's own bits and nothing is compared.
+
+`owner` is `"user"` or `"user:group"`, set through `chown` once the file is
+placed. luadot never escalates privilege: a user you cannot chown to stops the
+run with chown's own message. Without an `owner`, the file belongs to you.

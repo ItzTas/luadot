@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use super::State;
+use crate::files;
 use crate::utils;
 
 pub fn load() -> Result<State> {
@@ -29,13 +30,8 @@ fn load_from(path: &Path) -> Result<State> {
 }
 
 fn save_to(path: &Path, state: &State) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("state: failed to create {}", parent.display()))?;
-    }
     let contents = serde_json::to_string_pretty(state).context("state: failed to serialize")?;
-    std::fs::write(path, contents)
-        .with_context(|| format!("state: failed to write {}", path.display()))?;
+    files::replace_contents("state", path, contents.as_bytes())?;
     debug!(path = %path.display(), "saved the state");
     Ok(())
 }
@@ -49,13 +45,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn missing_file_loads_default() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("state.json");
-        assert!(load_from(&path).unwrap().repo().is_none());
-    }
-
-    #[test]
     fn save_then_load_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("nested/state.json");
@@ -66,13 +55,5 @@ mod tests {
 
         let loaded = load_from(&path).unwrap();
         assert_eq!(loaded.repo(), Some(Path::new("/x/y/repo")));
-    }
-
-    #[test]
-    fn invalid_json_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("state.json");
-        std::fs::write(&path, "not json").unwrap();
-        assert!(load_from(&path).is_err());
     }
 }

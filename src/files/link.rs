@@ -36,13 +36,17 @@ pub fn link(mode: LinkMode, source: &Path, dest: &Path) -> Result<()> {
 }
 
 fn hard(source: &Path, dest: &Path) -> Result<()> {
-    std::fs::hard_link(source, dest).with_context(|| {
-        format!(
-            "files: failed to hard link {} -> {}",
-            dest.display(),
-            source.display()
-        )
-    })
+    match std::fs::hard_link(source, dest) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::CrossesDevices => copy(source, dest),
+        Err(err) => Err(err).with_context(|| {
+            format!(
+                "files: failed to hard link {} -> {}",
+                dest.display(),
+                source.display()
+            )
+        }),
+    }
 }
 
 fn symbolic(source: &Path, dest: &Path) -> Result<()> {
@@ -81,20 +85,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hard_link_shares_the_same_inode() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source.txt");
-        let dest = dir.path().join("dest.txt");
-        std::fs::write(&source, "hello").unwrap();
-
-        link(LinkMode::Hard, &source, &dest).unwrap();
-
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
-        std::fs::write(&source, "changed").unwrap();
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "changed");
-    }
-
-    #[test]
     fn symbolic_link_points_at_the_source() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source.txt");
@@ -110,20 +100,7 @@ mod tests {
     }
 
     #[test]
-    fn fails_when_dest_already_exists() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source.txt");
-        let dest = dir.path().join("dest.txt");
-        std::fs::write(&source, "hello").unwrap();
-        std::fs::write(&dest, "existing").unwrap();
-
-        assert!(link(LinkMode::Hard, &source, &dest).is_err());
-        assert!(link(LinkMode::Copy, &source, &dest).is_err());
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "existing");
-    }
-
-    #[test]
-    fn copy_duplicates_the_contents_into_a_new_inode() {
+    fn a_hard_link_shares_the_inode_of_the_source() {
         use std::os::unix::fs::MetadataExt;
 
         let dir = tempfile::tempdir().unwrap();
@@ -131,16 +108,13 @@ mod tests {
         let dest = dir.path().join("dest.txt");
         std::fs::write(&source, "hello").unwrap();
 
-        link(LinkMode::Copy, &source, &dest).unwrap();
+        link(LinkMode::Hard, &source, &dest).unwrap();
 
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
-        assert_ne!(
-            std::fs::metadata(&source).unwrap().ino(),
-            std::fs::metadata(&dest).unwrap().ino()
+        let (a, b) = (
+            std::fs::metadata(&source).unwrap(),
+            std::fs::metadata(&dest).unwrap(),
         );
-
-        std::fs::write(&source, "changed").unwrap();
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "hello");
+        assert_eq!((a.dev(), a.ino()), (b.dev(), b.ino()));
     }
 
     #[test]

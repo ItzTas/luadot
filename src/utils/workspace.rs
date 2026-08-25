@@ -1,24 +1,31 @@
 use std::path::{Path, PathBuf};
+use std::sync::MutexGuard;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
-use super::paths::{home_dir, is_managed, relative};
+use super::paths::{home_dir, relative};
 use super::repo::{managed_path, require_repo};
 use crate::files::{self, Entry};
-use crate::lua::{self, Config};
+use crate::lua::{self, Config, Shared};
 
 pub struct Workspace {
-    pub config: Config,
+    pub config: Shared,
     pub home: PathBuf,
     pub repo: PathBuf,
 }
 
 pub fn workspace(command: &str) -> Result<Workspace> {
     let config = lua::load_config()?;
-    let repo = require_repo(command, config.repo_dir())?;
+    let repo = require_repo(command, configured(command, &config)?.repo_dir())?;
     let home = home_dir()?;
 
     Ok(Workspace { config, home, repo })
+}
+
+pub fn configured<'a>(command: &str, config: &'a Shared) -> Result<MutexGuard<'a, Config>> {
+    config
+        .try_lock()
+        .map_err(|_| anyhow!("{command}: the configuration is still being read"))
 }
 
 pub fn managed_root(
@@ -57,11 +64,6 @@ pub fn managed_entries(
 ) -> Result<Vec<Entry>> {
     Ok(files::collect_entries(command, root)?
         .into_iter()
-        .filter(|entry| {
-            let target = entry.target();
-            let relative = relative(repo, &target);
-
-            is_managed(relative) && !ignored(relative)
-        })
+        .filter(|entry| !ignored(relative(repo, &entry.target())))
         .collect())
 }

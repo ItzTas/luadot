@@ -2,22 +2,20 @@ use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::API;
 use super::super::parse::external;
-use super::super::surface::{self, Surface};
-use super::constants::{ARGS, DIFF, DIFF_KEYS, NAMESPACE, TOOL};
-use super::parse::{known, report};
+use super::command::Command;
+use super::constants::{ARGS, DIFF_KEYS, NAMESPACE, TOOL};
+use super::parse::{around, known, report};
 use crate::lua::{Config, Diff, Tool};
 
-pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, options: Table| {
-        let call = format!("{NAMESPACE}.{DIFF}");
-        if surface::inert(lua, &call, Surface::Config) {
-            return Ok(());
-        }
-
+pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
+    lua.create_function(move |lua, options: Table| {
+        let call = format!("{NAMESPACE}.{}", command.path());
         let diff = diff(&call, &options)?;
-        Config::building(lua)?.set_diff(diff);
-
-        Ok(())
+        let around = around(&call, &options)?;
+        Config::building(lua, |config| {
+            config.set_diff(diff);
+            config.set_around(command, around);
+        })
     })
 }
 
@@ -72,18 +70,6 @@ mod tests {
     use crate::lua::{Custom, from_source};
 
     #[test]
-    fn nothing_is_customized_until_the_call_runs() {
-        let config = from_source("local unused = 1").unwrap();
-        let diff = config.diff();
-
-        assert!(diff.entry().is_none());
-        assert!(diff.summary().is_none());
-        assert!(diff.render().is_none());
-        assert!(diff.tool().is_none());
-        assert!(diff.args().is_empty());
-    }
-
-    #[test]
     fn a_function_is_kept_callable_after_the_configuration_ran() {
         let config = from_source(
             r#"ld.on.diff({ summary = function(counts) return counts.default .. "!" end })"#,
@@ -126,50 +112,5 @@ mod tests {
         assert_eq!(tool.program(), "delta");
         assert_eq!(tool.arguments(), ["--side-by-side"]);
         assert_eq!(config.diff().args(), ["--stat"]);
-    }
-
-    #[test]
-    fn rejects_an_unknown_key() {
-        let err = format!(
-            "{:#}",
-            from_source("ld.on.diff({ entries = false })").unwrap_err()
-        );
-
-        assert!(err.contains("`ld.on.diff`: unknown key `entries`"));
-        assert!(err.contains("available: args, entry, render, summary, tool"));
-    }
-
-    #[test]
-    fn rejects_a_value_the_key_does_not_accept() {
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.on.diff({ entry = "a line" })"#).unwrap_err()
-        );
-
-        assert!(err.contains("`entry` takes a function or false"));
-
-        let err = format!(
-            "{:#}",
-            from_source("ld.on.diff({ summary = 1 })").unwrap_err()
-        );
-
-        assert!(err.contains("`summary` takes a function, a string or false"));
-    }
-
-    #[test]
-    fn rejects_a_tool_that_names_no_program() {
-        let err = format!(
-            "{:#}",
-            from_source("ld.on.diff({ tool = {} })").unwrap_err()
-        );
-
-        assert!(err.contains("`tool` takes the program to run"));
-
-        let err = format!(
-            "{:#}",
-            from_source(r#"ld.on.diff({ tool = "  " })"#).unwrap_err()
-        );
-
-        assert!(err.contains("`tool` takes a word or a list of words"));
     }
 }

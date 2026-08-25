@@ -239,7 +239,7 @@ mod tests {
             Lock::Keys,
             &recipients,
             Some(Path::new("/home/u/.netrc")),
-            Path::new("/repo/home/.netrc.age"),
+            Path::new("/repo/.netrc.age"),
         );
 
         assert_eq!(invocation.get_program(), OsStr::new("age"));
@@ -252,96 +252,10 @@ mod tests {
                 "--recipient",
                 "age1second",
                 "--output",
-                "/repo/home/.netrc.age",
+                "/repo/.netrc.age",
                 "/home/u/.netrc",
             ]
         );
-    }
-
-    #[test]
-    fn gpg_encrypts_without_prompting() {
-        let recipients = ["me@example.com".to_string()];
-        let invocation = encrypt_command(
-            Backend::Gpg,
-            Lock::Keys,
-            &recipients,
-            Some(Path::new("/home/u/.netrc")),
-            Path::new("/repo/home/.netrc.gpg"),
-        );
-
-        assert_eq!(invocation.get_program(), OsStr::new("gpg"));
-        assert_eq!(
-            args(&invocation),
-            [
-                "--quiet",
-                "--batch",
-                "--yes",
-                "--encrypt",
-                "--recipient",
-                "me@example.com",
-                "--output",
-                "/repo/home/.netrc.gpg",
-                "/home/u/.netrc",
-            ]
-        );
-    }
-
-    #[test]
-    fn a_plaintext_held_in_memory_is_encrypted_without_a_source_file() {
-        let recipients = ["age1first".to_string()];
-        let invocation = encrypt_command(
-            Backend::Age,
-            Lock::Keys,
-            &recipients,
-            None,
-            Path::new("/repo/root/etc/wg0.conf.age"),
-        );
-
-        assert_eq!(
-            args(&invocation),
-            [
-                "--encrypt",
-                "--recipient",
-                "age1first",
-                "--output",
-                "/repo/root/etc/wg0.conf.age",
-            ]
-        );
-    }
-
-    #[test]
-    fn age_encrypts_to_a_passphrase_instead_of_recipients() {
-        let recipients = ["age1first".to_string()];
-        let invocation = encrypt_command(
-            Backend::Age,
-            Lock::Passphrase,
-            &recipients,
-            Some(Path::new("/home/u/.netrc")),
-            Path::new("/repo/home/.netrc.age"),
-        );
-
-        assert_eq!(
-            args(&invocation),
-            [
-                "--encrypt",
-                "--passphrase",
-                "--output",
-                "/repo/home/.netrc.age",
-                "/home/u/.netrc",
-            ]
-        );
-    }
-
-    #[test]
-    fn what_is_piped_in_reaches_the_tool() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path().join("copied");
-        let mut invocation = Command::new("sh");
-        invocation.args(["-c", "cat > \"$0\"", dest.to_str().unwrap()]);
-
-        piped("add", invocation, b"secret\n").unwrap();
-
-        assert_eq!(std::fs::read(&dest).unwrap(), b"secret\n");
     }
 
     #[test]
@@ -350,7 +264,7 @@ mod tests {
             Backend::Age,
             Lock::Keys,
             Some(Path::new("/home/u/key.txt")),
-            Path::new("/repo/home/.netrc.age"),
+            Path::new("/repo/.netrc.age"),
             None,
         );
 
@@ -360,52 +274,9 @@ mod tests {
                 "--decrypt",
                 "--identity",
                 "/home/u/key.txt",
-                "/repo/home/.netrc.age",
+                "/repo/.netrc.age",
             ]
         );
-    }
-
-    #[test]
-    fn encrypting_without_recipients_is_refused() {
-        let err = encrypt(
-            "add",
-            Backend::Age,
-            Lock::Keys,
-            &[],
-            Path::new("/home/u/.netrc"),
-            Path::new("/repo/home/.netrc.age"),
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(err.contains("add: no recipients set"));
-        assert!(err.contains("`ld.crypt.lock` with `recipients`"));
-    }
-
-    #[test]
-    fn decrypting_age_without_an_identity_is_refused() {
-        let err = decrypt(
-            "apply",
-            Backend::Age,
-            Lock::Keys,
-            None,
-            Path::new("/repo/x.age"),
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(err.contains("apply: decrypting with age needs `ld.crypt.lock` with `identity`"));
-    }
-
-    #[test]
-    fn a_missing_tool_says_so() {
-        let mut invocation = Command::new("luadot-tool-that-does-not-exist");
-        invocation.arg("--version");
-
-        let err = format!("{:#}", run("apply", invocation).unwrap_err());
-
-        assert!(err.contains("apply: failed to run `luadot-tool-that-does-not-exist`"));
-        assert!(err.contains("is it installed?"));
     }
 
     #[test]

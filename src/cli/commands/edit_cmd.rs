@@ -12,12 +12,16 @@ use crate::utils::{self, Workspace};
 
 #[derive(Debug, Args)]
 pub struct EditArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(
+        value_name = "PATH",
+        help = "The managed file to open, or the file a template produces"
+    )]
     pub path: String,
 }
 
 pub fn edit_cmd(args: EditArgs) -> Result<()> {
     let Workspace { config, home, repo } = utils::workspace("edit")?;
+    let config = utils::configured("edit", &config)?;
     let in_repo = utils::managed_path("edit", &home, &repo, &args.path)?;
 
     if let Some(script) = template_script(&in_repo) {
@@ -119,32 +123,12 @@ mod tests {
     #[test]
     fn a_template_directory_is_edited_through_its_script() {
         let repo = tempfile::tempdir().unwrap();
-        let template = repo.path().join("home/.zshrc.luadot");
+        let template = repo.path().join(".zshrc.luadot");
         std::fs::create_dir_all(&template).unwrap();
 
         assert_eq!(
             template_script(&template),
             Some(template.join(TEMPLATE_FILE))
         );
-    }
-
-    #[test]
-    fn a_standalone_template_is_edited_as_it_stands() {
-        let repo = tempfile::tempdir().unwrap();
-        let template = repo.path().join("home/.zprofile.luadot");
-        std::fs::create_dir_all(template.parent().unwrap()).unwrap();
-        std::fs::write(&template, "export HOST=1\n").unwrap();
-
-        assert_eq!(template_script(&template), None);
-    }
-
-    #[test]
-    fn a_managed_file_is_edited_as_it_stands() {
-        let repo = tempfile::tempdir().unwrap();
-        let file = repo.path().join("home/.vimrc");
-        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        std::fs::write(&file, "set number\n").unwrap();
-
-        assert_eq!(template_script(&file), None);
     }
 }

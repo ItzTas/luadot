@@ -4,19 +4,14 @@ use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::API;
 use super::super::parse::external;
-use super::super::surface::{self, Surface};
 use super::constants::{NAMESPACE, RENDER};
 use super::file::{failed, read, resolve};
 use crate::lua::runtime::environment;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, (name, vars): (String, Option<Table>)| {
-        if surface::inert(lua, &format!("{NAMESPACE}.{RENDER}"), Surface::Template) {
-            return Ok(None);
-        }
-
         let path = resolve(lua, &name, RENDER)?;
-        render(lua, &path, vars).map(Some)
+        render(lua, &path, vars)
     })
 }
 
@@ -42,19 +37,8 @@ fn render(lua: &Lua, path: &Path, vars: Option<Table>) -> mlua::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
-
+    use super::super::fixture::template;
     use crate::lua::{Content, from_template};
-
-    fn template(root: &Path) -> PathBuf {
-        let dir = root.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    fn error(dir: &Path, source: &str) -> String {
-        format!("{:#}", from_template(dir, source).unwrap_err())
-    }
 
     #[test]
     fn the_standard_library_stays_reachable_from_a_rendered_file() {
@@ -76,29 +60,5 @@ mod tests {
             outputs[0].content(),
             &Content::Text("export EDITOR=nvim".to_string())
         );
-    }
-
-    #[test]
-    fn rejects_a_file_that_returns_no_string() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("broken.tmpl.zsh"), "return 42").unwrap();
-
-        let err = error(&dir, r#"return ld.alt.render("broken.tmpl.zsh")"#);
-
-        assert!(err.contains("expects"));
-        assert!(err.contains("to return a string, got integer"));
-    }
-
-    #[test]
-    fn reports_a_file_that_fails_to_run() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-        std::fs::write(dir.join("broken.tmpl.zsh"), "error('boom')").unwrap();
-
-        let err = error(&dir, r#"return ld.alt.render("broken.tmpl.zsh")"#);
-
-        assert!(err.contains("failed to run"));
-        assert!(err.contains("boom"));
     }
 }

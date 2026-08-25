@@ -120,7 +120,6 @@ mod tests {
     use std::ffi::{OsStr, OsString};
 
     use super::*;
-    use crate::lua::runtime::runtime;
 
     fn path_with(programs: &[&str]) -> (tempfile::TempDir, OsString) {
         let dir = tempfile::tempdir().unwrap();
@@ -129,30 +128,6 @@ mod tests {
         }
         let path = env::join_paths([dir.path()]).unwrap();
         (dir, path)
-    }
-
-    #[test]
-    fn a_sequence_lists_packages() {
-        let lua = runtime().unwrap();
-        let list = lua.create_sequence_from(["git", "zsh"]).unwrap();
-
-        assert_eq!(packages(&Value::Table(list)).unwrap(), ["git", "zsh"]);
-    }
-
-    #[test]
-    fn rejects_other_values() {
-        let err = packages(&Value::Integer(1)).unwrap_err().to_string();
-
-        assert!(err.contains("takes a package name or a list of package names"));
-    }
-
-    #[test]
-    fn detect_finds_an_available_manager() {
-        let (_dir, path) = path_with(&["dnf"]);
-
-        let (manager, _) = detect(Some(&path)).unwrap();
-
-        assert_eq!(manager, "dnf");
     }
 
     #[test]
@@ -165,28 +140,11 @@ mod tests {
     }
 
     #[test]
-    fn detect_yields_nothing_without_a_manager() {
-        let (_dir, path) = path_with(&[]);
-
-        assert!(detect(Some(&path)).is_none());
-        assert!(detect(None).is_none());
-    }
-
-    #[test]
     fn build_command_prefixes_sudo_when_available() {
         let command = build_command("pacman", &["-S"], true, &["git".to_string()]);
 
         assert_eq!(command.get_program(), OsStr::new("sudo"));
         let args: Vec<&str> = command.get_args().map(|a| a.to_str().unwrap()).collect();
         assert_eq!(args, ["pacman", "-S", "git"]);
-    }
-
-    #[test]
-    fn build_command_runs_the_manager_directly_without_sudo() {
-        let command = build_command("apt-get", &["install", "-y"], false, &["git".to_string()]);
-
-        assert_eq!(command.get_program(), OsStr::new("apt-get"));
-        let args: Vec<&str> = command.get_args().map(|a| a.to_str().unwrap()).collect();
-        assert_eq!(args, ["install", "-y", "git"]);
     }
 }

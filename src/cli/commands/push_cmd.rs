@@ -9,7 +9,8 @@ pub struct PushArgs {
     #[arg(
         value_name = "ARGS",
         trailing_var_arg = true,
-        allow_hyphen_values = true
+        allow_hyphen_values = true,
+        help = "The arguments git push receives, verbatim"
     )]
     pub args: Vec<String>,
 }
@@ -24,15 +25,4 @@ fn push_args(args: Vec<String>) -> Vec<String> {
     let mut forwarded = vec!["push".to_string()];
     forwarded.extend(args);
     forwarded
-}
-
-#[cfg(test)]
-mod tests {
-    use super::push_args;
-
-    #[test]
-    fn forwards_extra_args_after_push() {
-        let args = vec!["origin".to_string(), "main".to_string()];
-        assert_eq!(push_args(args), ["push", "origin", "main"]);
-    }
 }

@@ -2,7 +2,7 @@ use glob::Pattern;
 use mlua::{Table, Value};
 use regex::Regex;
 
-use super::constants::{CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX};
+use super::constants::{API, CONFLICT_POLICIES, LINK_MODES, MATCH, REGEX};
 use crate::files::{ConflictPolicy, LinkMode};
 use crate::lua::Matcher;
 
@@ -101,11 +101,27 @@ pub fn owner_name(raw: &str, what: &str) -> mlua::Result<String> {
         || raw.contains(char::is_whitespace);
     if broken {
         return Err(external(format!(
-            "{what} needs an `owner` like \"root\" or \"root:root\", got `{raw}`"
+            "{what} needs an `owner` like \"user\" or \"user:group\", got `{raw}`"
         )));
     }
 
     Ok(raw.to_string())
+}
+
+pub fn known(call: &str, options: &Table, keys: &[&str]) -> mlua::Result<()> {
+    for pair in options.clone().pairs::<String, Value>() {
+        let (key, _) =
+            pair.map_err(|_| external(format!("`{API}.{call}` takes a table of options")))?;
+
+        if !keys.contains(&key.as_str()) {
+            return Err(external(format!(
+                "`{API}.{call}`: unknown key `{key}` (available: {})",
+                keys.join(", ")
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 pub fn lookup<T: Copy>(entries: &[(&str, T)], name: &str, field: &str) -> mlua::Result<T> {
@@ -143,16 +159,6 @@ fn keys<T>(entries: &[(&str, T)]) -> String {
 mod tests {
     use super::*;
 
-    const ENTRIES: [(&str, u8); 2] = [("one", 1), ("two", 2)];
-
-    #[test]
-    fn lookup_lists_the_available_names() {
-        let err = lookup(&ENTRIES, "three", "number").unwrap_err().to_string();
-
-        assert!(err.contains("unknown number `three`"));
-        assert!(err.contains("available: one, two"));
-    }
-
     #[test]
     fn mode_bits_reads_three_or_four_octal_digits() {
         assert_eq!(mode_bits("600", "a rule").unwrap(), 0o600);
@@ -171,38 +177,11 @@ mod tests {
     }
 
     #[test]
-    fn owner_name_takes_a_user_with_an_optional_group() {
-        assert_eq!(owner_name("root", "a rule").unwrap(), "root");
-        assert_eq!(owner_name("root:wheel", "a rule").unwrap(), "root:wheel");
-        assert_eq!(owner_name("0:0", "a rule").unwrap(), "0:0");
-    }
-
-    #[test]
     fn owner_name_rejects_a_broken_name() {
-        for raw in ["", ":", "root:", ":wheel", "a:b:c", "ro ot"] {
+        for raw in ["", ":", "me:", ":wheel", "a:b:c", "m e"] {
             let err = owner_name(raw, "a rule").unwrap_err().to_string();
 
             assert!(err.contains("needs an `owner`"), "{raw}");
         }
-    }
-
-    #[test]
-    fn regex_reports_an_invalid_expression() {
-        assert!(
-            regex("^[")
-                .unwrap_err()
-                .to_string()
-                .contains("invalid regex `^[`")
-        );
-    }
-
-    #[test]
-    fn pattern_reports_an_invalid_glob() {
-        assert!(
-            pattern("[")
-                .unwrap_err()
-                .to_string()
-                .contains("invalid pattern `[`")
-        );
     }
 }

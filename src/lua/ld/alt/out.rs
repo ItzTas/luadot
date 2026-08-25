@@ -2,18 +2,19 @@ use std::path::PathBuf;
 
 use mlua::{Function, Lua, Table, Value};
 
-use super::super::constants::API;
-use super::super::parse::{conflict_policy, external, link_mode, mode_bits};
+use super::super::constants::{API, CONFLICT, LINK, MODE, ON_CHANGE};
+use super::super::parse::{chain, conflict_policy, external, link_mode, mode_bits};
 use super::super::surface::{self, Surface};
-use super::constants::{FILE, NAMESPACE, OUT};
+use super::constants::{CONTENT, DEST, DEST_ALONE, FILE, NAMESPACE, OUT};
 use super::file::handle;
-use crate::lua::{Content, Output, Template};
+use crate::files::{Placement, sync_file, write_file};
+use crate::hook::Hooks;
+use crate::lua::{Content, Output, Scope};
+use crate::utils::dry_run;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, value: Value| {
-        if surface::inert(lua, &format!("{NAMESPACE}.{OUT}"), Surface::Template) {
-            return Ok(());
-        }
+        surface::slow_in(lua, &format!("{NAMESPACE}.{OUT}"), Surface::Config);
 
         output(lua, value)
     })
@@ -21,9 +22,38 @@ pub fn function(lua: &Lua) -> mlua::Result<Function> {
 
 pub fn output(lua: &Lua, value: Value) -> mlua::Result<()> {
     let output = parse(lua, value)?;
-    Template::building(lua)?.add_output(output);
+    if Surface::current(lua) == Some(Surface::Template) {
+        Scope::building(lua)?.add_output(output);
+        return Ok(());
+    }
 
-    Ok(())
+    place(&output)
+}
+
+fn place(output: &Output) -> mlua::Result<()> {
+    if dry_run() {
+        return Ok(());
+    }
+
+    let call = format!("`{API}.{NAMESPACE}.{OUT}`");
+    let policy = output.conflict().unwrap_or_default();
+
+    let placement = Placement::new(output.link().unwrap_or_default()).with_mode(output.mode());
+    let outcome = match output.content() {
+        Content::Text(text) => write_file(policy, placement.attributes(), output.dest(), text),
+        Content::File(source) => sync_file(policy, placement, source, output.dest()),
+    }
+    .map_err(|err| {
+        external(format!(
+            "{call} failed to write {}: {err:#}",
+            output.dest().display()
+        ))
+    })?;
+
+    let mut hooks = Hooks::new(false);
+    hooks.record(outcome, output.on_change());
+
+    hooks.finish(&call).map_err(chain)
 }
 
 fn parse(lua: &Lua, value: Value) -> mlua::Result<Output> {
@@ -40,13 +70,13 @@ fn parse(lua: &Lua, value: Value) -> mlua::Result<Output> {
 }
 
 fn from_table(lua: &Lua, entry: &Table) -> mlua::Result<Output> {
-    let dest: Option<String> = entry.get("dest")?;
-    let link: Option<String> = entry.get("link")?;
-    let conflict: Option<String> = entry.get("conflict")?;
-    let on_change: Option<String> = entry.get("on_change")?;
+    let dest: Option<String> = entry.get(DEST)?;
+    let link: Option<String> = entry.get(LINK)?;
+    let conflict: Option<String> = entry.get(CONFLICT)?;
+    let on_change: Option<String> = entry.get(ON_CHANGE)?;
 
-    let content = content(&entry.get::<Value>("content")?)?;
-    let mode = mode(&entry.get::<Value>("mode")?, &content)?;
+    let content = content(&entry.get::<Value>(CONTENT)?)?;
+    let mode = mode(&entry.get::<Value>(MODE)?, &content)?;
 
     Ok(Output::new(
         destination(lua, dest.as_deref())?,
@@ -81,7 +111,9 @@ fn mode(value: &Value, content: &Content) -> mlua::Result<Option<u32>> {
 }
 
 fn destination(lua: &Lua, raw: Option<&str>) -> mlua::Result<PathBuf> {
-    Ok(Template::building(lua)?.destination(raw))
+    Scope::building(lua)?
+        .destination(raw)
+        .ok_or_else(|| external(format!("`{API}.{NAMESPACE}.{OUT}` {DEST_ALONE}")))
 }
 
 fn content(value: &Value) -> mlua::Result<Content> {
@@ -97,49 +129,38 @@ fn content(value: &Value) -> mlua::Result<Content> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
+    use super::super::super::{Paths, install};
+    use super::super::fixture::{error, template};
+    use super::*;
     use crate::lua::from_template;
+    use crate::lua::runtime::runtime;
+    use crate::state::Classes;
 
-    fn error(dir: &Path, source: &str) -> String {
-        format!("{:#}", from_template(dir, source).unwrap_err())
-    }
+    fn script(dir: &Path, source: &str) -> mlua::Result<()> {
+        let lua = runtime().unwrap();
+        let paths = Paths::new(dir, dir, dir).with_dir(dir);
+        install(&lua, Surface::Bootstrap, &paths, &Classes::default()).unwrap();
 
-    fn template(root: &Path) -> PathBuf {
-        let dir = root.join(".zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    #[test]
-    fn rejects_a_table_without_content() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = error(&dir, r#"ld.alt.out({ dest = "~/.zshrc" })"#);
-
-        assert!(err.contains("needs a `content`"));
-        assert!(err.contains("got nil"));
+        lua.load(source).exec()
     }
 
     #[test]
-    fn rejects_an_unknown_link_mode() {
+    fn a_script_writes_the_file_where_it_declares_it() {
         let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
+        let dest = root.path().join("generated/motd");
 
-        let err = error(&dir, r#"ld.alt.out({ content = "x", link = "magic" })"#);
+        script(
+            root.path(),
+            &format!(
+                r#"ld.alt.out({{ dest = "{}", content = "welcome\n", mode = "600" }})"#,
+                dest.display()
+            ),
+        )
+        .unwrap();
 
-        assert!(err.contains("unknown link mode `magic`"));
-    }
-
-    #[test]
-    fn rejects_an_unknown_conflict_policy() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        let err = error(&dir, r#"ld.alt.out({ content = "x", conflict = "ask" })"#);
-
-        assert!(err.contains("unknown conflict policy `ask`"));
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "welcome\n");
     }
 
     #[test]
@@ -156,22 +177,6 @@ mod tests {
             from_template(&dir, r#"ld.alt.out({ content = "x", mode = "0644" })"#).unwrap();
 
         assert_eq!(outputs[0].mode(), Some(0o644));
-    }
-
-    #[test]
-    fn rejects_a_mode_that_is_not_three_or_four_octal_digits() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template(root.path());
-
-        for raw in ["60", "60000", "6o0", "800", "+60"] {
-            let err = error(
-                &dir,
-                &format!(r#"ld.alt.out({{ content = "x", mode = "{raw}" }})"#),
-            );
-
-            assert!(err.contains("three or four octal digits"), "{raw}");
-            assert!(err.contains(raw), "{raw}");
-        }
     }
 
     #[test]

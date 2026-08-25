@@ -87,57 +87,42 @@ mod tests {
     }
 
     #[test]
-    fn a_pattern_excludes_the_files_it_names() {
-        let (_dir, repo) = repository("*.swp\n");
+    fn the_ignore_file_of_the_repository_counts_once_installed_without_a_gitignore() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        gix::init(&repo).unwrap();
+        let rules = super::super::rules::dir("add", &repo).unwrap();
+        std::fs::create_dir_all(&rules).unwrap();
+        std::fs::write(rules.join("ignore"), "*.log\n").unwrap();
+        super::super::info::refresh("add", &repo).unwrap();
         let mut excludes = Excludes::open("add", &repo).unwrap();
 
         assert!(
             excludes
-                .excluded(Path::new("home/.vimrc.swp"), Kind::File)
+                .excluded(Path::new(".config/nvim/lsp.log"), Kind::File)
                 .unwrap()
         );
         assert!(
             !excludes
-                .excluded(Path::new("home/.vimrc"), Kind::File)
+                .excluded(Path::new(".config/nvim/init.lua"), Kind::File)
                 .unwrap()
         );
     }
 
     #[test]
     fn an_excluded_directory_carries_its_contents() {
-        let (_dir, repo) = repository("home/.cache/\n");
+        let (_dir, repo) = repository(".cache/\n");
         let mut excludes = Excludes::open("add", &repo).unwrap();
 
+        assert!(!excludes.excluded(Path::new(".cache"), Kind::File).unwrap());
         assert!(
-            !excludes
-                .excluded(Path::new("home/.cache"), Kind::File)
+            excludes
+                .excluded(Path::new(".cache"), Kind::Directory)
                 .unwrap()
         );
         assert!(
             excludes
-                .excluded(Path::new("home/.cache"), Kind::Directory)
-                .unwrap()
-        );
-        assert!(
-            excludes
-                .excluded(Path::new("home/.cache/nvim/log"), Kind::File)
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn a_negated_pattern_takes_a_file_back() {
-        let (_dir, repo) = repository("home/.config/*\n!home/.config/nvim\n");
-        let mut excludes = Excludes::open("add", &repo).unwrap();
-
-        assert!(
-            excludes
-                .excluded(Path::new("home/.config/fish"), Kind::Directory)
-                .unwrap()
-        );
-        assert!(
-            !excludes
-                .excluded(Path::new("home/.config/nvim"), Kind::Directory)
+                .excluded(Path::new(".cache/nvim/log"), Kind::File)
                 .unwrap()
         );
     }

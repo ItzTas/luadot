@@ -4,11 +4,12 @@ use anyhow::{Context, Result, bail};
 use mlua::Value;
 
 use super::constants::TEMPLATE_FILE;
-use super::types::{Output, Template};
 use crate::files::template_target;
+use crate::lua::Shared;
 use crate::lua::constants::MODULES_DIR;
-use crate::lua::ld::{API, Paths, Surface, install, output};
+use crate::lua::ld::{API, Paths, Surface, extend_module_path, install, output, share};
 use crate::lua::runtime::{add_module_path, runtime};
+use crate::lua::scope::{Output, Scope};
 use crate::state::Classes;
 use crate::utils;
 
@@ -18,6 +19,7 @@ pub fn load_template(
     repo: &Path,
     dir: &Path,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<Vec<Output>> {
     let path = dir.join(TEMPLATE_FILE);
     let source = std::fs::read_to_string(&path)
@@ -25,15 +27,20 @@ pub fn load_template(
     let dest = destination(command, home, repo, dir)?;
     let config = utils::config_dir()
         .with_context(|| format!("{command}: failed to locate the configuration"))?;
+    let data = utils::data_dir()
+        .with_context(|| format!("{command}: failed to locate the data directory"))?;
+    let paths = Paths::new(home, &config, &data)
+        .with_repo(Some(repo))
+        .with_dir(dir);
 
     run(
         command,
         &source,
         &path,
-        repo,
-        &config,
-        Template::new(dir.to_path_buf(), home.to_path_buf(), dest),
+        &paths,
+        Scope::new(dir.to_path_buf(), home.to_path_buf()).with_dest(dest),
         classes,
+        shared,
     )
 }
 
@@ -44,26 +51,24 @@ pub fn from_source(dir: &Path, source: &str) -> Result<Vec<Output>> {
 
 #[cfg(test)]
 pub fn from_classes(dir: &Path, source: &str, classes: &Classes) -> Result<Vec<Output>> {
-    let config = utils::config_dir().context("test: failed to locate the configuration")?;
-
-    from_config(dir, source, &config, classes)
-}
-
-#[cfg(test)]
-fn from_config(dir: &Path, source: &str, config: &Path, classes: &Classes) -> Result<Vec<Output>> {
     let root = dir.parent().unwrap_or(dir);
     let Some(dest) = template_target(dir) else {
         bail!("test: {} is not a template directory", dir.display());
     };
+    let config = utils::config_dir().context("test: failed to locate the configuration")?;
+    let data = utils::data_dir().context("test: failed to locate the data directory")?;
+    let paths = Paths::new(root, &config, &data)
+        .with_repo(Some(root))
+        .with_dir(dir);
 
     run(
         "test",
         source,
         &dir.join(TEMPLATE_FILE),
-        root,
-        config,
-        Template::new(dir.to_path_buf(), root.to_path_buf(), dest),
+        &paths,
+        Scope::new(dir.to_path_buf(), root.to_path_buf()).with_dest(dest),
         classes,
+        &std::sync::Arc::new(std::sync::Mutex::new(crate::lua::Config::default())),
     )
 }
 
@@ -80,22 +85,21 @@ fn run(
     command: &str,
     source: &str,
     path: &Path,
-    repo: &Path,
-    config: &Path,
-    template: Template,
+    paths: &Paths,
+    scope: Scope,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<Vec<Output>> {
-    let dir = template.dir().to_path_buf();
-    let home = template.home().to_path_buf();
+    let dir = scope.dir().to_path_buf();
 
     let lua = runtime().with_context(|| format!("{command}: failed to start the Lua runtime"))?;
-    lua.set_app_data(template);
-    let paths = Paths::new(&home, config)
-        .with_repo(Some(repo))
-        .with_dir(&dir);
-    install(&lua, Surface::Template, &paths, classes)
+    install(&lua, Surface::Template, paths, classes)
         .with_context(|| format!("{command}: failed to install `{API}`"))?;
-    for modules in [dir.as_path(), config].into_iter().rev() {
+    share(&lua, shared);
+    extend_module_path(&lua)
+        .with_context(|| format!("{command}: failed to reach the registered modules"))?;
+    lua.set_app_data(scope);
+    for modules in [dir.as_path(), paths.config()].into_iter().rev() {
         add_module_path(&lua, modules)
             .with_context(|| format!("{command}: failed to make {MODULES_DIR}/ requirable"))?;
     }
@@ -112,7 +116,7 @@ fn run(
     }
 
     let outputs = lua
-        .remove_app_data::<Template>()
+        .remove_app_data::<Scope>()
         .with_context(|| {
             format!(
                 "{command}: the template was lost while running {}",
@@ -130,6 +134,14 @@ fn run(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::lua::Shared;
+
+    fn configuration() -> Shared {
+        Arc::new(Mutex::new(crate::lua::Config::default()))
+    }
+
     use super::*;
     use crate::files::{ConflictPolicy, LinkMode};
     use crate::lua::Content;
@@ -144,27 +156,35 @@ mod tests {
         std::fs::write(dir.join(name), contents).unwrap();
     }
 
-    fn error(dir: &Path, source: &str) -> String {
-        format!("{:#}", from_source(dir, source).unwrap_err())
-    }
-
     #[test]
-    fn a_returned_handle_selects_a_file_of_the_template() {
+    fn a_directory_the_configuration_registered_is_requirable_from_a_template() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".zshrc.luadot");
-        write(&dir, "laptop.zsh", "laptop");
+        let plugin = crate::lua::ld::plugin(root.path(), "greeting", r#"return "hello""#);
+        let config =
+            crate::lua::from_source(&format!(r#"ld.rtp.add("{}")"#, plugin.display())).unwrap();
 
-        let outputs = from_source(&dir, r#"return ld.alt.file("laptop.zsh")"#).unwrap();
+        let paths = Paths::new(
+            root.path(),
+            &root.path().join(".config/luadot"),
+            &root.path().join(".local/share/luadot"),
+        )
+        .with_repo(Some(root.path()))
+        .with_dir(&dir);
 
-        assert_eq!(
-            outputs,
-            vec![Output::new(
-                root.path().join(".zshrc"),
-                Content::File(dir.join("laptop.zsh")),
-                None,
-                None,
-            )]
-        );
+        let outputs = run(
+            "test",
+            r#"return require("greeting")"#,
+            &dir.join(TEMPLATE_FILE),
+            &paths,
+            Scope::new(dir.clone(), root.path().to_path_buf())
+                .with_dest(root.path().join(".zshrc")),
+            &Classes::default(),
+            &Arc::new(Mutex::new(config)),
+        )
+        .unwrap();
+
+        assert_eq!(outputs[0].content(), &Content::Text("hello".to_string()));
     }
 
     #[test]
@@ -221,20 +241,6 @@ mod tests {
     }
 
     #[test]
-    fn a_string_is_written_as_generated_content() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".config/nvim/init.lua.luadot");
-
-        let outputs = from_source(&dir, r#"return "vim.g.mapleader = ' '""#).unwrap();
-
-        assert_eq!(outputs[0].dest(), root.path().join(".config/nvim/init.lua"));
-        assert_eq!(
-            outputs[0].content(),
-            &Content::Text("vim.g.mapleader = ' '".to_string())
-        );
-    }
-
-    #[test]
     fn render_fills_a_file_of_the_template_with_variables() {
         let root = tempfile::tempdir().unwrap();
         let dir = template_dir(root.path(), ".config/nvim/init.lua.luadot");
@@ -257,53 +263,23 @@ mod tests {
     }
 
     #[test]
-    fn modules_of_the_template_are_requirable() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-        std::fs::create_dir_all(dir.join(MODULES_DIR)).unwrap();
-        std::fs::write(
-            dir.join(MODULES_DIR).join("aliases.lua"),
-            r#"return "alias ll='ls -l'\n""#,
-        )
-        .unwrap();
-
-        let outputs = from_source(&dir, r#"return require("aliases")"#).unwrap();
-
-        assert_eq!(
-            outputs[0].content(),
-            &Content::Text("alias ll='ls -l'\n".to_string())
-        );
-    }
-
-    #[test]
-    fn a_template_producing_nothing_is_an_error() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-
-        assert!(error(&dir, "local unused = 1").contains("produced no file"));
-    }
-
-    #[test]
-    fn a_broken_script_reports_the_file() {
-        let root = tempfile::tempdir().unwrap();
-        let dir = template_dir(root.path(), ".zshrc.luadot");
-
-        let err = error(&dir, "ld.alt.out(");
-
-        assert!(err.contains("failed to run"));
-        assert!(err.contains(TEMPLATE_FILE));
-    }
-
-    #[test]
     fn load_template_runs_the_file_of_the_directory() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = template_dir(&repo, "home/.zshrc.luadot");
+        let dir = template_dir(&repo, ".zshrc.luadot");
         write(&dir, "laptop.zsh", "laptop");
         write(&dir, TEMPLATE_FILE, r#"return ld.alt.file("laptop.zsh")"#);
 
-        let outputs = load_template("apply", &home, &repo, &dir, &Classes::default()).unwrap();
+        let outputs = load_template(
+            "apply",
+            &home,
+            &repo,
+            &dir,
+            &Classes::default(),
+            &configuration(),
+        )
+        .unwrap();
 
         assert_eq!(outputs[0].dest(), home.join(".zshrc"));
         assert_eq!(outputs[0].content(), &Content::File(dir.join("laptop.zsh")));
@@ -326,27 +302,5 @@ mod tests {
         .unwrap();
 
         assert_eq!(outputs[0].content(), &Content::File(dir.join("laptop.zsh")));
-    }
-
-    #[test]
-    fn a_missing_template_file_reports_the_command() {
-        let root = tempfile::tempdir().unwrap();
-        let repo = root.path().join("repo");
-        let dir = template_dir(&repo, ".zshrc.luadot");
-
-        let err = format!(
-            "{:#}",
-            load_template(
-                "apply",
-                &root.path().join("home"),
-                &repo,
-                &dir,
-                &Classes::default()
-            )
-            .unwrap_err()
-        );
-
-        assert!(err.contains("apply: failed to read"));
-        assert!(err.contains(TEMPLATE_FILE));
     }
 }

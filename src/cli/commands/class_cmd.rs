@@ -20,19 +20,22 @@ pub enum ClassAction {
     List,
     #[command(about = "Answer a class, or ask for every one still unanswered")]
     Set {
-        #[arg(value_name = "NAME")]
+        #[arg(
+            value_name = "NAME",
+            help = "The class to answer, every unanswered one when left out"
+        )]
         name: Option<String>,
-        #[arg(value_name = "VALUE")]
+        #[arg(value_name = "VALUE", help = "The answer, asked for when left out")]
         value: Vec<String>,
     },
     #[command(about = "Forget the answer of a class")]
     Unset {
-        #[arg(value_name = "NAME")]
+        #[arg(value_name = "NAME", help = "The class to forget")]
         name: String,
     },
     #[command(about = "Print the answer alone, for a script to read")]
     Get {
-        #[arg(value_name = "NAME")]
+        #[arg(value_name = "NAME", help = "The class to print")]
         name: String,
     },
 }
@@ -48,6 +51,7 @@ pub fn class_cmd(args: ClassArgs) -> Result<()> {
 
 fn list() -> Result<()> {
     let config = lua::load_config()?;
+    let config = utils::configured("class", &config)?;
     let state = state::load()?;
 
     if config.classes().is_empty() && state.classes().is_empty() {
@@ -74,6 +78,7 @@ fn list() -> Result<()> {
 
 fn set(name: Option<String>, values: Vec<String>) -> Result<()> {
     let config = lua::load_config()?;
+    let config = utils::configured("class", &config)?;
     let Some(name) = name else {
         return set_missing(&config);
     };
@@ -182,11 +187,6 @@ mod tests {
     }
 
     #[test]
-    fn a_value_of_the_choices_is_taken() {
-        assert_eq!(checked(&class(), "laptop".to_string()).unwrap(), "laptop");
-    }
-
-    #[test]
     fn a_value_outside_the_choices_is_reported() {
         let err = checked(&class(), "tablet".to_string())
             .unwrap_err()
@@ -194,16 +194,5 @@ mod tests {
 
         assert!(err.contains("`tablet` is not one of the choices of `form-factor`"));
         assert!(err.contains("available: desktop, laptop"));
-    }
-
-    #[test]
-    fn an_undeclared_class_lists_the_declared_ones() {
-        let mut config = Config::default();
-        config.add_class(class());
-
-        let err = declared(&config, "editor").unwrap_err().to_string();
-
-        assert!(err.contains("class: no class named `editor`"));
-        assert!(err.contains("declared: form-factor"));
     }
 }

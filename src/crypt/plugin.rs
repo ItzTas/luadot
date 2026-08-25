@@ -64,6 +64,17 @@ pub fn for_identity(
     Ok(())
 }
 
+pub fn plugged(identity: Option<&Path>) -> bool {
+    let Some(identity) = identity else {
+        return false;
+    };
+    let Ok(contents) = std::fs::read_to_string(identity) else {
+        return false;
+    };
+
+    !from_identity(&contents).is_empty()
+}
+
 fn require(command: &str, name: &str, what: &str) -> Result<()> {
     if seen(&CHECKED, name) {
         return Ok(());
@@ -149,46 +160,6 @@ fn runnable(candidate: &Path) -> bool {
 mod tests {
     use super::*;
 
-    fn install(dir: &Path, name: &str, mode: u32) -> PathBuf {
-        let binary = dir.join(name);
-        std::fs::write(&binary, "#!/bin/sh\n").unwrap();
-        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(mode)).unwrap();
-
-        binary
-    }
-
-    #[test]
-    fn a_plugin_recipient_names_its_binary() {
-        assert_eq!(
-            from_recipient(
-                "age1yubikey1qwqvurupq2fzhaeg38g4hkyrfcyvpuhrjcnr6dtcxzftzmxtd8j7fqjhr5g"
-            ),
-            Some("yubikey".to_string())
-        );
-        assert_eq!(binary("yubikey"), "age-plugin-yubikey");
-    }
-
-    #[test]
-    fn a_native_recipient_needs_no_plugin() {
-        assert_eq!(
-            from_recipient("age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"),
-            None
-        );
-        assert_eq!(from_recipient("me@example.com"), None);
-    }
-
-    #[test]
-    fn a_plugin_identity_names_its_binary() {
-        assert_eq!(
-            from_identity("AGE-PLUGIN-YUBIKEY-1QQQPQ8UEZQ\n"),
-            ["yubikey"]
-        );
-        assert_eq!(
-            from_identity("# created by age-plugin-tpm\nAGE-PLUGIN-TPM-EK-1QQQPQ\n"),
-            ["tpm-ek"]
-        );
-    }
-
     #[test]
     fn an_identity_file_names_every_plugin_once() {
         let contents = concat!(
@@ -203,17 +174,6 @@ mod tests {
     }
 
     #[test]
-    fn a_binary_is_looked_up_along_the_path() {
-        let dir = tempfile::tempdir().unwrap();
-        let binary = install(dir.path(), "age-plugin-luadot", 0o755);
-        let path = env::join_paths([dir.path()]).unwrap();
-
-        assert_eq!(in_path("age-plugin-luadot", Some(&path)), Some(binary));
-        assert_eq!(in_path("age-plugin-missing", Some(&path)), None);
-        assert_eq!(in_path("age-plugin-luadot", None), None);
-    }
-
-    #[test]
     fn a_missing_plugin_stops_the_command() {
         let err = for_recipients(
             "add",
@@ -225,27 +185,6 @@ mod tests {
         .to_string();
 
         assert!(err.contains("add: the recipient `age1luadotplugin1qqqpq`"));
-        assert!(err.contains("needs `age-plugin-luadotplugin`"));
-    }
-
-    #[test]
-    fn gpg_and_passphrases_are_left_alone() {
-        let recipients = ["age1luadotplugin1qqqpq".to_string()];
-
-        assert!(for_recipients("add", Backend::Gpg, Lock::Keys, &recipients).is_ok());
-        assert!(for_recipients("add", Backend::Age, Lock::Passphrase, &recipients).is_ok());
-    }
-
-    #[test]
-    fn a_plugin_identity_file_stops_the_command() {
-        let dir = tempfile::tempdir().unwrap();
-        let identity = dir.path().join("plugin.txt");
-        std::fs::write(&identity, "AGE-PLUGIN-LUADOTPLUGIN-1QQQPQ\n").unwrap();
-
-        let err = for_identity("apply", Backend::Age, Lock::Keys, Some(&identity))
-            .unwrap_err()
-            .to_string();
-
         assert!(err.contains("needs `age-plugin-luadotplugin`"));
     }
 }

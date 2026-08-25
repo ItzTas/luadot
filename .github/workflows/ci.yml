@@ -18,16 +18,94 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Build
+        run: cargo build --locked --verbose
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --locked --verbose
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --verbose
-
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo build --release --locked --verbose
 
       - name: Test
-        run: cargo test --verbose
+        run: cargo test --locked --verbose
+
+  deny:
+    name: Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  vendor:
+    name: Vendored sources
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check
+        run: ./packaging/vendor/update.sh --check
+
+  changelog:
+    name: Changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check
+        run: ./packaging/release/changelog.sh --check
+
+  meta:
+    name: Lua definitions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets --features meta -- -D warnings
+
+      - name: Test
+        run: cargo test --locked --features meta --lib
+
+      - name: Check
+        run: ./packaging/meta/update.sh --check

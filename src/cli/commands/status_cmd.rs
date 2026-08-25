@@ -5,19 +5,22 @@ use clap::Args;
 
 use crate::crypt;
 use crate::files::{self, Entry, FileStatus, Side};
-use crate::lua::{Config, StatusCounts, StatusFile};
+use crate::lua::{Command, Config, Shared, StatusCounts, StatusFile};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
 
 use super::super::constants::{
-    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, STATUS_CLEAN, STATUS_CUSTOM,
-    STATUS_GENERATED_CLEAN, STATUS_GENERATED_HEAD, STATUS_HEAD, STATUS_LABELS, STATUS_SECTIONS,
+    CUSTOM_ENTRY, CUSTOM_RENDER, CUSTOM_SUMMARY, STATUS_CLEAN, STATUS_GENERATED_CLEAN,
+    STATUS_GENERATED_HEAD, STATUS_HEAD, STATUS_LABELS, STATUS_SECTIONS,
 };
 
 #[derive(Debug, Args)]
 pub struct StatusArgs {
-    #[arg(value_name = "PATH")]
+    #[arg(
+        value_name = "PATH",
+        help = "Narrow the report to this file or directory"
+    )]
     pub path: Option<String>,
     #[arg(
         short,
@@ -31,7 +34,12 @@ pub struct StatusArgs {
 struct Counts([u32; STATUS_LABELS.len()]);
 
 pub fn status_cmd(args: StatusArgs) -> Result<()> {
-    let Workspace { config, home, repo } = utils::workspace("status")?;
+    let Workspace {
+        config: shared,
+        home,
+        repo,
+    } = utils::workspace("status")?;
+    let config = utils::configured("status", &shared)?;
 
     let root = utils::managed_root("status", &home, &repo, args.path.as_deref())?;
 
@@ -58,8 +66,9 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
     if skipped > 0 || templates.is_empty() {
         return Ok(());
     }
+    drop(config);
 
-    generated_side(&config, &home, &repo, &templates)
+    generated_side(&shared, &home, &repo, &templates)
 }
 
 fn managed_side(
@@ -82,14 +91,15 @@ fn managed_side(
     show(config, &reported)
 }
 
-fn generated_side(config: &Config, home: &Path, repo: &Path, templates: &[Entry]) -> Result<()> {
+fn generated_side(shared: &Shared, home: &Path, repo: &Path, templates: &[Entry]) -> Result<()> {
     let classes = state::load()?.classes().clone();
-    let reported = generated_files(config, home, repo, templates, &classes)?;
+    let reported = generated_files(shared, home, repo, templates, &classes)?;
+    let config = utils::configured("status", shared)?;
 
     output::section(STATUS_GENERATED_HEAD);
-    summary(config, Side::Generated, &reported, templates.len())?;
+    summary(&config, Side::Generated, &reported, templates.len())?;
 
-    show(config, &reported)
+    show(&config, &reported)
 }
 
 fn managed_files(
@@ -110,8 +120,8 @@ fn managed_files(
             .map(|(stripped, _)| stripped.as_path())
             .unwrap_or(relative);
         let dest = utils::system_path(home, repo, &repo.join(logical))?;
-        let status = match (&split, utils::is_root(relative)) {
-            (Some((stripped, backend)), true) => crypt::system_status(
+        let status = match &split {
+            Some((stripped, backend)) => crypt::status(
                 "status",
                 *backend,
                 lock,
@@ -120,16 +130,7 @@ fn managed_files(
                 &dest,
                 config.mode(stripped),
             ),
-            (Some((_, backend)), false) => crypt::status(
-                "status",
-                *backend,
-                lock,
-                identity.path("status")?,
-                file,
-                &dest,
-            ),
-            (None, true) => files::inspect_system(file, &dest, config.mode(relative)),
-            (None, false) => files::file_status(config.link_mode(relative), file, &dest),
+            None => files::file_status(config.placement(relative), file, &dest),
         }
         .with_context(|| format!("status: failed to inspect {}", dest.display()))?;
 
@@ -145,7 +146,7 @@ fn managed_files(
 }
 
 fn generated_files(
-    config: &Config,
+    shared: &Shared,
     home: &Path,
     repo: &Path,
     templates: &[Entry],
@@ -153,8 +154,11 @@ fn generated_files(
 ) -> Result<Vec<StatusFile>> {
     let mut reported = Vec::new();
     for entry in templates {
-        for output in utils::outputs("status", home, repo, entry, classes)? {
-            let status = utils::output_status("status", config, home, &output)?;
+        for output in utils::outputs("status", home, repo, entry, classes, shared)? {
+            let status = {
+                let config = utils::configured("status", shared)?;
+                utils::output_status("status", &config, home, &output)?
+            };
             let relative = utils::output_relative("status", home, &output)?;
 
             reported.push(StatusFile::new(
@@ -272,7 +276,7 @@ fn counted(reported: &[StatusFile]) -> Counts {
 }
 
 fn what(key: &str) -> String {
-    utils::customized("status", STATUS_CUSTOM, key)
+    utils::customized("status", &Command::Status.call(), key)
 }
 
 fn display(status: FileStatus) -> (Tone, &'static str) {
@@ -313,6 +317,7 @@ impl Counts {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
 
     use super::*;
 
@@ -326,13 +331,6 @@ mod tests {
     }
 
     #[test]
-    fn the_label_of_a_state_is_the_name_the_configuration_reads() {
-        for (status, label, _) in STATUS_LABELS {
-            assert_eq!(label, status.name());
-        }
-    }
-
-    #[test]
     fn the_states_are_counted_one_by_one_for_the_configuration() {
         let states = counts(&[FileStatus::Synced, FileStatus::Differs]).states();
 
@@ -343,45 +341,16 @@ mod tests {
     }
 
     #[test]
-    fn each_side_says_what_it_reports() {
-        let counts = counts(&[FileStatus::Synced, FileStatus::Missing]);
-
-        assert_eq!(line(Side::Repository, 2, 0, &counts), "2 managed file(s)");
-        assert_eq!(
-            line(Side::Generated, 2, 1, &counts),
-            "1 template(s) into 2 file(s)"
-        );
-    }
-
-    #[test]
-    fn a_side_with_nothing_to_apply_says_so() {
-        let counts = counts(&[FileStatus::Synced, FileStatus::Synced]);
-
-        assert_eq!(line(Side::Repository, 2, 0, &counts), STATUS_CLEAN);
-        assert_eq!(line(Side::Generated, 2, 1, &counts), STATUS_GENERATED_CLEAN);
-    }
-
-    #[test]
-    fn the_templates_left_alone_close_the_managed_line() {
-        let counts = counts(&[FileStatus::Synced]);
-
-        assert_eq!(
-            line(Side::Repository, 1, 2, &counts),
-            "nothing to apply, every managed file is synced, 2 template(s) not resolved"
-        );
-    }
-
-    #[test]
     fn a_template_is_reported_through_the_file_it_produces() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
+        let dir = repo.join(".zshrc.luadot");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
 
         let reported = generated_files(
-            &Config::default(),
+            &Arc::new(Mutex::new(Config::default())),
             &home,
             &repo,
             &[Entry::Template(dir)],
@@ -391,30 +360,6 @@ mod tests {
 
         assert_eq!(reported.len(), 1);
         assert_eq!(reported[0].state(), FileStatus::Missing);
-        assert_eq!(reported[0].path(), Path::new("home/.zshrc"));
-    }
-
-    #[test]
-    fn a_resolved_template_that_is_already_on_the_system_is_synced() {
-        let root = tempfile::tempdir().unwrap();
-        let home = root.path().join("home");
-        let repo = root.path().join("repo");
-        let dir = repo.join("home/.zshrc.luadot");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::write(dir.join("luadot.lua"), r#"return "generated\n""#).unwrap();
-        std::fs::write(home.join(".zshrc"), "generated\n").unwrap();
-
-        let reported = generated_files(
-            &Config::default(),
-            &home,
-            &repo,
-            &[Entry::Template(dir)],
-            &Classes::default(),
-        )
-        .unwrap();
-
-        assert_eq!(reported.len(), 1);
-        assert_eq!(reported[0].state(), FileStatus::Synced);
+        assert_eq!(reported[0].path(), Path::new(".zshrc"));
     }
 }

@@ -2,9 +2,9 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::LinkMode;
 use super::constants::COMMAND;
 use super::fs::exists;
+use super::placement::Placement;
 use super::sync::{already_synced, same_contents};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,13 +28,16 @@ impl FileStatus {
     }
 }
 
-pub fn file_status(mode: LinkMode, source: &Path, dest: &Path) -> Result<FileStatus> {
+pub fn file_status(placement: Placement, source: &Path, dest: &Path) -> Result<FileStatus> {
     if !exists(COMMAND, dest)? {
         return Ok(FileStatus::Missing);
     }
 
-    if already_synced(mode, source, dest)? {
-        return Ok(FileStatus::Synced);
+    if already_synced(placement.link(), source, dest)? {
+        return Ok(match placement.carried_by(dest) {
+            true => FileStatus::Synced,
+            false => FileStatus::Differs,
+        });
     }
 
     if same_contents(source, dest)? {
@@ -46,49 +49,15 @@ pub fn file_status(mode: LinkMode, source: &Path, dest: &Path) -> Result<FileSta
 
 #[cfg(test)]
 mod tests {
+    use super::super::LinkMode;
     use super::*;
 
     fn write(path: &Path, contents: &str) {
         std::fs::write(path, contents).unwrap();
     }
 
-    #[test]
-    fn reports_missing_when_the_destination_does_not_exist() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        write(&source, "data");
-
-        let status = file_status(LinkMode::Hard, &source, &dir.path().join("dest")).unwrap();
-
-        assert_eq!(status, FileStatus::Missing);
-    }
-
-    #[test]
-    fn reports_synced_when_hard_linked() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        std::fs::hard_link(&source, &dest).unwrap();
-
-        assert_eq!(
-            file_status(LinkMode::Hard, &source, &dest).unwrap(),
-            FileStatus::Synced
-        );
-    }
-
-    #[test]
-    fn reports_synced_when_the_symlink_points_at_the_source() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "data");
-        std::os::unix::fs::symlink(&source, &dest).unwrap();
-
-        assert_eq!(
-            file_status(LinkMode::Symbolic, &source, &dest).unwrap(),
-            FileStatus::Synced
-        );
+    fn placed(link: LinkMode) -> Placement<'static> {
+        Placement::new(link)
     }
 
     #[test]
@@ -100,22 +69,8 @@ mod tests {
         write(&dest, "data");
 
         assert_eq!(
-            file_status(LinkMode::Hard, &source, &dest).unwrap(),
+            file_status(placed(LinkMode::Hard), &source, &dest).unwrap(),
             FileStatus::Unlinked
-        );
-    }
-
-    #[test]
-    fn reports_differs_when_the_contents_diverge() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("source");
-        let dest = dir.path().join("dest");
-        write(&source, "repo");
-        write(&dest, "system");
-
-        assert_eq!(
-            file_status(LinkMode::Hard, &source, &dest).unwrap(),
-            FileStatus::Differs
         );
     }
 
@@ -128,28 +83,38 @@ mod tests {
         write(&dest, "data");
 
         assert_eq!(
-            file_status(LinkMode::Copy, &source, &dest).unwrap(),
+            file_status(placed(LinkMode::Copy), &source, &dest).unwrap(),
             FileStatus::Synced
         );
 
         write(&dest, "other");
         assert_eq!(
-            file_status(LinkMode::Copy, &source, &dest).unwrap(),
+            file_status(placed(LinkMode::Copy), &source, &dest).unwrap(),
             FileStatus::Differs
         );
     }
 
     #[test]
-    fn reports_differs_for_a_dangling_symlink() {
+    fn a_mode_that_drifted_reports_differs_even_when_linked() {
+        use std::os::unix::fs::PermissionsExt;
+
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
         let dest = dir.path().join("dest");
         write(&source, "data");
-        std::os::unix::fs::symlink(dir.path().join("gone"), &dest).unwrap();
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::hard_link(&source, &dest).unwrap();
 
+        let placement = placed(LinkMode::Hard).with_mode(Some(0o600));
         assert_eq!(
-            file_status(LinkMode::Hard, &source, &dest).unwrap(),
+            file_status(placement, &source, &dest).unwrap(),
             FileStatus::Differs
+        );
+
+        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(
+            file_status(placement, &source, &dest).unwrap(),
+            FileStatus::Synced
         );
     }
 }

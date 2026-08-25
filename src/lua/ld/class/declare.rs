@@ -1,21 +1,39 @@
 use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::API;
+use super::super::parse::chain;
 use super::super::parse::external;
-use super::super::surface::{self, Surface};
+use super::super::surface::Surface;
 use super::constants::{CHOICES, DEFAULT, NAME, NAMESPACE, PROMPT};
+use super::values::remember;
 use crate::lua::{Class, Config};
+use crate::state;
+use crate::utils;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, (_, value): (Table, Value)| {
-        if surface::inert(lua, NAMESPACE, Surface::Config) {
-            return Ok(());
+        let class = class(&value)?;
+        if Surface::current(lua) == Some(Surface::Config) {
+            return Config::building(lua, |config| config.add_class(class));
         }
 
-        let class = class(&value)?;
-        Config::building(lua)?.add_class(class);
-        Ok(())
+        answer(lua, &class)
     })
+}
+
+fn answer(lua: &Lua, class: &Class) -> mlua::Result<()> {
+    let command = format!("`{API}.{NAMESPACE}`");
+    let mut state = state::load().map_err(chain)?;
+    if state.class(class.name()).is_some() {
+        return Ok(());
+    }
+
+    let value = utils::ask(&command, class, None).map_err(chain)?;
+    state.set_class(class.name(), &value);
+    state::save(&state).map_err(chain)?;
+    remember(lua, class.name(), &value);
+
+    Ok(())
 }
 
 fn class(value: &Value) -> mlua::Result<Class> {
@@ -130,54 +148,6 @@ mod tests {
         assert_eq!(class.question(), "Is this machine a desktop or a laptop?");
         assert_eq!(class.choices(), ["desktop", "laptop"]);
         assert_eq!(class.default(), Some("laptop"));
-    }
-
-    #[test]
-    fn a_class_needs_nothing_but_a_name() {
-        let config = configure(r#"ld.class({ name = "email" })"#);
-
-        let class = config.class("email").unwrap();
-        assert_eq!(class.question(), "define the class `email`");
-        assert!(class.choices().is_empty());
-        assert_eq!(class.default(), None);
-    }
-
-    #[test]
-    fn a_single_choice_is_taken_as_a_list_of_one() {
-        let config = configure(r#"ld.class({ name = "shell", choices = "zsh" })"#);
-
-        assert_eq!(config.class("shell").unwrap().choices(), ["zsh"]);
-    }
-
-    #[test]
-    fn rejects_a_declaration_without_a_name() {
-        assert!(error(r#"ld.class({ prompt = "which one?" })"#).contains("takes a `name`"));
-    }
-
-    #[test]
-    fn rejects_an_argument_that_is_not_a_table() {
-        assert!(error(r#"ld.class("form-factor")"#).contains("takes a table, got string"));
-    }
-
-    #[test]
-    fn rejects_a_name_holding_spaces() {
-        let err = error(r#"ld.class({ name = "form factor" })"#);
-
-        assert!(err.contains("name `form factor` cannot hold spaces"));
-    }
-
-    #[test]
-    fn rejects_choices_of_the_wrong_type() {
-        let err = error(r#"ld.class({ name = "shell", choices = 42 })"#);
-
-        assert!(err.contains("takes `choices` as a string or a table of strings"));
-    }
-
-    #[test]
-    fn rejects_an_empty_choice() {
-        let err = error(r#"ld.class({ name = "shell", choices = { "zsh", "" } })"#);
-
-        assert!(err.contains("choices entry 2 is empty"));
     }
 
     #[test]

@@ -42,3 +42,27 @@ pub const DIFF_STATES: [(&str, DiffState); 4] = [
     ("mode", DiffState::Mode),
     ("other", DiffState::Other),
 ];
+
+pub const MISSING: &str = "the configuration is not available";
+
+pub const LOCKED: &str = "the configuration is already being changed";
+
+pub const BEFORE: &str = "before";
+
+pub const AFTER: &str = "after";
+
+pub const STARTER: &str = r#"-- The luadot configuration, read before every command.
+-- `luadot doc ld` names every call, `luadot doc rules` describes one.
+
+-- ld.opt.link("symbolic")
+
+-- ld.rules({
+--   { match = ".ssh/id_*", encrypt = true },
+--   { match = ".config/mako/**", on_change = "makoctl reload" },
+--   { match = ".cache/**", ignore = true },
+-- })
+
+-- if ld.sys.has_battery() then
+--   ld.rules({ { match = ".config/tlp/**", link = "symbolic" } })
+-- end
+"#;

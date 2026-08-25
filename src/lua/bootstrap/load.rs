@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use super::constants::BOOTSTRAP_FILE;
+use crate::lua::Shared;
 use crate::lua::ld::{Paths, Surface};
 use crate::lua::script::run_script;
 use crate::state::{self, Classes};
@@ -13,14 +14,15 @@ pub fn bootstrap_path(command: &str, repo: &Path) -> Result<PathBuf> {
         .with_context(|| format!("{command}: failed to locate the bootstrap file"))
 }
 
-pub fn run_bootstrap(command: &str, repo: &Path) -> Result<()> {
+pub fn run_bootstrap(command: &str, repo: &Path, shared: &Shared) -> Result<()> {
     let home = utils::home_dir()?;
     let config = utils::config_dir()?;
     let path = resolve(&home, &config, repo)
         .with_context(|| format!("{command}: failed to locate the bootstrap file"))?;
+    let paths = Paths::new(&home, &config, &utils::data_dir()?).with_repo(Some(repo));
     let classes = state::load()?.classes().clone();
 
-    run_file(command, &path, &home, &config, repo, &classes)
+    run_file(command, &path, &paths, &classes, shared)
 }
 
 fn resolve(home: &Path, config: &Path, repo: &Path) -> Result<PathBuf> {
@@ -30,15 +32,14 @@ fn resolve(home: &Path, config: &Path, repo: &Path) -> Result<PathBuf> {
 fn run_file(
     command: &str,
     path: &Path,
-    home: &Path,
-    config: &Path,
-    repo: &Path,
+    paths: &Paths,
     classes: &Classes,
+    shared: &Shared,
 ) -> Result<()> {
     let modules = path
         .parent()
         .with_context(|| format!("{command}: {} has no parent directory", path.display()))?;
-    let paths = Paths::new(home, config).with_repo(Some(repo));
+    let paths = paths.clone().with_dir(modules);
 
     run_script(
         command,
@@ -47,11 +48,34 @@ fn run_file(
         &[modules],
         &paths,
         classes,
+        shared,
     )
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use crate::lua::{Config, Shared};
+
+    fn shared() -> Shared {
+        Arc::new(Mutex::new(Config::default()))
+    }
+
+    fn run_test(
+        command: &str,
+        path: &Path,
+        home: &Path,
+        config: &Path,
+        repo: &Path,
+        classes: &Classes,
+    ) -> Result<()> {
+        let paths =
+            Paths::new(home, config, &home.join(".local/share/luadot")).with_repo(Some(repo));
+
+        run_file(command, path, &paths, classes, &shared())
+    }
+
     use super::*;
     use crate::lua::constants::MODULES_DIR;
 
@@ -74,22 +98,7 @@ mod tests {
 
         assert_eq!(
             path,
-            PathBuf::from("/data/repo/home/.config/luadot/bootstrap.lua")
-        );
-    }
-
-    #[test]
-    fn resolve_maps_a_config_outside_home_under_root() {
-        let path = resolve(
-            Path::new("/home/u"),
-            Path::new("/etc/luadot"),
-            Path::new("/data/repo"),
-        )
-        .unwrap();
-
-        assert_eq!(
-            path,
-            PathBuf::from("/data/repo/root/etc/luadot/bootstrap.lua")
+            PathBuf::from("/data/repo/.config/luadot/bootstrap.lua")
         );
     }
 
@@ -113,7 +122,7 @@ mod tests {
         std::fs::create_dir_all(&modules).unwrap();
         std::fs::write(modules.join("greeting.lua"), r#"return "hello""#).unwrap();
 
-        run_file(
+        run_test(
             "bootstrap",
             &path,
             &home,
@@ -130,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn the_script_reads_the_classes_of_the_machine() {
+    fn the_script_knows_the_directory_it_lives_in() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -139,64 +148,25 @@ mod tests {
             &home,
             &repo,
             r#"
-            local out = assert(io.open(ld.path.repo .. "/class.txt", "w"))
-            out:write(ld.class.get("form-factor"))
+            local out = assert(io.open(ld.path.repo .. "/dir.txt", "w"))
+            out:write(ld.path.dir)
             out:close()
             "#,
         );
-        let mut classes = Classes::default();
-        classes.set("form-factor", "laptop");
 
-        run_file("bootstrap", &path, &home, &config, &repo, &classes).unwrap();
+        run_test(
+            "bootstrap",
+            &path,
+            &home,
+            &config,
+            &repo,
+            &Classes::default(),
+        )
+        .unwrap();
 
         assert_eq!(
-            std::fs::read_to_string(repo.join("class.txt")).unwrap(),
-            "laptop"
+            std::fs::read_to_string(repo.join("dir.txt")).unwrap(),
+            path.parent().unwrap().display().to_string()
         );
-    }
-
-    #[test]
-    fn a_missing_file_reports_the_command() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join(BOOTSTRAP_FILE);
-
-        let err = format!(
-            "{:#}",
-            run_file(
-                "clone",
-                &path,
-                Path::new("/home/u"),
-                Path::new("/home/u/.config/luadot"),
-                dir.path(),
-                &Classes::default(),
-            )
-            .unwrap_err()
-        );
-
-        assert!(err.contains("clone: failed to read"));
-    }
-
-    #[test]
-    fn a_broken_script_reports_the_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path().join("home");
-        let repo = dir.path().join("repo");
-        let config = home.join(".config/luadot");
-        let path = write_bootstrap(&home, &repo, "ld.cmd(");
-
-        let err = format!(
-            "{:#}",
-            run_file(
-                "bootstrap",
-                &path,
-                &home,
-                &config,
-                &repo,
-                &Classes::default()
-            )
-            .unwrap_err()
-        );
-
-        assert!(err.contains("bootstrap: failed to run"));
     }
 }

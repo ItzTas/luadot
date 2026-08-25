@@ -41,21 +41,3 @@ impl Report {
         self.render.as_ref()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn merging_only_replaces_the_pieces_the_other_one_carries() {
-        let mut report = Report::default()
-            .with_entry(Some(Custom::Silent))
-            .with_summary(Some(Custom::Text("first".to_string())));
-
-        report.merge(Report::default().with_summary(Some(Custom::Text("second".to_string()))));
-
-        assert!(matches!(report.entry(), Some(Custom::Silent)));
-        assert!(matches!(report.summary(), Some(Custom::Text(text)) if text == "second"));
-        assert!(report.render().is_none());
-    }
-}

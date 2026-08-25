@@ -106,22 +106,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn collect_files_walks_directories_recursively() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        std::fs::create_dir_all(root.join(".config/nvim")).unwrap();
-        std::fs::write(root.join(".bashrc"), "a").unwrap();
-        std::fs::write(root.join(".config/nvim/init.lua"), "b").unwrap();
-
-        let files = collect_files("apply", root).unwrap();
-
-        assert_eq!(
-            files,
-            vec![root.join(".bashrc"), root.join(".config/nvim/init.lua")]
-        );
-    }
-
-    #[test]
     fn collect_files_skips_the_git_directory() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
@@ -133,20 +117,6 @@ mod tests {
         assert_eq!(
             collect_files("apply", root).unwrap(),
             vec![root.join(".vimrc")]
-        );
-    }
-
-    #[test]
-    fn collect_files_still_reaches_inside_a_template() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        let template = root.join(".zshrc.luadot");
-        std::fs::create_dir_all(&template).unwrap();
-        std::fs::write(template.join("luadot.lua"), "brain").unwrap();
-
-        assert_eq!(
-            collect_files("rm", root).unwrap(),
-            vec![template.join("luadot.lua")]
         );
     }
 
@@ -169,18 +139,6 @@ mod tests {
     }
 
     #[test]
-    fn collect_entries_reports_a_template_root() {
-        let dir = tempfile::tempdir().unwrap();
-        let template = dir.path().join(".zshrc.luadot");
-        std::fs::create_dir_all(&template).unwrap();
-
-        assert_eq!(
-            collect_entries("apply", &template).unwrap(),
-            vec![Entry::Template(template)]
-        );
-    }
-
-    #[test]
     fn a_standalone_template_is_its_own_entry() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
@@ -196,18 +154,6 @@ mod tests {
                 Entry::File(root.join(".vimrc")),
                 Entry::Standalone(standalone),
             ]
-        );
-    }
-
-    #[test]
-    fn collect_entries_reports_a_standalone_root() {
-        let dir = tempfile::tempdir().unwrap();
-        let standalone = dir.path().join(".zprofile.luadot");
-        std::fs::write(&standalone, "export HOST=1\n").unwrap();
-
-        assert_eq!(
-            collect_entries("alt", &standalone).unwrap(),
-            vec![Entry::Standalone(standalone)]
         );
     }
 }

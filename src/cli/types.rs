@@ -1,9 +1,9 @@
 use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
-    AddArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs, EditArgs,
-    ExecArgs, GitArgs, InitArgs, PushArgs, RekeyArgs, RestoreArgs, RmArgs, SetupArgs, StatusArgs,
-    SyncArgs, TmplArgs,
+    AddArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs, DocArgs,
+    EditArgs, ExecArgs, GitArgs, InitArgs, MetaArgs, MvArgs, PushArgs, RekeyArgs, RestoreArgs,
+    RmArgs, SetupArgs, StatusArgs, SyncArgs, TaskArgs, TmplArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -11,6 +11,12 @@ use super::commands::{
     name = "luadot",
     version,
     about = "A dotfiles manager configured in Lua",
+    long_about = "luadot keeps your dotfiles in a git repository and puts them back on every \
+machine you clone it to. The configuration is a Lua script instead of a static file, so one \
+repository answers for a laptop, a desktop and a server without a branch or a copy per machine.\n\
+\n\
+The repository mirrors your home directory, path for path. Rules decide how each file is placed: \
+linked hard, symbolic or copied, ignored, encrypted, or generated per machine by a template.",
     arg_required_else_help = true
 )]
 pub struct Cli {
@@ -36,6 +42,8 @@ pub enum Cmd {
     Add(AddArgs),
     #[command(about = "Stop managing files or directories, leaving your home copy in place")]
     Rm(RmArgs),
+    #[command(about = "Move managed files or directories, in the repository and on the system")]
+    Mv(MvArgs),
     #[command(about = "List the managed files whose system copy is not in sync")]
     Status(StatusArgs),
     #[command(about = "Show what the repository holds and the system does not")]
@@ -60,6 +68,8 @@ pub enum Cmd {
     Bootstrap,
     #[command(about = "Run the repository's setup scripts")]
     Setup(SetupArgs),
+    #[command(about = "Run a task the configuration registers; `luadot <name>` is the same")]
+    Task(TaskArgs),
     #[command(about = "Start a shell in the repository")]
     Cd,
     #[command(about = "Stage what changed in the repository, commit it and push it")]
@@ -68,16 +78,26 @@ pub enum Cmd {
     Git(GitArgs),
     #[command(about = "Shorthand for `luadot git push`")]
     Push(PushArgs),
+    #[command(about = "Describe the calls the configuration and the scripts have")]
+    Doc(DocArgs),
+    #[command(
+        about = "Print the editor definitions of ld, or write them where the configuration is edited"
+    )]
+    Meta(MetaArgs),
     #[command(about = "Print a completion script for a shell")]
     Completions(CompletionsArgs),
+    #[command(about = "Print the manual page")]
+    Man,
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }
 
 #[cfg(test)]
 mod tests {
     use clap::CommandFactory;
 
-    use super::super::commands::TmplAction;
     use super::*;
+    use crate::lua::BUILTINS;
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
         Cli::try_parse_from(args)
@@ -89,39 +109,36 @@ mod tests {
     }
 
     #[test]
+    fn a_name_that_is_no_command_reaches_the_tasks_with_what_follows_it() {
+        let cli = parse(&["luadot", "plug", "sync", "--all"]).unwrap();
+
+        match cli.command {
+            Cmd::External(words) => assert_eq!(words, ["plug", "sync", "--all"]),
+            other => panic!("parsed {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_names_a_task_cannot_take_are_the_commands_declared() {
+        let mut command = Cli::command();
+        command.build();
+        let mut declared: Vec<&str> = command
+            .get_subcommands()
+            .map(|sub| sub.get_name())
+            .collect();
+        let mut refused: Vec<&str> = BUILTINS.to_vec();
+        declared.sort_unstable();
+        refused.sort_unstable();
+
+        assert_eq!(declared, refused);
+    }
+
+    #[test]
     fn git_keeps_every_argument_verbatim() {
         let cli = parse(&["luadot", "git", "commit", "-m", "msg"]).unwrap();
 
         match cli.command {
             Cmd::Git(args) => assert_eq!(args.args, ["commit", "-m", "msg"]),
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn sync_takes_a_message_and_can_leave_the_push_out() {
-        let cli = parse(&["luadot", "sync", "-m", "from here", "--no-push"]).unwrap();
-
-        match cli.command {
-            Cmd::Sync(args) => {
-                assert_eq!(args.message.as_deref(), Some("from here"));
-                assert!(args.no_push);
-            }
-            other => panic!("parsed {other:?}"),
-        }
-    }
-
-    #[test]
-    fn tmpl_new_takes_one_path_and_the_file_flag() {
-        let cli = parse(&["luadot", "tmpl", "new", "-f", "~/.zprofile"]).unwrap();
-
-        match cli.command {
-            Cmd::Tmpl(TmplArgs {
-                action: TmplAction::New(args),
-            }) => {
-                assert!(args.file);
-                assert_eq!(args.path, "~/.zprofile");
-            }
             other => panic!("parsed {other:?}"),
         }
     }

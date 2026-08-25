@@ -63,10 +63,7 @@ fn paths(c: &mut Criterion) {
     let home = Path::new("/home/user");
     let repo = Path::new("/home/user/.local/share/luadot/repo");
     let outside: Vec<PathBuf> = probes().iter().map(|probe| home.join(probe)).collect();
-    let inside: Vec<PathBuf> = probes()
-        .iter()
-        .map(|probe| repo.join("home").join(probe))
-        .collect();
+    let inside: Vec<PathBuf> = probes().iter().map(|probe| repo.join(probe)).collect();
     group.throughput(Throughput::Elements(outside.len() as u64));
 
     group.bench_function("repo_path", |b| {

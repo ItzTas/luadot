@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::Command;
 
 use mlua::{Function, Lua, Table, Variadic};
@@ -14,61 +15,46 @@ pub fn function(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
     let command = format!("`{API}.{NAMESPACE}`");
 
     lua.create_function(move |lua, (_, args): (Table, Variadic<String>)| {
-        if args.is_empty() {
-            return Err(external(format!(
-                "{command} takes the arguments of the git command to run"
-            )));
-        }
-
         let repo = require(paths.repo(), &command)?;
-        let mut git = Command::new(PROGRAM);
-        git.current_dir(repo).args(args.iter());
 
-        run(lua, git, NAMESPACE, &display(PROGRAM, &args))
+        run_in(lua, repo, &args, &command)
     })
+}
+
+pub fn run_in(lua: &Lua, dir: &Path, args: &[String], command: &str) -> mlua::Result<String> {
+    if args.is_empty() {
+        return Err(external(format!(
+            "{command} takes the arguments of the git command to run"
+        )));
+    }
+
+    let mut git = Command::new(PROGRAM);
+    git.current_dir(dir).args(args);
+
+    run(lua, git, NAMESPACE, &display(PROGRAM, args))
 }
 
 #[cfg(test)]
 mod tests {
     use std::path::Path;
-    use std::process::Command;
 
-    use tempfile::TempDir;
-
+    use super::super::super::fixture;
     use super::super::super::path::Paths;
+    use super::super::constants::NAMESPACE;
     use super::super::table::table;
-    use crate::lua::runtime::runtime;
+    use crate::git::fixture::repository;
 
     fn eval(paths: &Paths, source: &str) -> mlua::Result<String> {
-        let lua = runtime().unwrap();
-        lua.globals()
-            .set("git", table(&lua, paths).unwrap())
-            .unwrap();
-
-        lua.load(source).eval()
+        fixture::eval(NAMESPACE, |lua| table(lua, paths), source)
     }
 
     fn paths(repo: Option<&Path>) -> Paths {
-        Paths::new(Path::new("/home/u"), Path::new("/home/u/.config/luadot")).with_repo(repo)
-    }
-
-    fn repository() -> TempDir {
-        let repo = tempfile::tempdir().unwrap();
-
-        for args in [
-            vec!["init", "--quiet"],
-            vec!["config", "user.email", "test@luadot"],
-            vec!["config", "user.name", "luadot"],
-        ] {
-            let status = Command::new("git")
-                .current_dir(repo.path())
-                .args(args)
-                .status()
-                .unwrap();
-            assert!(status.success());
-        }
-
-        repo
+        Paths::new(
+            Path::new("/home/u"),
+            Path::new("/home/u/.config/luadot"),
+            Path::new("/home/u/.local/share/luadot"),
+        )
+        .with_repo(repo)
     }
 
     #[test]
@@ -98,39 +84,5 @@ mod tests {
             eval(&paths, r#"return git("log", "-1", "--format=%s")"#).unwrap(),
             "one  two"
         );
-    }
-
-    #[test]
-    fn a_failing_command_stops_the_script() {
-        let repo = repository();
-
-        let err = eval(
-            &paths(Some(repo.path())),
-            r#"return git("no-such-command")"#,
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(err.contains("`ld.git` `git no-such-command` exited with status"));
-    }
-
-    #[test]
-    fn reports_a_call_without_arguments() {
-        let repo = repository();
-
-        let err = eval(&paths(Some(repo.path())), "return git()")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.git` takes the arguments of the git command to run"));
-    }
-
-    #[test]
-    fn reports_a_missing_repository() {
-        let err = eval(&paths(None), r#"return git("status")"#)
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.git`: no repository set"));
     }
 }

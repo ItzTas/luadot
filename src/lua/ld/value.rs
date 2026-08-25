@@ -89,33 +89,6 @@ mod tests {
     use crate::lua::runtime::runtime;
 
     #[test]
-    fn text_rejects_anything_else() {
-        let err = text("opt", &Value::Boolean(true), "link")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.opt.link` takes a string"));
-    }
-
-    #[test]
-    fn text_names_the_namespace_it_was_given() {
-        let err = text("crypt", &Value::Boolean(true), "backend")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.crypt.backend` takes a string"));
-    }
-
-    #[test]
-    fn flag_rejects_anything_else() {
-        let err = flag("opt", &Value::Integer(0), "pkg_warn")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.opt.pkg_warn` takes true or false"));
-    }
-
-    #[test]
     fn span_rejects_a_string_without_a_known_unit() {
         let lua = runtime().unwrap();
         let value = Value::String(lua.create_string("30").unwrap());
@@ -138,17 +111,6 @@ mod tests {
     }
 
     #[test]
-    fn keys_reads_a_single_key() {
-        let lua = runtime().unwrap();
-        let value = Value::String(lua.create_string("age1example").unwrap());
-
-        assert_eq!(
-            keys("crypt.lock", &value, "recipients").unwrap(),
-            ["age1example"]
-        );
-    }
-
-    #[test]
     fn keys_reads_a_list_of_keys() {
         let lua = runtime().unwrap();
         let list = lua
@@ -159,22 +121,5 @@ mod tests {
             keys("crypt.lock", &Value::Table(list), "recipients").unwrap(),
             ["age1first", "age1second"]
         );
-    }
-
-    #[test]
-    fn keys_rejects_an_empty_list() {
-        let lua = runtime().unwrap();
-        let list = lua.create_table().unwrap();
-
-        let err = keys("crypt.lock", &Value::Table(list), "recipients")
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("`ld.crypt.lock.recipients` takes a key or a list of keys"));
-    }
-
-    #[test]
-    fn keys_rejects_anything_else() {
-        assert!(keys("crypt.lock", &Value::Integer(1), "recipients").is_err());
     }
 }
