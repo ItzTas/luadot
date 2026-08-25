@@ -3,7 +3,9 @@
 `~/.config/luadot/config.lua` (or `$XDG_CONFIG_HOME/luadot/config.lua`) runs
 before every command and configures luadot through the global `ld`. Without
 the file, the defaults apply. `luadot init` and `luadot config edit` write a
-commented starter there when it is missing.
+commented starter there when it is missing. It is full Lua running before
+everything else, so luadot refuses a `config.lua` that group or others can
+write, and one owned by anybody but you.
 
 ```lua
 ld.opt.link("hard")
