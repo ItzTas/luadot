@@ -2,7 +2,9 @@
 
 Every file luadot writes over is copied aside first: `apply` and `tmpl alt`
 save what they replace, `rm` saves the repository entry it deletes and the
-system symlink it writes over. `add` takes no backup.
+system symlink it writes over, and `take` run with no path saves the repository
+entries it replaces. `add` takes no backup, and neither does `take` on a path
+you name.
 
 ```
 luadot: applied 12 file(s) (0 created, 1 replaced, 11 unchanged, 0 skipped)
@@ -11,8 +13,8 @@ luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
 
 One directory per run, named after the millisecond it ran, holding each saved
 file under its absolute path: `/home/u/.zshrc` is kept at
-`<run>/home/u/.zshrc`, and the repository entry `rm` deletes under the
-repository's own path. A symlink is kept as a symlink; nothing is written for
+`<run>/home/u/.zshrc`, and the repository entries `rm` and `take` save under
+the repository's own path. A symlink is kept as a symlink; nothing is written for
 a file that was created rather than replaced.
 
 ## restore

@@ -309,6 +309,37 @@ fn take_stores_system_copy_and_relinks() {
 }
 
 #[test]
+fn take_with_no_path_stores_everything_and_backs_it_up() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    repository(&repo);
+    write(&repo.join(".vimrc"), "set number\n");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(&home.join(".vimrc"), "set paste\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.opt.backup_dir("~/saved")"#,
+    );
+    write_state(&home, &repo);
+
+    luadot_with_git(&home)
+        .arg("take")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "took 1 file(s) (0 added, 1 replaced)",
+        ));
+
+    assert_eq!(read(&repo.join(".vimrc")), "set paste\n");
+    assert_eq!(read(&repo.join(".bashrc")), "managed\n");
+    assert_eq!(staged(&repo), ".vimrc\n");
+
+    let saved = only_dir(&home.join("saved"));
+    assert_eq!(read(&backed(&saved, &repo.join(".vimrc"))), "set number\n");
+}
+
+#[test]
 fn add_and_take_point_at_each_other() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

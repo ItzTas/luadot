@@ -5,7 +5,7 @@
 | `luadot init [dir]` | Creates an empty dotfiles repository and makes it the managed one. |
 | `luadot clone <url> [dir]` | Clones a dotfiles repository and makes it the managed one. |
 | `luadot add [path]...` | Starts managing a file or directory, mirroring it into the repository; with no path, whatever a `track = "auto"` rule covers. |
-| `luadot take <path>...` | Stores a managed file or directory as the system holds it, and links it again. |
+| `luadot take [path]...` | Stores a managed file or directory as the system holds it, and links it again; with no path, everything the repository holds. |
 | `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving the system copy in place. |
 | `luadot mv [-n] <path>... <dest>` | Moves a managed file or directory, in the repository and on the system. |
 | `luadot status [-t] [path]` | Lists the managed files whose system copy is not in sync, `-t` the files the templates produce too. |
@@ -232,6 +232,20 @@ A path names a file or a directory, the way `add` does. A directory takes the
 files the repository already holds and leaves the rest out, so a new file under
 a managed directory still needs `add`. A file the repository does not hold is
 refused, and so is one a template produces.
+
+With no path, `take` covers every file the repository holds, whole directories
+included, and leaves out the ones the system has no copy of:
+
+```
+$ luadot take
+replaced   .vimrc
+replaced   .zshrc
+luadot: took 2 file(s) (0 added, 2 replaced)
+luadot: backed up 2 file(s) in ~/.local/share/luadot/backups/1786677956412
+```
+
+The repository entries it writes over are saved first, under their own path.
+`take <path>` takes no backup.
 
 The rules are read again for what it stores: a file with an `encrypt` rule is
 re-encrypted for the recipients set now, one tracked in LFS stays there, and a
