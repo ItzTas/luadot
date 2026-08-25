@@ -3,18 +3,40 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use etcetera::base_strategy::{BaseStrategy, Xdg};
 
-use super::constants::APP_DIR;
+use super::constants::{APP_DIR, DEFAULT_CONFIG_DIR, DEFAULT_DATA_DIR};
 
 pub fn data_dir() -> Result<PathBuf> {
-    Ok(app_dir(&base()?.data_dir()))
+    let base = base()?;
+
+    Ok(app_dir(&confined(
+        base.home_dir(),
+        base.data_dir(),
+        DEFAULT_DATA_DIR,
+    )))
 }
 
 pub fn config_dir() -> Result<PathBuf> {
-    Ok(app_dir(&base()?.config_dir()))
+    let base = base()?;
+
+    Ok(app_dir(&confined(
+        base.home_dir(),
+        base.config_dir(),
+        DEFAULT_CONFIG_DIR,
+    )))
 }
 
 pub fn home_dir() -> Result<PathBuf> {
     Ok(base()?.home_dir().to_path_buf())
+}
+
+fn confined(home: &Path, chosen: PathBuf, default: &str) -> PathBuf {
+    let home = normalize(home);
+    let chosen = normalize(&chosen);
+
+    match chosen.starts_with(&home) {
+        true => chosen,
+        false => home.join(default),
+    }
 }
 
 fn base() -> Result<Xdg> {
@@ -101,6 +123,28 @@ mod tests {
         assert_eq!(normalize(Path::new("/..")), PathBuf::from("/"));
         assert_eq!(normalize(Path::new("a/../b")), PathBuf::from("b"));
         assert_eq!(normalize(Path::new("../a")), PathBuf::from("../a"));
+    }
+
+    #[test]
+    fn an_xdg_directory_outside_the_home_falls_back() {
+        let home = Path::new("/home/u");
+
+        assert_eq!(
+            confined(home, PathBuf::from("/home/u/.dots/config"), ".config"),
+            PathBuf::from("/home/u/.dots/config")
+        );
+        assert_eq!(
+            confined(home, PathBuf::from("/etc/skel/.config"), ".config"),
+            PathBuf::from("/home/u/.config")
+        );
+        assert_eq!(
+            confined(
+                home,
+                PathBuf::from("/home/u/../v/.local/share"),
+                ".local/share"
+            ),
+            PathBuf::from("/home/u/.local/share")
+        );
     }
 
     #[test]
