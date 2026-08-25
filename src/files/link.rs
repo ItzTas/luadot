@@ -3,6 +3,9 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use tracing::debug;
 
+use super::constants::COMMAND;
+use super::fs::link_target;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LinkMode {
     #[default]
@@ -68,6 +71,10 @@ fn copy(source: &Path, dest: &Path) -> Result<()> {
         )
     };
 
+    if let (_, Some(target)) = link_target(COMMAND, source)? {
+        return symbolic(&target, dest);
+    }
+
     let mut reader = std::fs::File::open(source).with_context(failed)?;
     let mut writer = std::fs::OpenOptions::new()
         .write(true)
@@ -115,6 +122,26 @@ mod tests {
             std::fs::metadata(&dest).unwrap(),
         );
         assert_eq!((a.dev(), a.ino()), (b.dev(), b.ino()));
+    }
+
+    #[test]
+    fn copy_carries_a_symlink_instead_of_its_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("target.txt");
+        let source = dir.path().join("source.txt");
+        let dest = dir.path().join("dest.txt");
+        std::fs::write(&target, "secret").unwrap();
+        std::os::unix::fs::symlink(&target, &source).unwrap();
+
+        link(LinkMode::Copy, &source, &dest).unwrap();
+
+        assert!(
+            std::fs::symlink_metadata(&dest)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(std::fs::read_link(&dest).unwrap(), target);
     }
 
     #[test]
