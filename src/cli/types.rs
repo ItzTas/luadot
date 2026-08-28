@@ -28,6 +28,13 @@ pub struct Cli {
         help = "Log what luadot is doing (-vv logs more)"
     )]
     pub verbose: u8,
+    #[arg(
+        short = 'u',
+        long,
+        global = true,
+        help = "List the paths that were already in sync too"
+    )]
+    pub unchanged: bool,
     #[command(subcommand)]
     pub command: Cmd,
 }

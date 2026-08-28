@@ -246,6 +246,30 @@ fn apply_places_a_whole_directory_as_one_link() {
 }
 
 #[test]
+fn apply_names_an_unchanged_path_only_when_asked() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    write(&repo.join(".vimrc"), "set number\n");
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+
+    luadot(&home)
+        .arg("apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unchanged  .vimrc").not());
+
+    luadot(&home)
+        .args(["apply", "--unchanged"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unchanged  .vimrc"));
+}
+
+#[test]
 fn add_and_rm_stage_their_changes() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

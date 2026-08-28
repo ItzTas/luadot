@@ -73,6 +73,7 @@ fn filter(verbose: u8) -> EnvFilter {
 
 fn dispatch(cli: Cli) -> Result<()> {
     utils::set_dry_run(dry_run(&cli.command));
+    output::set_unchanged(cli.unchanged);
     if let Some(command) = customized(&cli.command) {
         utils::set_command(command);
     }
