@@ -276,8 +276,7 @@ fn whole_roots(
             );
         }
         let system = home.join(&root);
-        let linked = metadata(&system)?.is_some_and(|meta| meta.file_type().is_symlink());
-        if linked && points_at(&system, &stored)? {
+        if files::link_at("rm", &system)?.as_deref() == Some(stored.as_path()) {
             wholes.push((system, stored));
         }
     }
@@ -323,7 +322,7 @@ fn detach_file(
     }
     std::fs::remove_file(file)
         .with_context(|| format!("rm: failed to remove {}", file.display()))?;
-    prune_parents(repo, file)?;
+    files::prune_parents("rm", repo, file)?;
 
     Ok(detached)
 }
@@ -352,7 +351,7 @@ fn detach_template(
         }
     }
     remove_template(template)?;
-    prune_parents(repo, template)?;
+    files::prune_parents("rm", repo, template)?;
 
     Ok(detached)
 }
@@ -504,11 +503,10 @@ fn decide(source: &Path, dest: &Path) -> Result<Plan> {
         return Ok(Plan::Keep);
     }
 
-    let Some(meta) = metadata(dest)? else {
+    if metadata(dest)?.is_none() {
         return Ok(Plan::Copy);
-    };
-
-    if !meta.file_type().is_symlink() || !points_at(dest, source)? {
+    }
+    if files::link_at("rm", dest)?.as_deref() != Some(source) {
         return Ok(Plan::Keep);
     }
 
@@ -550,18 +548,8 @@ fn restore(source: &Path, dest: &Path) -> Result<()> {
     })
 }
 
-fn prune_parents(repo: &Path, file: &Path) -> Result<()> {
-    files::prune_parents("rm", repo, file)
-}
-
 fn metadata(path: &Path) -> Result<Option<Metadata>> {
     files::metadata("rm", path)
-}
-
-fn points_at(link: &Path, target: &Path) -> Result<bool> {
-    let read = std::fs::read_link(link)
-        .with_context(|| format!("rm: failed to read {}", link.display()))?;
-    Ok(read == target)
 }
 
 #[cfg(test)]

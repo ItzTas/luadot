@@ -14,7 +14,7 @@ mod write;
 
 pub use atomic::{replace_contents, replace_file};
 pub use fs::{
-    create_parent, effective_mode, exists, link_target, metadata, mode_bits, private_dir,
+    create_parent, effective_mode, exists, link_at, link_target, metadata, mode_bits, private_dir,
     prune_parents, read_contents, regular_file, write_mode,
 };
 pub use link::{LinkMode, link};
