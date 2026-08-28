@@ -4,32 +4,24 @@ use super::constants::{
     NAMESPACE, NEW, PUSH, REKEY, RESTORE, RM, SETUP, STATUS, SYNC, TAKE, TMPL, TMPL_ALT, TMPL_NEW,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Command {
-    Add,
-    Apply,
-    Bootstrap,
-    Cd,
-    Class,
-    Clone,
-    Config,
-    Diff,
-    Edit,
-    Exec,
-    Git,
-    Init,
-    Mv,
-    Push,
-    Rekey,
-    Restore,
-    Rm,
-    Setup,
-    Status,
-    Sync,
-    Take,
-    TmplAlt,
-    TmplNew,
+macro_rules! command {
+    ($($variant:ident),+ $(,)?) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        pub enum Command {
+            $($variant,)+
+        }
+
+        #[cfg(test)]
+        impl Command {
+            pub const ALL: &'static [Self] = &[$(Self::$variant,)+];
+        }
+    };
 }
+
+command!(
+    Add, Apply, Bootstrap, Cd, Class, Clone, Config, Diff, Edit, Exec, Git, Init, Mv, Push, Rekey,
+    Restore, Rm, Setup, Status, Sync, Take, TmplAlt, TmplNew,
+);
 
 impl Command {
     pub fn name(self) -> &'static str {
