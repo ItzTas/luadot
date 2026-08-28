@@ -40,7 +40,7 @@ mod tests {
         let dir = template(root.path());
         std::fs::write(
             dir.join("zshrc.tmpl.zsh"),
-            "export EDITOR=<%= editor %>\nhost is a <%= type(ld.sys.host.name) %>\n",
+            "export EDITOR=<%= editor %>\nhome is a <%= type(ld.path.home) %>\n",
         )
         .unwrap();
 
@@ -52,7 +52,7 @@ mod tests {
 
         assert_eq!(
             outputs[0].content(),
-            &Content::Text("export EDITOR=nvim\nhost is a string\n".to_string())
+            &Content::Text("export EDITOR=nvim\nhome is a string\n".to_string())
         );
     }
 
