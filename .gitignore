@@ -37,3 +37,5 @@ target
 
 # Local CARGO_HOME: registry cache, and credentials.toml if cargo login runs here
 /.cargo/
+
+/.omo/run-continuation/
