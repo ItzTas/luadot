@@ -2,7 +2,7 @@ use std::env;
 use std::error::Error;
 use std::path::PathBuf;
 
-use super::constants::DIR;
+const DIR: &str = "vendor";
 
 pub fn dir(name: &str) -> Result<PathBuf, Box<dyn Error>> {
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);

@@ -6,7 +6,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use tracing::debug;
 
-use super::constants::{CHOWN, CHOWN_NO_FOLLOW};
+use super::constants::CHOWN;
 use super::fs::mode_bits;
 use super::link::LinkMode;
 
@@ -116,11 +116,7 @@ impl<'a> Attributes<'a> {
         };
 
         let mut invocation = Command::new(CHOWN);
-        invocation
-            .arg(CHOWN_NO_FOLLOW)
-            .arg("--")
-            .arg(owner)
-            .arg(dest);
+        invocation.arg("-h").arg("--").arg(owner).arg(dest);
         debug!(?invocation, "setting the owner");
 
         let output = invocation

@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::builder::Resettable;
 use clap::{Args, CommandFactory};
 
-use super::super::constants::{TASK_NONE, TASK_UNKNOWN};
+use super::super::constants::TASK_UNKNOWN;
 use super::super::types::Cli;
 use crate::lua::{self, Shared, Task};
 use crate::output;
@@ -52,7 +52,7 @@ pub fn task_cmd(args: TaskArgs) -> Result<()> {
 pub fn external_cmd(words: Vec<String>) -> Result<()> {
     let config = lua::load_config()?;
     let Some((name, args)) = words.split_first() else {
-        bail!(TASK_NONE);
+        bail!("task: no task named");
     };
 
     match registered(name, &config, name)? {

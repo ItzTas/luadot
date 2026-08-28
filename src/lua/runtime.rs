@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use mlua::{Lua, Table, Value};
 
 use super::bundled::lpeg;
-use super::constants::{MODULE_PATH_MISSING, MODULES_DIR, PACKAGE, PACKAGE_PATH};
+use super::constants::{MODULES_DIR, PACKAGE, PACKAGE_PATH};
 
 #[derive(Debug, Clone)]
 struct ModulePath {
@@ -58,7 +58,7 @@ fn change(lua: &Lua, edit: impl FnOnce(&mut ModulePath)) -> mlua::Result<()> {
     let rendered = {
         let mut path = lua
             .app_data_mut::<ModulePath>()
-            .ok_or_else(|| mlua::Error::external(MODULE_PATH_MISSING))?;
+            .ok_or_else(|| mlua::Error::external("the module path is not available"))?;
         edit(&mut path);
         path.render()
     };

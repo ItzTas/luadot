@@ -78,23 +78,10 @@ pub const INTEGER_INDEX: &str = "[integer]";
 pub const LINK_MODE_TYPENAME: &str = "ld.LinkMode";
 
 #[cfg(feature = "meta")]
-pub const LINK_MODE_DOC: &str =
-    "How a managed file is placed on the system: a hard link, a symbolic link or a copy.";
-
-#[cfg(feature = "meta")]
 pub const CONFLICT_TYPENAME: &str = "ld.Conflict";
-
-#[cfg(feature = "meta")]
-pub const CONFLICT_DOC: &str = "What happens when the system copy differs: it is overwritten, the file is skipped, or the run stops.";
 
 #[cfg(feature = "meta")]
 pub const TRACK_TYPENAME: &str = "ld.Track";
 
 #[cfg(feature = "meta")]
-pub const TRACK_DOC: &str = "How luadot picks a file up: `auto` adds it on its own, `manual` waits for `luadot add`, `never` leaves it alone.";
-
-#[cfg(feature = "meta")]
 pub const BACKEND_TYPENAME: &str = "ld.Backend";
-
-#[cfg(feature = "meta")]
-pub const BACKEND_DOC: &str = "The tool that encrypts and decrypts managed files.";

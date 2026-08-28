@@ -6,7 +6,7 @@ use crate::output;
 use crate::state;
 use crate::utils;
 
-use super::super::constants::{UNDECLARED, UNSET};
+use super::super::constants::UNSET;
 
 #[derive(Debug, Args)]
 pub struct ClassArgs {
@@ -70,7 +70,7 @@ fn list() -> Result<()> {
         .iter()
         .filter(|(name, _)| config.class(name).is_none())
     {
-        output::field(name, format!("{value}  {UNDECLARED}"));
+        output::field(name, format!("{value}  (not declared)"));
     }
 
     Ok(())

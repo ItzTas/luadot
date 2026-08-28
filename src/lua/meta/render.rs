@@ -3,10 +3,42 @@ use tealr::{
     TypeWalker,
 };
 
-use super::constants::{
-    ALIAS, ARRAY, CLASS, COMMENT, ELLIPSIS, EMPTY_TABLE, END, FIELD, FUN, FUNCTION, HEADER, MAP,
-    OPTIONAL, OVERLOAD, PARAM, RETURN, UNNAMED, VARIANT,
-};
+const HEADER: &str = "---@meta";
+
+const COMMENT: &str = "---";
+
+const ALIAS: &str = "---@alias";
+
+const VARIANT: &str = "---|";
+
+const CLASS: &str = "---@class";
+
+const FIELD: &str = "---@field";
+
+const OVERLOAD: &str = "---@overload";
+
+const PARAM: &str = "---@param";
+
+const RETURN: &str = "---@return";
+
+const FUNCTION: &str = "function";
+
+const END: &str = "end";
+
+const FUN: &str = "fun";
+
+const EMPTY_TABLE: &str = "= {}";
+
+const ELLIPSIS: &str = "...";
+
+const OPTIONAL: &str = "?";
+
+const UNNAMED: &str = "_";
+
+const ARRAY: &str = "[]";
+
+const MAP: &str = "table";
+
 use crate::lua::ld::{CALL_METHOD, NIL};
 
 struct Union {

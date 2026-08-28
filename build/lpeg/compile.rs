@@ -3,7 +3,11 @@ use std::path::Path;
 
 use crate::vendor;
 
-use super::constants::{NAME, RE_ENV, RE_FILE};
+const NAME: &str = "lpeg";
+
+const RE_FILE: &str = "re.lua";
+
+const RE_ENV: &str = "LPEG_RE_PATH";
 
 pub fn compile(headers: &Path) -> Result<(), Box<dyn Error>> {
     let source = vendor::compile(NAME, headers)?;

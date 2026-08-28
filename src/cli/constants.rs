@@ -13,29 +13,13 @@ pub const TRACE_FILTER: &str = "luadot=trace";
 
 pub const UNSET: &str = "(none)";
 
-pub const CONFIG_WROTE: &str = "wrote";
-
 pub const ADD_COMMAND: &str = "add";
 
 pub const TAKE_COMMAND: &str = "take";
 
-pub const ADD_LABEL: &str = "added";
-
-pub const MOVE_LABEL: &str = "moved";
-
-pub const MOVE_PREDICTION: &str = "move";
-
-pub const MOVE_ARROW: &str = " -> ";
-
-pub const UNDECLARED: &str = "(not declared)";
-
-pub const DEFAULT_SHELL: &str = "/bin/sh";
-
 pub const PREVIEW_LIMIT: usize = 10;
 
 pub const YES_FLAGS: &str = "-y or --yes";
-
-pub const TEMPLATE_SKELETON: &str = "return \"\"\n";
 
 pub const DIFF_PROGRAM: &str = "git";
 
@@ -50,8 +34,6 @@ pub const CUSTOM_SUMMARY: &str = "summary";
 pub const MANAGED_FILES: &str = "managed";
 
 pub const GENERATED_FILES: &str = "generated";
-
-pub const TASK_NONE: &str = "task: no task named";
 
 pub const TASK_UNKNOWN: &str = "is not a task the configuration registers";
 

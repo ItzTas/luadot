@@ -1,9 +1,8 @@
 use tealr::TypeWalker;
 
 use super::constants::{
-    BACKEND_DOC, BACKEND_TYPENAME, CONFLICT_DOC, CONFLICT_POLICIES, CONFLICT_TYPENAME,
-    CRYPT_BACKENDS, LINK_MODE_DOC, LINK_MODE_TYPENAME, LINK_MODES, TRACK_DOC, TRACK_KINDS,
-    TRACK_TYPENAME,
+    BACKEND_TYPENAME, CONFLICT_POLICIES, CONFLICT_TYPENAME, CRYPT_BACKENDS, LINK_MODE_TYPENAME,
+    LINK_MODES, TRACK_KINDS, TRACK_TYPENAME,
 };
 use super::signature::Collect;
 use super::{
@@ -12,6 +11,15 @@ use super::{
 };
 
 type Describer = fn(TypeWalker) -> TypeWalker;
+
+const LINK_MODE_DOC: &str =
+    "How a managed file is placed on the system: a hard link, a symbolic link or a copy.";
+
+const CONFLICT_DOC: &str = "What happens when the system copy differs: it is overwritten, the file is skipped, or the run stops.";
+
+const TRACK_DOC: &str = "How luadot picks a file up: `auto` adds it on its own, `manual` waits for `luadot add`, `never` leaves it alone.";
+
+const BACKEND_DOC: &str = "The tool that encrypts and decrypts managed files.";
 
 pub fn walker() -> TypeWalker {
     let describers: [Describer; 18] = [

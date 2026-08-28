@@ -4,12 +4,12 @@ use std::process::{Command, Stdio};
 use anyhow::Result;
 use tracing::debug;
 
-use super::constants::{LFS_FILTERS, LFS_INSTALL, LFS_PROGRAM, LFS_PULL, LFS_VERSION};
+use super::constants::LFS_FILTERS;
 use super::run::{present, quiet};
 
 pub fn available() -> bool {
-    Command::new(LFS_PROGRAM)
-        .arg(LFS_VERSION)
+    Command::new("git-lfs")
+        .arg("version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -33,7 +33,7 @@ pub fn install(command: &str, repo: &Path, lfs: bool) -> Result<()> {
     }
 
     debug!(repo = %repo.display(), "installing the lfs filters");
-    quiet(command, repo, LFS_INSTALL)
+    quiet(command, repo, ["lfs", "install", "--local"])
 }
 
 pub fn pull(command: &str, repo: &Path, lfs: bool) -> Result<()> {
@@ -42,7 +42,7 @@ pub fn pull(command: &str, repo: &Path, lfs: bool) -> Result<()> {
     }
 
     debug!(repo = %repo.display(), "pulling the lfs contents");
-    quiet(command, repo, LFS_PULL)
+    quiet(command, repo, ["lfs", "pull"])
 }
 
 #[cfg(test)]

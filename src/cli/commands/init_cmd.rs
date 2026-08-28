@@ -6,8 +6,6 @@ use clap::Args;
 use crate::output::Tone;
 use crate::{git, lua, output, state, utils};
 
-use super::super::constants::CONFIG_WROTE;
-
 #[derive(Debug, Args)]
 pub struct InitArgs {
     #[arg(
@@ -38,7 +36,7 @@ pub fn init_cmd(args: InitArgs) -> Result<()> {
 
     output::note(format!("created {}", dir.display()));
     if let Some(path) = lua::place_starter("init", &lua::config_path()?)? {
-        output::entry(Tone::Good, CONFIG_WROTE, path.display());
+        output::entry(Tone::Good, "wrote", path.display());
     }
     utils::offer_definitions("init", &registered);
 

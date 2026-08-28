@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-use super::constants::DEFAULT_REPO_DIR;
 use super::paths::{data_dir, expand, home_dir, repo_path};
 use crate::crypt;
 use crate::files;
@@ -22,7 +21,7 @@ pub fn destination(
         return Ok(expand(home, configured));
     }
 
-    Ok(data_dir()?.join(DEFAULT_REPO_DIR))
+    Ok(data_dir()?.join("repo"))
 }
 
 pub fn require_repo(command: &str, configured: Option<&Path>) -> Result<PathBuf> {

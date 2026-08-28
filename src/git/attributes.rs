@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use super::block::stitched;
-use super::constants::{MARKER_END, MARKER_START, RULES_ATTRIBUTES, TRACKED, UNTRACKED};
+use super::constants::RULES_ATTRIBUTES;
 use super::rules;
 use crate::files;
 
@@ -43,8 +43,8 @@ pub fn sync(command: &str, repo: &Path, patterns: &[(String, bool)]) -> Result<b
 fn rendered(current: &str, patterns: &[(String, bool)]) -> String {
     stitched(
         current,
-        MARKER_START,
-        MARKER_END,
+        "# luadot:lfs",
+        "# /luadot:lfs",
         &attributes(patterns).join("\n"),
     )
 }
@@ -58,8 +58,8 @@ fn attributes(patterns: &[(String, bool)]) -> Vec<String> {
                 .map(move |pattern| (pattern, *tracked))
         })
         .map(|(pattern, tracked)| match tracked {
-            true => format!("{pattern} {TRACKED}"),
-            false => format!("{pattern} {UNTRACKED}"),
+            true => format!("{pattern} filter=lfs diff=lfs merge=lfs -text"),
+            false => format!("{pattern} -filter -diff -merge text"),
         })
         .collect()
 }

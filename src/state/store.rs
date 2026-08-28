@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use super::State;
-use super::constants::{DATA_MODE, STATE_FILE, STATE_MODE};
+use super::constants::{DATA_MODE, STATE_MODE};
 use crate::files;
 use crate::utils;
 
@@ -43,7 +43,7 @@ fn save_to(path: &Path, state: &State) -> Result<()> {
 }
 
 fn state_path() -> Result<PathBuf> {
-    Ok(utils::data_dir()?.join(STATE_FILE))
+    Ok(utils::data_dir()?.join("state.json"))
 }
 
 #[cfg(test)]

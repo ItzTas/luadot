@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result, bail};
 
-use super::constants::{STAGED_ATTEMPTS, STAGED_PREFIX};
+const STAGED_ATTEMPTS: u32 = 64;
 use super::fs::{create_parent, metadata, write_contents};
 
 static TICKET: AtomicU64 = AtomicU64::new(0);
@@ -111,7 +111,7 @@ fn staged_name(name: &OsStr) -> OsString {
     let mut staged = OsString::from(".");
     staged.push(name);
     staged.push(format!(
-        ".{STAGED_PREFIX}-{}-{}",
+        ".luadot-{}-{}",
         std::process::id(),
         TICKET.fetch_add(1, Ordering::Relaxed)
     ));

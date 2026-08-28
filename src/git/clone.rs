@@ -9,7 +9,6 @@ use gix::sec::Trust;
 use gix::sec::trust::DefaultForLevel;
 use tracing::debug;
 
-use super::constants::{CHECKOUT_TASK, FETCH_TASK};
 use super::empty::require_empty;
 use super::{info, lfs};
 use crate::output::Progress;
@@ -92,11 +91,11 @@ fn checkout(command: &str, mut fetch: PrepareFetch) -> Result<gix::Repository> {
     let progress = Progress::new();
 
     let (mut checkout, _outcome) = fetch
-        .fetch_then_checkout(progress.task(FETCH_TASK), &should_interrupt)
+        .fetch_then_checkout(progress.task("fetch"), &should_interrupt)
         .with_context(|| format!("{command}: failed to fetch repository"))?;
 
     let (repo, _outcome) = checkout
-        .main_worktree(progress.task(CHECKOUT_TASK), &should_interrupt)
+        .main_worktree(progress.task("checkout"), &should_interrupt)
         .with_context(|| format!("{command}: failed to checkout worktree"))?;
 
     drop(progress);

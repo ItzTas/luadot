@@ -93,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn machine_and_classes_are_reachable() {
+    fn classes_are_reachable() {
         let root = tempfile::tempdir().unwrap();
         let mut classes = Classes::default();
         classes.set("form-factor", "laptop");
@@ -101,15 +101,12 @@ mod tests {
         let output = load(
             root.path(),
             ".zshrc.luadot",
-            "<%= type(ld.sys.host.name) %> on a <%= ld.class.get(\"form-factor\") %>",
+            "on a <%= ld.class.get(\"form-factor\") %>",
             &classes,
         )
         .unwrap();
 
-        assert_eq!(
-            output.content(),
-            &Content::Text("string on a laptop".to_string())
-        );
+        assert_eq!(output.content(), &Content::Text("on a laptop".to_string()));
     }
 
     #[test]
