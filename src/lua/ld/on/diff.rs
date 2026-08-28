@@ -4,7 +4,7 @@ use super::super::constants::API;
 use super::super::parse::external;
 use super::command::Command;
 use super::constants::{ARGS, DIFF_KEYS, NAMESPACE, TOOL};
-use super::parse::{around, known, report};
+use super::parse::{around, hints, known, report};
 use crate::lua::{Config, Diff, Tool};
 
 pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
@@ -12,9 +12,11 @@ pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
         let call = format!("{NAMESPACE}.{}", command.path());
         let diff = diff(&call, &options)?;
         let around = around(&call, &options)?;
+        let hints = hints(&call, &options)?;
         Config::building(lua, |config| {
             config.set_diff(diff);
             config.set_around(command, around);
+            config.set_command_hints(command, hints);
         })
     })
 }

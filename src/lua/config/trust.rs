@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-use super::constants::SHARED_WRITE;
+const SHARED_WRITE: u32 = 0o022;
 use crate::files::mode_bits;
 
 pub fn trusted(path: &Path) -> Result<()> {

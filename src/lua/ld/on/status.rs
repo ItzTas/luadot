@@ -2,7 +2,7 @@ use mlua::{Function, Lua, Table};
 
 use super::command::Command;
 use super::constants::{NAMESPACE, STATUS_KEYS};
-use super::parse::{around, known, report};
+use super::parse::{around, hints, known, report};
 use crate::lua::Config;
 
 pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
@@ -11,9 +11,11 @@ pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
         known(&call, &options, &STATUS_KEYS)?;
         let status = report(&call, &options)?;
         let around = around(&call, &options)?;
+        let hints = hints(&call, &options)?;
         Config::building(lua, |config| {
             config.set_status(status);
             config.set_around(command, around);
+            config.set_command_hints(command, hints);
         })
     })
 }

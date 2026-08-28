@@ -4,11 +4,7 @@ use super::diff::DiffState;
 
 pub const CONFIG_FILE: &str = "config.lua";
 
-pub const SHARED_WRITE: u32 = 0o022;
-
 pub const GIT_DIR: &str = ".git";
-
-pub const CLASS_QUESTION: &str = "define the class";
 
 pub const MATCH: MatchOptions = MatchOptions {
     case_sensitive: true,
@@ -38,14 +34,14 @@ pub const TEMPLATES: &str = "templates";
 
 pub const DEFAULT: &str = "default";
 
+pub const NAME: &str = "name";
+
 pub const DIFF_STATES: [(&str, DiffState); 4] = [
     ("missing", DiffState::Missing),
     ("differs", DiffState::Differs),
     ("mode", DiffState::Mode),
     ("other", DiffState::Other),
 ];
-
-pub const MISSING: &str = "the configuration is not available";
 
 pub const LOCKED: &str = "the configuration is already being changed";
 
@@ -63,8 +59,4 @@ pub const STARTER: &str = r#"-- The luadot configuration, read before every comm
 --   { match = ".config/mako/**", on_change = "makoctl reload" },
 --   { match = ".cache/**", track = "never" },
 -- })
-
--- if ld.sys.has_battery() then
---   ld.rules({ { match = ".config/tlp/**", link = "symbolic" } })
--- end
 "#;

@@ -936,6 +936,43 @@ fn status_groups_files_by_state() {
 }
 
 #[test]
+fn the_option_silences_every_hint() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        "ld.opt.hints(false)\n",
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("status").assert().success().stdout(
+        predicate::str::contains("Files not on the system:")
+            .and(predicate::str::contains("        missing:     .bashrc"))
+            .and(predicate::str::contains("(use \"luadot apply").not()),
+    );
+}
+
+#[test]
+fn a_command_writes_the_hints_it_was_given() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.on.status({ hints = function(hint) return "hint<" .. hint.name .. ">" end })"#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("status").assert().success().stdout(
+        predicate::str::contains("hint<missing>")
+            .and(predicate::str::contains("(use \"luadot apply <path>...\" to write them)").not()),
+    );
+}
+
+#[test]
 fn command_runs_before_and_after_hooks() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

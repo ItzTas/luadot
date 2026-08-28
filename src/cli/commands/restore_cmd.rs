@@ -104,7 +104,7 @@ fn list(roots: &[PathBuf], taken: &[(u64, PathBuf)], name: Option<&String>) -> R
     show(&[(stamp, dir.to_path_buf())])?;
 
     for file in files::collect_files("restore", dir)? {
-        output::hint(destination(roots, dir, &file)?.display());
+        output::detail(destination(roots, dir, &file)?.display());
     }
 
     Ok(())
@@ -161,7 +161,7 @@ fn confirmed(roots: &[PathBuf], dir: &Path, saved: &[PathBuf], stamp: u64) -> Re
     }
 
     if saved.len() > PREVIEW_LIMIT {
-        output::hint(format!("... and {} more", saved.len() - PREVIEW_LIMIT));
+        output::detail(format!("... and {} more", saved.len() - PREVIEW_LIMIT));
     }
 
     output::confirm(

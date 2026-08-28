@@ -3,10 +3,14 @@ use std::io::Write;
 
 use anstream::{eprint, eprintln, print, println, stderr, stdout};
 
-use super::constants::{FIELD_WIDTH, HINT_INDENT, ITEM_INDENT, ITEM_WIDTH, LABEL_WIDTH};
+use super::constants::{FIELD_WIDTH, ITEM_WIDTH, LABEL_WIDTH};
 use super::format::notice;
 use super::message::{Message, Stream};
 use super::tone::Tone;
+
+const ITEM_INDENT: usize = 8;
+
+const HINT_INDENT: usize = 2;
 
 pub fn say(message: &Message) {
     if message.blank() {
@@ -57,9 +61,17 @@ pub fn section(title: impl Display) {
 }
 
 pub fn hint(text: impl Display) {
-    say(&Message::new(text)
+    say(&muted(text));
+}
+
+pub fn detail(text: impl Display) {
+    say(&muted(text));
+}
+
+fn muted(text: impl Display) -> Message {
+    Message::new(text)
         .with_look(Tone::Muted.into())
-        .with_indent(HINT_INDENT));
+        .with_indent(HINT_INDENT)
 }
 
 pub fn item(tone: Tone, label: impl Display, text: impl Display) {
