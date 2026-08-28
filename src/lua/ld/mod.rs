@@ -26,7 +26,6 @@ mod setup;
 #[cfg(feature = "meta")]
 mod signature;
 mod surface;
-mod sys;
 mod table;
 mod value;
 #[cfg(feature = "meta")]

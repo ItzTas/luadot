@@ -25,7 +25,7 @@ the parser rejects, and a new link mode reaches the editor when it reaches
 `LINK_MODES`.
 
 Namespaces are registered as global instances with dotted names (`ld`,
-`ld.opt`, `ld.sys.gpu`); data tables are plain records. `src/lua/meta/render.rs`
+`ld.opt`, `ld.on.tmpl`); data tables are plain records. `src/lua/meta/render.rs`
 writes the walker as LuaCATS: enums as `---@alias`, records as `---@class`,
 instances as `ld.opt = {}` with an `---@overload` when the table is callable,
 functions with `---@param` and `---@return`. tealr's own lua-language-server
