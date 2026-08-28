@@ -1,65 +1,22 @@
-use mlua::{Function, Lua, Value};
-use serde_json::{Number, Value as Json};
+use mlua::{Function, Lua, LuaSerdeExt, Value};
+use serde_json::Value as Json;
 
 use super::super::constants::API;
 use super::super::parse::external;
-use super::constants::{DECODE, DEPTH, NAMESPACE};
-use super::null;
+use super::constants::{DECODE, NAMESPACE};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, text: String| decode(lua, &text))
 }
 
 fn decode(lua: &Lua, text: &str) -> mlua::Result<Value> {
-    let json: Json = serde_json::from_str(text)
-        .map_err(|err| external(format!("{} failed to parse: {err}", prefix())))?;
+    let json: Json = serde_json::from_str(text).map_err(|err| {
+        external(format!(
+            "`{API}.{NAMESPACE}.{DECODE}` failed to parse: {err}"
+        ))
+    })?;
 
-    convert(lua, &json, 0)
-}
-
-fn convert(lua: &Lua, json: &Json, depth: usize) -> mlua::Result<Value> {
-    if depth > DEPTH {
-        return Err(external(format!(
-            "{} gave up below {DEPTH} nested values",
-            prefix()
-        )));
-    }
-
-    match json {
-        Json::Null => Ok(null::value()),
-        Json::Bool(state) => Ok(Value::Boolean(*state)),
-        Json::Number(number) => self::number(number),
-        Json::String(text) => Ok(Value::String(lua.create_string(text)?)),
-        Json::Array(items) => {
-            let table = lua.create_table_with_capacity(items.len(), 0)?;
-            for (index, item) in items.iter().enumerate() {
-                table.raw_set(index + 1, convert(lua, item, depth + 1)?)?;
-            }
-            Ok(Value::Table(table))
-        }
-        Json::Object(entries) => {
-            let table = lua.create_table_with_capacity(0, entries.len())?;
-            for (key, value) in entries {
-                table.raw_set(key.as_str(), convert(lua, value, depth + 1)?)?;
-            }
-            Ok(Value::Table(table))
-        }
-    }
-}
-
-fn number(number: &Number) -> mlua::Result<Value> {
-    if let Some(whole) = number.as_i64() {
-        return Ok(Value::Integer(whole));
-    }
-
-    number
-        .as_f64()
-        .map(Value::Number)
-        .ok_or_else(|| external(format!("{} cannot hold {number}", prefix())))
-}
-
-fn prefix() -> String {
-    format!("`{API}.{NAMESPACE}.{DECODE}`")
+    lua.to_value(&json)
 }
 
 #[cfg(test)]
@@ -113,13 +70,13 @@ mod tests {
     }
 
     #[test]
-    fn nesting_past_the_limit_is_refused() {
-        let deep = format!("{}1{}", "[".repeat(70), "]".repeat(70));
+    fn nesting_past_what_the_parser_takes_is_refused() {
+        let deep = format!("{}1{}", "[".repeat(200), "]".repeat(200));
 
         let err = eval(&format!(r#"return json.decode("{deep}")"#))
             .unwrap_err()
             .to_string();
 
-        assert!(err.contains("gave up below 64 nested values"));
+        assert!(err.contains("`ld.json.decode` failed to parse"));
     }
 }
