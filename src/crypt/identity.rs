@@ -4,7 +4,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use super::constants::{IDENTITY_FILE, SECRET_MODE, SHELL, SHELL_ARG};
+use super::constants::{SECRET_MODE, SHELL, SHELL_ARG};
 use super::edit::Workspace;
 use crate::files::write_mode;
 
@@ -94,7 +94,7 @@ fn provide(command: &str, provider: &Provider) -> Result<(Workspace, PathBuf)> {
     }
 
     let workspace = Workspace::create(command)?;
-    let path = workspace.file(OsStr::new(IDENTITY_FILE));
+    let path = workspace.file(OsStr::new("identity"));
     write_mode(command, &path, &output.stdout, SECRET_MODE)?;
 
     Ok((workspace, path))

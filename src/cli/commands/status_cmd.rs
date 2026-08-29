@@ -6,7 +6,7 @@ use clap::Args;
 use crate::crypt;
 use crate::files::{self, Entry, FileStatus, Side};
 use crate::git;
-use crate::lua::{Command, Config, Shared, StatusCounts, StatusFile};
+use crate::lua::{Command, Config, Hint, Shared, StatusCounts, StatusFile};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
@@ -244,8 +244,7 @@ fn show(config: &Config, reported: &[StatusFile]) -> Result<()> {
     }
 
     let Some(custom) = config.status().entry() else {
-        grouped(reported);
-        return Ok(());
+        return grouped(config, reported);
     };
 
     for file in reported {
@@ -255,7 +254,7 @@ fn show(config: &Config, reported: &[StatusFile]) -> Result<()> {
     Ok(())
 }
 
-fn grouped(reported: &[StatusFile]) {
+fn grouped(config: &Config, reported: &[StatusFile]) -> Result<()> {
     for (state, title, hints) in STATUS_SECTIONS {
         let listed: Vec<&StatusFile> = reported
             .iter()
@@ -267,13 +266,15 @@ fn grouped(reported: &[StatusFile]) {
 
         let (tone, label) = display(state);
         output::section(title);
-        for line in hints {
-            output::hint(line);
+        for &line in hints {
+            utils::hint(config, Command::Status, Hint::new(state.name(), line))?;
         }
         for file in listed {
             output::item(tone, format!("{label}:"), file.path().display());
         }
     }
+
+    Ok(())
 }
 
 fn summary(config: &Config, side: Side, reported: &[StatusFile], templates: usize) -> Result<()> {

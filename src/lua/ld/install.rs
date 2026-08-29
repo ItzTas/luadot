@@ -5,7 +5,7 @@ use super::path::Paths;
 use super::surface::Surface;
 use super::{
     alt, argv, class, cmd, crypt, doc, fs, git, json, on, opt, path, pkg, print, regex, root, rtp,
-    setup, sys,
+    setup,
 };
 use std::sync::{Arc, Mutex};
 
@@ -16,7 +16,7 @@ use crate::state::Classes;
 type Namespace = fn(&Lua) -> mlua::Result<Table>;
 
 pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) -> mlua::Result<()> {
-    let namespaces: [(&str, Namespace); 14] = [
+    let namespaces: [(&str, Namespace); 13] = [
         (alt::NAMESPACE, alt::table),
         (argv::NAMESPACE, argv::table),
         (cmd::NAMESPACE, cmd::table),
@@ -30,7 +30,6 @@ pub fn install(lua: &Lua, surface: Surface, paths: &Paths, classes: &Classes) ->
         (print::NAMESPACE, print::table),
         (regex::NAMESPACE, regex::table),
         (rtp::NAMESPACE, rtp::table),
-        (sys::NAMESPACE, sys::table),
     ];
 
     surface.install(lua);
@@ -115,15 +114,6 @@ mod tests {
         end
         assert(type(ld.argv.name) == "string", "argv.name is missing")
         assert(type(ld.argv.args) == "table", "argv.args is missing")
-        assert(ld.host == nil, "host leaked into the root")
-        for _, name in ipairs({ "name", "os", "arch" }) do
-          assert(type(ld.sys.host[name]) == "string", "sys.host." .. name .. " is missing")
-        end
-        for _, name in ipairs({ "vendor", "name", "driver" }) do
-          assert(type(ld.sys.gpu[name]) == "string", "sys.gpu." .. name .. " is missing")
-        end
-        assert(type(ld.sys.ram) == "number", "sys.ram is missing")
-        assert(type(ld.sys.has_battery()) == "boolean", "sys.has_battery is missing")
         assert(type(ld.path.home) == "string", "path.home is missing")
         assert(type(ld.path.config) == "string", "path.config is missing")
         assert(type(ld.path.data) == "string", "path.data is missing")

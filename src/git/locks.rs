@@ -1,7 +1,7 @@
 use std::io;
 use std::panic;
 
-use super::constants::INTERRUPT_GRACE;
+const INTERRUPT_GRACE: usize = 0;
 
 pub fn guard() -> io::Result<()> {
     catch_panics();

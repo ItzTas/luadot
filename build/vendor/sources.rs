@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::constants::SOURCE_EXTENSION;
+const SOURCE_EXTENSION: &str = "c";
 
 pub fn sources(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let mut found = Vec::new();

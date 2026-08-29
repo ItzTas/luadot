@@ -3,6 +3,7 @@ pub mod constants;
 mod custom;
 mod diff;
 mod file;
+mod hint;
 mod load;
 mod report;
 mod starter;
@@ -14,6 +15,7 @@ mod types;
 pub use around::{Around, Chain, Moment};
 pub use custom::{Call, Custom};
 pub use diff::{Diff, DiffCounts, DiffFile, DiffState, Tool};
+pub use hint::Hint;
 #[cfg(test)]
 pub use load::from_source;
 pub use load::{config_path, load_config};

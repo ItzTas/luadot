@@ -3,7 +3,11 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use etcetera::base_strategy::{BaseStrategy, Xdg};
 
-use super::constants::{APP_DIR, DEFAULT_CONFIG_DIR, DEFAULT_DATA_DIR};
+const APP_DIR: &str = "luadot";
+
+const DEFAULT_CONFIG_DIR: &str = ".config";
+
+const DEFAULT_DATA_DIR: &str = ".local/share";
 
 pub fn data_dir() -> Result<PathBuf> {
     let base = base()?;

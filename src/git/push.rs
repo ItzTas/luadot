@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use tracing::debug;
 
 use super::commit::committed;
-use super::constants::{PUSH, SET_UPSTREAM, UPSTREAM};
+use super::constants::PUSH;
 use super::run::{run, succeeds};
 
 pub fn push(command: &str, repo: &Path) -> Result<()> {
@@ -17,7 +17,7 @@ pub fn push(command: &str, repo: &Path) -> Result<()> {
 }
 
 fn tracked(repo: &Path) -> bool {
-    succeeds(repo, UPSTREAM)
+    succeeds(repo, ["rev-parse", "--abbrev-ref", "@{upstream}"])
 }
 
 fn arguments(tracked: bool) -> Vec<&'static str> {
@@ -25,7 +25,9 @@ fn arguments(tracked: bool) -> Vec<&'static str> {
         return vec![PUSH];
     }
 
-    std::iter::once(PUSH).chain(SET_UPSTREAM).collect()
+    std::iter::once(PUSH)
+        .chain(["--set-upstream", "origin", "HEAD"])
+        .collect()
 }
 
 #[cfg(test)]

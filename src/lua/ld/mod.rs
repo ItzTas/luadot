@@ -26,7 +26,6 @@ mod setup;
 #[cfg(feature = "meta")]
 mod signature;
 mod surface;
-mod sys;
 mod table;
 mod value;
 #[cfg(feature = "meta")]
@@ -37,7 +36,7 @@ pub use constants::API;
 #[cfg(feature = "meta")]
 pub use constants::{CALL_METHOD, NIL};
 pub use install::{install, share};
-pub use on::Command;
+pub use on::{Command, HINTS};
 pub use path::Paths;
 #[cfg(test)]
 pub use root::BUILTINS;

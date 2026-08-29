@@ -53,8 +53,7 @@ by returning the same table:
 ```lua
 -- .zshrc.luadot/luadot.lua
 return {
-  content = (ld.sys.host.name == "thinkpad") and ld.alt.file("laptop.zsh")
-      or ld.alt.file("desktop.zsh"),
+  content = ld.alt.file("zshrc.zsh"),
   link = "symbolic",
 }
 ```
@@ -148,7 +147,6 @@ so the file changes only when the data does:
 ```lua
 return ld.alt.json({
   editor = ld.class.get("editor") or "nvim",
-  gpu = ld.sys.gpu.vendor,
 })
 ```
 

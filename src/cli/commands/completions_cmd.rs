@@ -4,7 +4,7 @@ use clap_complete::Shell;
 
 use crate::cli::Cli;
 
-use super::super::constants::{
+use super::super::completions::{
     BASH_GIT_COMPLETION, FISH_GIT_COMPLETION, ZSH_DISPATCH, ZSH_GIT_COMPLETION,
 };
 
@@ -23,8 +23,8 @@ fn script(shell: Shell) -> Result<String> {
     let generated = generated(shell)?;
 
     match shell {
-        Shell::Bash => Ok(format!("{generated}{BASH_GIT_COMPLETION}")),
-        Shell::Fish => Ok(format!("{generated}{FISH_GIT_COMPLETION}")),
+        Shell::Bash => Ok(format!("{generated}\n{BASH_GIT_COMPLETION}")),
+        Shell::Fish => Ok(format!("{generated}\n{FISH_GIT_COMPLETION}")),
         Shell::Zsh => zsh(&generated),
         _ => Ok(generated),
     }

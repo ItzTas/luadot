@@ -246,6 +246,30 @@ fn apply_places_a_whole_directory_as_one_link() {
 }
 
 #[test]
+fn apply_names_an_unchanged_path_only_when_asked() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    write(&repo.join(".vimrc"), "set number\n");
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+
+    luadot(&home)
+        .arg("apply")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unchanged  .vimrc").not());
+
+    luadot(&home)
+        .args(["apply", "--unchanged"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unchanged  .vimrc"));
+}
+
+#[test]
 fn add_and_rm_stage_their_changes() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -932,6 +956,43 @@ fn status_groups_files_by_state() {
                 "(use \"luadot apply\" to keep the repository's copy, \"luadot take\" to keep the system's)",
             ))
             .and(predicate::str::contains("        differs:     .zshrc")),
+    );
+}
+
+#[test]
+fn the_option_silences_every_hint() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        "ld.opt.hints(false)\n",
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("status").assert().success().stdout(
+        predicate::str::contains("Files not on the system:")
+            .and(predicate::str::contains("        missing:     .bashrc"))
+            .and(predicate::str::contains("(use \"luadot apply").not()),
+    );
+}
+
+#[test]
+fn a_command_writes_the_hints_it_was_given() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    write(&repo.join(".bashrc"), "managed\n");
+    write(
+        &home.join(".config/luadot/config.lua"),
+        r#"ld.on.status({ hints = function(hint) return "hint<" .. hint.name .. ">" end })"#,
+    );
+    write_state(&home, &repo);
+
+    luadot(&home).arg("status").assert().success().stdout(
+        predicate::str::contains("hint<missing>")
+            .and(predicate::str::contains("(use \"luadot apply <path>...\" to write them)").not()),
     );
 }
 

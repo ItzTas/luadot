@@ -244,38 +244,6 @@ always describe the same home. The data directory is
 not answer for an `ld.opt.repo_dir` set in that same file; every script that
 runs afterwards gets the resolved one.
 
-## The machine
-
-`ld.sys` describes the machine the script is running on:
-
-```lua
-if ld.sys.gpu.vendor == "nvidia" and ld.sys.ram > 24 * 1024 ^ 3 then
-  ld.pkg.install({ "nvidia-utils", "cuda" })
-end
-```
-
-| Value | Holds |
-| --- | --- |
-| `ld.sys.host` | `name`, `os` and `arch` of the machine. |
-| `ld.sys.gpu` | `vendor`, `name` and `driver` of the first card, and every card as a list. |
-| `ld.sys.ram` | The memory of the machine, in bytes. |
-| `ld.sys.has_battery()` | `true` on a machine with a battery of its own. |
-
-`ld.sys.gpu.vendor` is a short name (`nvidia`, `amd`, `intel`), or the PCI
-identifier when the vendor is not a known one. `ld.sys.gpu.name` is the model
-as `lspci` reports it, empty when `lspci` is not installed. A machine with
-several cards carries each of them:
-
-```lua
-for _, card in ipairs(ld.sys.gpu) do
-  print(card.vendor, card.name, card.driver)
-end
-```
-
-`ld.sys.has_battery()` ignores the battery of a mouse or a keyboard.
-`ld.sys.ram` is the kernel's `MemTotal`, a little under the installed memory;
-round it in the configuration: `math.ceil(ld.sys.ram / 1024 ^ 3)`.
-
 ## Classes
 
 A class is a question the machine answers once, such as which setup it runs or
@@ -387,7 +355,7 @@ output returned, non-zero status stops the script.
 
 ```lua
 local branch = ld.git("branch", "--show-current")
-ld.git("commit", "-m", "apply from " .. ld.sys.host.name)
+ld.git("commit", "-m", "apply")
 ```
 
 A call before a repository is set stops instead of running git somewhere else:
@@ -476,16 +444,17 @@ and `ld.on.tmpl.alt` and `ld.on.tmpl.new` for the two `tmpl`
 actions. `completions`, `doc`, `man` and `meta` describe luadot itself and
 have none.
 
-Two keys are common to all of them:
+Three keys are common to all of them:
 
 | Key | Takes | Effect |
 | --- | --- | --- |
 | `before` | a function, or `false` | Runs once `config.lua` ran, before the command does anything. |
 | `after` | a function, or `false` | Runs once the command is done. A command that fails stops before it. |
+| `hints` | a function, or `false` | Runs for every hint the command would write, in place of it. |
 
 ```lua
 ld.on.apply({
-  before = function() return "applying on " .. ld.sys.host.name end,
+  before = function() return "applying the dotfiles" end,
   after = function() ld.cmd("notify-send 'dotfiles applied'") end,
 })
 ```
@@ -498,6 +467,30 @@ take back what an earlier one set. Every command is customized apart. A dry
 run runs them too; `ld.argv.args` carries the flag. A call outside
 `config.lua` lands on the run in progress: `before` has passed by then,
 `after` still runs.
+
+A hint is a line saying which call comes next, like `(use "luadot diff
+<path>..." to see what changed)` under a `status` section. `hints` is handed
+each one as a table carrying `name`, which hint it is, and `default`, the line
+it stands in for. `false` silences them, and a second call replaces the
+function the last one set.
+
+```lua
+ld.on.status({
+  hints = function(hint)
+    if hint.name == "differs" then
+      return nil
+    end
+
+    return hint.default
+  end,
+})
+```
+
+`ld.opt.hints(false)` silences the hints of every command at once, and a
+`hints` given to a command wins over it. `status` names its hints after the
+section they open: `missing`, `unlinked`, `differs`, `unreadable`. `doc`
+writes one too, and with no `ld.on` call of its own it answers to the option
+alone.
 
 `status` and `diff` take three more keys, which replace what they print:
 
@@ -537,7 +530,7 @@ one at once:
 `state` is `"synced"`, `"missing"`, `"unlinked"`, `"differs"` or
 `"unreadable"`. Every inspected file reaches `entry` and `render`, synced ones
 included: the built-in report leaves those out and groups the rest into
-sections; a customized one gets a flat list.
+sections; a customized one gets a flat list, with no section and no hint.
 
 ```lua
 ld.on.status({
@@ -766,7 +759,7 @@ before installing it.
 `.lua` file:
 
 ```
-luadot exec 'print(ld.sys.gpu.name)'
+luadot exec 'print(ld.path.repo)'
 luadot exec ~/scripts/report.lua --json
 ```
 
@@ -823,6 +816,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.opt.backup_age(span)` | a span like `"30d"`, in `s`, `m`, `h`, `d` or `w` | How long a backup is kept; the ones older than that are dropped. Defaults to keeping them forever. |
 | `ld.opt.conflict(policy)` | `"overwrite"`, `"skip"`, `"error"` | Default answer when `apply` finds a differing file already on the system. |
 | `ld.opt.pkg_warn(enabled)` | `true`, `false` | Whether a call is warned about where it is slow or has no effect. Defaults to `true`. |
+| `ld.opt.hints(enabled)` | `true`, `false` | Whether a command writes the lines saying which call comes next. Defaults to `true`, and a `hints` given to `ld.on` wins over it. |
 | `ld.opt.autocommit(enabled)` | `true`, `false` | Whether `add`, `rm` and `mv` commit what they staged. Defaults to `false`. |
 | `ld.opt.autopush(enabled)` | `true`, `false` | Whether that commit is pushed too, committing first. Defaults to `false`. |
 | `ld.opt.lfs(enabled)` | `true`, `false` | Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH. |
@@ -847,7 +841,6 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.git.at(dir)(args...)` | a directory, then the arguments of a git command | Runs git inside that directory and returns what it printed. |
 | `ld.argv` | none | `name` and `args` of the command being run. |
 | `ld.surface` | none | Which script is running: `"config"`, `"bootstrap"`, `"setup"`, `"template"`, `"standalone"` or `"exec"`. |
-| `ld.sys` | none | `host`, `gpu`, `ram` and `has_battery()` of the machine. |
 | `ld.path` | none | `home`, `config`, `data`, `repo` and `dir`, where they exist. |
 | `ld.rtp.add(dir)` | a directory | Puts `<dir>/lua/` on the module path of this script and of every script the command runs after it, behind the configuration's own `lua/`. |
 | `ld.json.encode(value)` | a table or a scalar | That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both. |
@@ -861,29 +854,29 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.fs.read(path)` | a path | What the file holds. |
 | `ld.fs.write(path, text)` | a path and a string | Writes the text over the file, creating the directories leading to it. |
 | `ld.doc.page(path)` | a markdown page | Registers a page `luadot doc` answers from: every table row whose first cell is a namespaced call in backticks. |
-| `ld.on.add(options)` | a table of `before` and `after` | Runs a function before and after `add`. |
-| `ld.on.apply(options)` | a table of `before` and `after` | Runs a function before and after `apply`. |
-| `ld.on.bootstrap(options)` | a table of `before` and `after` | Runs a function before and after `bootstrap`. |
-| `ld.on.cd(options)` | a table of `before` and `after` | Runs a function before and after `cd`. |
-| `ld.on.class(options)` | a table of `before` and `after` | Runs a function before and after `class`. |
-| `ld.on.clone(options)` | a table of `before` and `after` | Runs a function before and after `clone`. |
-| `ld.on.config(options)` | a table of `before` and `after` | Runs a function before and after `config`. |
+| `ld.on.add(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `add`. |
+| `ld.on.apply(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `apply`. |
+| `ld.on.bootstrap(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `bootstrap`. |
+| `ld.on.cd(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `cd`. |
+| `ld.on.class(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `class`. |
+| `ld.on.clone(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `clone`. |
+| `ld.on.config(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `config`. |
 | `ld.on.diff(options)` | a table of options | Says what `diff` prints and which program compares the two sides, and runs a function before and after it. |
-| `ld.on.edit(options)` | a table of `before` and `after` | Runs a function before and after `edit`. |
-| `ld.on.exec(options)` | a table of `before` and `after` | Runs a function before and after `exec`. |
-| `ld.on.git(options)` | a table of `before` and `after` | Runs a function before and after `git`. |
-| `ld.on.init(options)` | a table of `before` and `after` | Runs a function before and after `init`. |
-| `ld.on.mv(options)` | a table of `before` and `after` | Runs a function before and after `mv`. |
-| `ld.on.push(options)` | a table of `before` and `after` | Runs a function before and after `push`. |
-| `ld.on.rekey(options)` | a table of `before` and `after` | Runs a function before and after `rekey`. |
-| `ld.on.restore(options)` | a table of `before` and `after` | Runs a function before and after `restore`. |
-| `ld.on.rm(options)` | a table of `before` and `after` | Runs a function before and after `rm`. |
-| `ld.on.setup(options)` | a table of `before` and `after` | Runs a function before and after `setup`. |
+| `ld.on.edit(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `edit`. |
+| `ld.on.exec(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `exec`. |
+| `ld.on.git(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `git`. |
+| `ld.on.init(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `init`. |
+| `ld.on.mv(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `mv`. |
+| `ld.on.push(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `push`. |
+| `ld.on.rekey(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `rekey`. |
+| `ld.on.restore(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `restore`. |
+| `ld.on.rm(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `rm`. |
+| `ld.on.setup(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `setup`. |
 | `ld.on.status(options)` | a table of options | Says what `status` prints, line by line, and runs a function before and after it. |
-| `ld.on.sync(options)` | a table of `before` and `after` | Runs a function before and after `sync`. |
-| `ld.on.take(options)` | a table of `before` and `after` | Runs a function before and after `take`. |
-| `ld.on.tmpl.alt(options)` | a table of `before` and `after` | Runs a function before and after `tmpl alt`. |
-| `ld.on.tmpl.new(options)` | a table of `before` and `after` | Runs a function before and after `tmpl new`. |
+| `ld.on.sync(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `sync`. |
+| `ld.on.take(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `take`. |
+| `ld.on.tmpl.alt(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `tmpl alt`. |
+| `ld.on.tmpl.new(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `tmpl new`. |
 | `ld.print(text, options)` | a string and a table of options | Writes a line to the terminal, styled the way the options ask. |
 | `ld.print.note(text)`, `ld.print.warn(text)`, `ld.print.error(text)` | a string and a table of options | The same line carrying `luadot:`; the last two on the error stream. |
 | `ld.print.section(title)`, `ld.print.entry(label, text)`, `ld.print.field(name, value)` | strings and a table of options | A title over a blank line, a labelled line, a named value. |

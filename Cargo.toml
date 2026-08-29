@@ -55,7 +55,7 @@ clap_mangen = "0.3.3"
 etcetera = "0.11.0"
 gix = { version = "0.84.0", features = ["blocking-network-client", "blocking-http-transport-reqwest-rust-tls", "interrupt"] }
 glob = "0.3.4"
-mlua = { version = "0.11.6", features = ["lua54", "vendored", "send"] }
+mlua = { version = "0.11.6", features = ["lua54", "vendored", "send", "serialize"] }
 prodash = { version = "31.0.0", features = [
   "progress-tree",
   "render-line",

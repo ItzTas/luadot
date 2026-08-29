@@ -11,8 +11,6 @@ use crate::lua::Shared;
 use crate::output::{self, Tone};
 use crate::utils::{self, Workspace};
 
-use super::super::constants::{MOVE_ARROW, MOVE_LABEL, MOVE_PREDICTION};
-
 #[derive(Debug, Args)]
 pub struct MvArgs {
     #[arg(
@@ -68,7 +66,7 @@ pub fn mv_cmd(args: MvArgs) -> Result<()> {
     let mut counts = Counts::default();
     for one in &moves {
         counts.record(carry(&repo, one)?);
-        output::entry(Tone::Good, MOVE_LABEL, shown(&repo, one));
+        output::entry(Tone::Good, "moved", shown(&repo, one));
     }
 
     let left: Vec<PathBuf> = moves
@@ -91,7 +89,7 @@ fn foresee(repo: &Path, moves: &[Move]) -> Result<()> {
     let mut counts = Counts::default();
     for one in moves {
         counts.record(predict(one)?);
-        output::entry(Tone::Muted, MOVE_PREDICTION, shown(repo, one));
+        output::entry(Tone::Muted, "move", shown(repo, one));
     }
     output::note(counts.summary("would move", moves.len()));
 
@@ -100,7 +98,7 @@ fn foresee(repo: &Path, moves: &[Move]) -> Result<()> {
 
 fn shown(repo: &Path, one: &Move) -> String {
     format!(
-        "{}{MOVE_ARROW}{}",
+        "{} -> {}",
         utils::relative(repo, one.entry.path()).display(),
         utils::relative(repo, &one.dest).display()
     )
@@ -300,15 +298,9 @@ fn predict(one: &Move) -> Result<Moved> {
 }
 
 fn points(link: &Path, root: &Path) -> Result<Option<PathBuf>> {
-    let Some(meta) = files::metadata("mv", link)? else {
+    let Some(target) = files::link_at("mv", link)? else {
         return Ok(None);
     };
-    if !meta.file_type().is_symlink() {
-        return Ok(None);
-    }
-
-    let target = std::fs::read_link(link)
-        .with_context(|| format!("mv: failed to read {}", link.display()))?;
     let Ok(inside) = target.strip_prefix(root) else {
         return Ok(None);
     };

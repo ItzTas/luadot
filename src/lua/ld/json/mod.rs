@@ -5,7 +5,6 @@ mod describe;
 mod encode;
 #[cfg(test)]
 mod fixture;
-mod null;
 mod table;
 
 pub use constants::NAMESPACE;

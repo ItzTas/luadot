@@ -18,7 +18,7 @@ pub use adopt::adoptable;
 pub use automatic::{Automatic, automatic};
 pub use classes::{ask, ask_missing};
 pub use constants::SYSTEM_TEXT_MODE;
-pub use custom::{customized, said};
+pub use custom::{customized, hint, said};
 pub use definitions::{offer_definitions, place_definitions, refresh_definitions};
 pub use editor::{launch, open};
 pub use host::host_name;

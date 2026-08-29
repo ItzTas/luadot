@@ -1,4 +1,17 @@
-use super::constants::{SPAN_SUFFIXES, SPAN_UNITS};
+const SPAN_UNITS: [(u64, &str); 4] = [
+    (86_400, "day"),
+    (3_600, "hour"),
+    (60, "minute"),
+    (1, "second"),
+];
+
+const SPAN_SUFFIXES: [(&str, u64); 5] = [
+    ("s", 1),
+    ("m", 60),
+    ("h", 3_600),
+    ("d", 86_400),
+    ("w", 604_800),
+];
 
 pub fn seconds(raw: &str) -> Option<u64> {
     let trimmed = raw.trim();

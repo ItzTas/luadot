@@ -1,4 +1,5 @@
 mod commands;
+mod completions;
 mod constants;
 mod run;
 mod types;

@@ -87,6 +87,19 @@ pub fn link_target(command: &str, source: &Path) -> Result<(Metadata, Option<Pat
     Ok((meta, Some(target)))
 }
 
+pub fn link_at(command: &str, path: &Path) -> Result<Option<PathBuf>> {
+    let Some(meta) = metadata(command, path)? else {
+        return Ok(None);
+    };
+    if !meta.file_type().is_symlink() {
+        return Ok(None);
+    }
+
+    std::fs::read_link(path)
+        .map(Some)
+        .with_context(|| format!("{command}: failed to read {}", path.display()))
+}
+
 pub fn read_contents(command: &str, path: &Path) -> Result<Vec<u8>> {
     std::fs::read(path).with_context(|| format!("{command}: failed to read {}", path.display()))
 }

@@ -8,7 +8,8 @@ use mlua::Lua;
 use regex::Regex;
 
 use super::around::{Around, Chain};
-use super::constants::{CLASS_QUESTION, GIT_DIR, LOCKED, MATCH, MISSING};
+use super::constants::{GIT_DIR, LOCKED, MATCH};
+use super::custom::Custom;
 use super::diff::Diff;
 use super::report::Report;
 use super::task::Task;
@@ -27,6 +28,7 @@ pub struct Config {
     classes: Vec<Class>,
     pkg_warn: bool,
     passphrase_warn: bool,
+    hints: bool,
     autocommit: bool,
     autopush: bool,
     lfs: bool,
@@ -40,6 +42,7 @@ pub struct Config {
     diff: Diff,
     status: Report,
     around: BTreeMap<Command, Chain>,
+    command_hints: BTreeMap<Command, Custom>,
     runtime_paths: Vec<PathBuf>,
     tasks: BTreeMap<String, Task>,
     doc_pages: Vec<PathBuf>,
@@ -55,6 +58,7 @@ impl Default for Config {
             classes: Vec::new(),
             pkg_warn: true,
             passphrase_warn: true,
+            hints: true,
             autocommit: false,
             autopush: false,
             lfs: true,
@@ -68,6 +72,7 @@ impl Default for Config {
             diff: Diff::default(),
             status: Report::default(),
             around: BTreeMap::new(),
+            command_hints: BTreeMap::new(),
             runtime_paths: Vec::new(),
             tasks: BTreeMap::new(),
             doc_pages: Vec::new(),
@@ -119,7 +124,7 @@ impl Config {
     pub fn shared(lua: &Lua) -> mlua::Result<Shared> {
         lua.app_data_ref::<Shared>()
             .map(|shared| Arc::clone(&shared))
-            .ok_or_else(|| mlua::Error::external(MISSING))
+            .ok_or_else(|| mlua::Error::external("the configuration is not available"))
     }
 
     pub fn building<T>(lua: &Lua, edit: impl FnOnce(&mut Config) -> T) -> mlua::Result<T> {
@@ -183,6 +188,18 @@ impl Config {
         self.around.get(&command)
     }
 
+    pub fn set_command_hints(&mut self, command: Command, hints: Option<Custom>) {
+        let Some(hints) = hints else {
+            return;
+        };
+
+        self.command_hints.insert(command, hints);
+    }
+
+    pub fn command_hints(&self, command: Command) -> Option<&Custom> {
+        self.command_hints.get(&command)
+    }
+
     pub fn set_link(&mut self, link: LinkMode) {
         self.link = link;
     }
@@ -223,6 +240,14 @@ impl Config {
 
     pub fn pkg_warn(&self) -> bool {
         self.pkg_warn
+    }
+
+    pub fn set_hints(&mut self, hints: bool) {
+        self.hints = hints;
+    }
+
+    pub fn hints(&self) -> bool {
+        self.hints
     }
 
     pub fn set_autocommit(&mut self, autocommit: bool) {
@@ -651,7 +676,7 @@ impl Class {
     pub fn question(&self) -> String {
         self.prompt
             .clone()
-            .unwrap_or_else(|| format!("{CLASS_QUESTION} `{}`", self.name))
+            .unwrap_or_else(|| format!("define the class `{}`", self.name))
     }
 
     pub fn choices(&self) -> &[String] {

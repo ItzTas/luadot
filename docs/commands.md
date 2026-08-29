@@ -334,8 +334,8 @@ commit.
 
 `-n` (or `--dry-run`) makes `apply`, `tmpl alt`, `rm` and `mv` report what they
 would do and touch nothing: nothing is written and no backup is taken. Only
-the files that would change are listed. A real run names every file it went through,
-unchanged ones included:
+the files that would change are listed. A real run lists the ones it changed,
+and the summary counts the rest:
 
 ```
 $ luadot apply --dry-run
@@ -344,6 +344,16 @@ replace    .zshrc
 luadot: would apply 12 file(s) (1 created, 1 replaced, 10 unchanged, 0 skipped)
 
 $ luadot apply
+created    .config/nvim/init.lua
+replaced   .zshrc
+luadot: applied 12 file(s) (1 created, 1 replaced, 10 unchanged, 0 skipped)
+```
+
+`-u` (or `--unchanged`) puts the files that were already in sync back in the
+list:
+
+```
+$ luadot apply --unchanged
 created    .config/nvim/init.lua
 replaced   .zshrc
 unchanged  .gitconfig

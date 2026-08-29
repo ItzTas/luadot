@@ -2,7 +2,13 @@ use std::os::raw::c_int;
 
 use mlua::{Lua, Table, lua_State};
 
-use super::constants::{LPEG_MODULE, PACKAGE, PRELOAD, RE_CHUNK, RE_MODULE, RE_SOURCE};
+use super::constants::{LPEG_MODULE, PACKAGE, RE_MODULE};
+
+const PRELOAD: &str = "preload";
+
+const RE_CHUNK: &str = "@re.lua";
+
+const RE_SOURCE: &str = include_str!(env!("LPEG_RE_PATH"));
 
 unsafe extern "C-unwind" {
     fn luaopen_lpeg(state: *mut lua_State) -> c_int;

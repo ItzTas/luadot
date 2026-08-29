@@ -13,7 +13,7 @@ use crate::lua::Config;
 use crate::output::{self, Tone};
 use crate::utils::{self, Workspace};
 
-use super::super::constants::{ADD_COMMAND, ADD_LABEL, TAKE_COMMAND};
+use super::super::constants::{ADD_COMMAND, TAKE_COMMAND};
 
 #[derive(Debug, Args)]
 pub struct AddArgs {
@@ -130,7 +130,7 @@ fn announce(outcome: SyncOutcome, path: impl Display) {
         return output::report(outcome, path);
     }
 
-    output::entry(Tone::Good, ADD_LABEL, path);
+    output::entry(Tone::Good, "added", path);
 }
 
 fn report(mode: Mode, stored: &[PathBuf], replaced: usize, sources: &[String]) {
@@ -686,7 +686,7 @@ fn store_whole(mode: Mode, config: &Config, repo: &Path, whole: &Whole) -> Resul
     let relative = utils::relative(repo, &whole.dest);
     let link = utils::whole_link(command, config, relative)?;
 
-    if points_at(command, &whole.source, &whole.dest)? {
+    if files::link_at(command, &whole.source)?.as_deref() == Some(whole.dest.as_path()) {
         return Ok(SyncOutcome::AlreadySynced);
     }
 
@@ -704,19 +704,6 @@ fn store_whole(mode: Mode, config: &Config, repo: &Path, whole: &Whole) -> Resul
     }
 
     Ok(outcome)
-}
-
-fn points_at(command: &str, system: &Path, stored: &Path) -> Result<bool> {
-    let Some(meta) = files::metadata(command, system)? else {
-        return Ok(false);
-    };
-    if !meta.file_type().is_symlink() {
-        return Ok(false);
-    }
-
-    let target = std::fs::read_link(system)
-        .with_context(|| format!("{command}: failed to read {}", system.display()))?;
-    Ok(target == stored)
 }
 
 fn swap_for_link(command: &str, system: &Path, stored: &Path) -> Result<()> {

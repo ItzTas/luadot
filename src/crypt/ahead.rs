@@ -5,7 +5,7 @@ use std::thread;
 use anyhow::{Result, anyhow};
 
 use super::backend::Backend;
-use super::constants::DECRYPT_WIDTH;
+const DECRYPT_WIDTH: usize = 8;
 use super::identity::Identity;
 use super::lock::Lock;
 use super::plugin::plugged;

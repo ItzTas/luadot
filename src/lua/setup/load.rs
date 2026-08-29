@@ -6,7 +6,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use super::constants::{INIT_STEM, LUA_EXT, SETUP_DIR, SH_EXT};
+use super::constants::{INIT_STEM, LUA_EXT, SH_EXT};
 use crate::lua::Shared;
 use crate::lua::ld::{Paths, Surface};
 use crate::lua::script::run_script;
@@ -57,7 +57,7 @@ pub fn run_one(
 }
 
 pub fn setup_dir(command: &str, home: &Path, config: &Path, repo: &Path) -> Result<PathBuf> {
-    utils::repo_path(home, repo, &config.join(SETUP_DIR))
+    utils::repo_path(home, repo, &config.join("setup"))
         .with_context(|| format!("{command}: failed to locate the setup directory"))
 }
 

@@ -5,8 +5,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 
-use super::constants::WORKSPACE_PREFIX;
-
 #[derive(Debug)]
 pub struct Workspace {
     dir: PathBuf,
@@ -49,7 +47,7 @@ fn unique_name() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|elapsed| elapsed.as_nanos())
         .unwrap_or_default();
-    format!("{WORKSPACE_PREFIX}-{}-{nanos}", std::process::id())
+    format!("luadot-edit-{}-{nanos}", std::process::id())
 }
 
 #[cfg(test)]

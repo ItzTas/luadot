@@ -18,10 +18,6 @@ ld.rules({
   { match = ".config/mako/**", on_change = "makoctl reload" },
   { match = ".cache/**", track = "never" },
 })
-
-if ld.sys.has_battery() then
-  ld.rules({ match = ".config/tlp/**", link = "symbolic" })
-end
 ```
 
 ## Quick start

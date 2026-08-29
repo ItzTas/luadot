@@ -149,10 +149,16 @@
 ---@field branch? string The branch to check out. Defaults to the remote's `HEAD`.
 ---@field depth? integer How many commits of history to fetch, one or more; `1` is the commit the branch points at alone. Defaults to all of it.
 
----A function to run before the command and one after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
+---A function to run before the command and one after it, and what its hints print. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.Around
 ---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
 ---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
+---@field hints? (fun(hint: ld.Hint): string?)|false Runs for every hint the command would write, in place of it. `false` silences them, and `ld.opt.hints(false)` silences the hints of every command.
+
+---One of the lines a command writes to say which call comes next, as it hands it to `hints`.
+---@class ld.Hint
+---@field name string Which hint it is: for `status`, the section it opens, like `"differs"`.
+---@field default string The line it stands in for.
 
 ---What `diff` prints and which program compares the two sides, and a function to run before and after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.DiffOptions
@@ -160,6 +166,7 @@
 ---@field args? string|string[] Extra arguments for whichever program compares the two sides; right after `diff` when git runs.
 ---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 ---@field entry? (fun(file: ld.DiffFile): string?)|false Runs for every drifted file, in place of the line the command would have written. `false` silences the line.
+---@field hints? (fun(hint: ld.Hint): string?)|false Runs for every hint the command would write, in place of it. `false` silences them, and `ld.opt.hints(false)` silences the hints of every command.
 ---@field render? (fun(files: ld.DiffFile[]): string?)|false Runs once, with every drifted file, and takes the whole report over; nothing is compared afterwards. `false` reports the files without diffing them.
 ---@field summary? (fun(counts: ld.DiffCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
 ---@field tool? string|string[] The program comparing the two sides instead of `git diff`, with its arguments; it gets the two sides as two directories, its last two arguments. Exit status 0 or 1 counts as success.
@@ -169,6 +176,7 @@
 ---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
 ---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 ---@field entry? (fun(file: ld.StatusFile): string?)|false Runs for every inspected file, synced ones included, in place of the line and the sections the command would have written. `false` silences them.
+---@field hints? (fun(hint: ld.Hint): string?)|false Runs for every hint the command would write, in place of it. `false` silences them, and `ld.opt.hints(false)` silences the hints of every command.
 ---@field render? (fun(files: ld.StatusFile[]): string?)|false Runs once, with every inspected file, and takes the whole report over.
 ---@field summary? (fun(counts: ld.StatusCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
 
@@ -226,6 +234,7 @@
 ---@field backup_dir? string Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`.
 ---@field backup_keep? integer How many backups to keep, one or more; the oldest ones are dropped once there are more. Defaults to keeping every one of them.
 ---@field conflict? ld.Conflict Default answer when `apply` finds a differing file already on the system.
+---@field hints? boolean Whether a command writes the lines saying which call comes next. Defaults to `true`, and a `hints` given to `ld.on` wins over it.
 ---@field lfs? boolean Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
 ---@field link? ld.LinkMode Default strategy used to link a managed file.
 ---@field passphrase_warn? boolean Whether passphrase mode says it is weaker than keys. Defaults to `true`.
@@ -251,12 +260,6 @@
 ---What `ld.setup.all` takes.
 ---@class ld.SetupOptions
 ---@field order? string[] The names that run first, in this order; the rest follow.
-
----One graphics card.
----@class ld.Card
----@field vendor string A short name (`nvidia`, `amd`, `intel`), or the PCI identifier when the vendor is not a known one.
----@field name string The model as `lspci` reports it, empty when `lspci` is not installed.
----@field driver string The kernel driver bound to the card.
 
 ---The interface luadot installs in every script it runs: `config.lua`, `bootstrap.lua`, the setup scripts, the templates and `luadot exec`. A call does the same thing wherever it runs, on the one configuration the command is using.
 ---@class ld
@@ -431,7 +434,7 @@ function ld.json.encode(value) end
 ---@return any
 function ld.json.decode(text) end
 
----One call per command, taking a table: functions to run `before` and `after` the command, and what `status` and `diff` print. Every function registered for a moment runs, in the order it was registered; what `status` and `diff` print is replaced by a later call, key by key. Every command is customized apart.
+---One call per command, taking a table: functions to run `before` and `after` the command, what its hints print, and what `status` and `diff` print. Every function registered for a moment runs, in the order it was registered; the rest is replaced by a later call, key by key. Every command is customized apart.
 ---@class ld.on
 ld.on = {}
 
@@ -563,6 +566,10 @@ function ld.opt.backup_keep(count) end
 ---Default answer when `apply` finds a differing file already on the system.
 ---@param policy ld.Conflict
 function ld.opt.conflict(policy) end
+
+---Whether a command writes the lines saying which call comes next. Defaults to `true`, and a `hints` given to `ld.on` wins over it.
+---@param enabled boolean
+function ld.opt.hints(enabled) end
 
 ---Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
 ---@param enabled boolean
@@ -708,27 +715,3 @@ function ld.setup.list() end
 ---Runs every setup script, the ones `order` names first.
 ---@param options? ld.SetupOptions
 function ld.setup.all(options) end
-
----The machine the script is running on.
----@class ld.sys
----@field ram integer The memory of the machine, in bytes, the kernel's raw `MemTotal`: a little under the installed memory, so round it yourself: `math.ceil(ld.sys.ram / 1024 ^ 3)`.
-ld.sys = {}
-
----`true` on a machine with a battery of its own, `false` on one without; the battery of a mouse or a keyboard does not count.
----@return boolean
-function ld.sys.has_battery() end
-
----The first card, and every card as a list: `for _, card in ipairs(ld.sys.gpu)`.
----@class ld.sys.gpu
----@field vendor string A short name (`nvidia`, `amd`, `intel`), or the PCI identifier when the vendor is not a known one.
----@field name string The model as `lspci` reports it, empty when `lspci` is not installed.
----@field driver string The kernel driver bound to the card.
----@field [integer] ld.Card Every card, in order.
-ld.sys.gpu = {}
-
----The host.
----@class ld.sys.host
----@field name string The hostname.
----@field os string The operating system, as Rust names it: `linux`.
----@field arch string The architecture: `x86_64`, `aarch64`.
-ld.sys.host = {}

@@ -2,7 +2,7 @@ use mlua::{Function, Lua, Table};
 
 use super::command::Command;
 use super::constants::{AROUND_KEYS, NAMESPACE};
-use super::parse::{around, known};
+use super::parse::{around, hints, known};
 use crate::lua::Config;
 
 pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
@@ -10,7 +10,11 @@ pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
         let call = format!("{NAMESPACE}.{}", command.path());
         known(&call, &options, &AROUND_KEYS)?;
         let around = around(&call, &options)?;
-        Config::building(lua, |config| config.set_around(command, around))
+        let hints = hints(&call, &options)?;
+        Config::building(lua, |config| {
+            config.set_around(command, around);
+            config.set_command_hints(command, hints);
+        })
     })
 }
 
@@ -21,7 +25,7 @@ mod tests {
     #[test]
     fn a_function_is_kept_per_command() {
         let config = from_source(
-            r#"ld.on.apply({ before = function() return "applying on " .. ld.sys.host.name end })"#,
+            r#"ld.on.apply({ before = function() return "applying on " .. ld.path.home end })"#,
         )
         .unwrap();
 
@@ -53,6 +57,23 @@ mod tests {
 
         assert_eq!(shown, ["first", "second"]);
         assert_eq!(chain.all(Moment::After).len(), 1);
+    }
+
+    #[test]
+    fn a_later_call_replaces_the_hints() {
+        let config = from_source(
+            r#"
+            ld.on.apply({ hints = function() end })
+            ld.on.apply({ hints = false })
+            "#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            config.command_hints(Command::Apply),
+            Some(Custom::Silent)
+        ));
+        assert!(config.command_hints(Command::Add).is_none());
     }
 
     #[test]
