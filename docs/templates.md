@@ -4,7 +4,8 @@ A path whose name ends in `.luadot` is a template, in one of two forms. A
 **directory** holds a `luadot.lua` deciding what ends up on the system, next
 to the files that decision picks from or renders. A plain **file** is an
 embedded template rendered directly to the mirrored path. `luadot tmpl alt`
-resolves both; `apply` walks past them.
+resolves both; `apply` places the files a template is made of and leaves the
+resolving to `tmpl alt`.
 
 ```
 ~/dotfiles/
@@ -22,6 +23,16 @@ resolves both; `apply` walks past them.
 The destination is the template's own path without the suffix, so the
 repository keeps mirroring the system. Inside a directory, a `dest` of your
 own overrides it.
+
+A template is a path like any other, and rules reach it by the name it carries:
+`{ match = ".zshrc.luadot", track = "never" }` leaves it unresolved, while a
+rule written against `.zshrc` decides how the generated file is placed. See
+[tracking](ld.md#tracking).
+
+`luadot.lua` and the files beside it are managed the way `.vimrc` is. `status`
+reports one that drifted or went missing, `apply` puts it back, and a rule on
+the template covers them all, since a rule naming a directory covers what is
+under it.
 
 ## tmpl new
 

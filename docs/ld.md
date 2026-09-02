@@ -110,8 +110,14 @@ above, so `"auto"` needs a `match` opening on a name: a pattern starting with
 `*` or a `regex` is refused, since neither says where to look.
 
 `"never"` leaves the matching files out of every command: `add` skips them,
-`status`, `diff` and `apply` never see them, and one already in the repository
-is left where it is. `.git/` is out whatever the rules say.
+`status`, `diff`, `apply` and `tmpl alt` never see them, and one already in
+the repository is left where it is. `.git/` is out whatever the rules say.
+
+A rule reaches a path by the name the repository holds, templates included, so
+`.zshrc.luadot` is what a rule on a template matches, not the `.zshrc` it
+produces. The other keys answer for the destination, so `link`, `conflict`,
+`mode`, `owner` and `on_change` written against `.zshrc` still decide how the
+generated file is placed.
 
 ### Whole directories
 
