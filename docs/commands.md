@@ -201,10 +201,12 @@ mode       .ssh/config 0644 -> 0600
 `ld.on.diff` replaces any of it, the compare program included; see
 [customizing a command](ld.md#customizing-a-command).
 
-Templates are left out of both reports; the summary says how many were. `-t`
-(or `--templates`) resolves them and reports the files they produce, without
-writing them. `diff --templates` shows the generated side under `generated/`
-rather than `repository/`. [templates.md](templates.md) says more.
+The files templates produce are left out of both reports; the summary says how
+many templates were held back. `-t` (or `--templates`) resolves them and
+reports what they produce, without writing it. `diff --templates` shows the
+generated side under `generated/` rather than `repository/`. The files a
+template is made of are managed like any other, so they show up in both
+reports without the flag. [templates.md](templates.md) says more.
 
 ## take
 
