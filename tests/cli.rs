@@ -708,7 +708,7 @@ fn clone_keeps_repository_settings() {
 }
 
 #[test]
-fn alt_resolves_forms_apply_skips_them() {
+fn alt_resolves_forms_apply_leaves_them_unresolved() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let repo = root.path().join("repo");
@@ -749,7 +749,17 @@ fn alt_resolves_forms_apply_skips_them() {
         .arg("apply")
         .assert()
         .success()
-        .stdout(predicate::str::contains("nothing to apply"));
+        .stdout(predicate::str::contains("3 created"));
+
+    assert_eq!(
+        read(&home.join(".zshrc.luadot/zshrc.tmpl.zsh")),
+        "export EDITOR=<%= editor %>\n"
+    );
+    assert!(home.join(".zshrc.luadot/luadot.lua").is_file());
+    assert!(home.join(".zprofile.luadot").is_file());
+    assert!(!home.join(".zshrc").exists());
+    assert!(!home.join(".zprofile").exists());
+
     luadot(&home)
         .arg("status")
         .assert()
@@ -760,8 +770,6 @@ fn alt_resolves_forms_apply_skips_them() {
         .assert()
         .success()
         .stdout(predicate::str::contains("2 template(s) into 2 file(s)"));
-    assert!(!home.join(".zshrc").exists());
-    assert!(!home.join(".zprofile").exists());
 }
 
 #[test]
