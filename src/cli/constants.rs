@@ -37,6 +37,9 @@ pub const GENERATED_FILES: &str = "generated";
 
 pub const TASK_UNKNOWN: &str = "is not a task the configuration registers";
 
+pub const TASK_RUNS: &str =
+    "(use \"luadot <name>\" to run one, \"luadot task --names\" to print the names alone)";
+
 pub const DOC_PAGES: [(&str, &str, &str); 3] = [
     (
         "docs/ld.md",
@@ -203,7 +206,7 @@ pub const STATUS_SECTIONS: [(FileStatus, &str, &[&str]); 4] = [
     (
         FileStatus::Unlinked,
         "Files not linked:",
-        &["(use \"luadot apply <path>...\" to link them)"],
+        &["(use \"luadot relink\" to link them again)"],
     ),
     (
         FileStatus::Differs,

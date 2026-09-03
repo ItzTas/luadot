@@ -2,11 +2,23 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 
 use crate::lua::{self, Config, Rule};
-use crate::output;
+use crate::output::{self, Message, Tone};
 use crate::state;
 use crate::utils;
 
 use super::super::constants::UNSET;
+
+const RULE_INDENT: usize = 2;
+
+const PART_INDENT: usize = 4;
+
+const RULE_COLUMN: usize = 44;
+
+struct Row {
+    head: String,
+    parts: Vec<String>,
+    overrides: String,
+}
 
 #[derive(Debug, Args)]
 pub struct ConfigArgs {
@@ -62,9 +74,67 @@ fn print_rules(config: &Config) {
         return;
     }
 
+    let rows: Vec<Row> = config.rules().iter().map(Row::new).collect();
+    let width = column_width(&rows);
+
     output::section("rules");
-    for rule in config.rules() {
-        output::line(format!("  {}{}", rule.pattern(), overrides(rule)));
+    for row in &rows {
+        print_row(row, width);
+    }
+}
+
+fn print_row(row: &Row, width: usize) {
+    let column = match row.overrides.is_empty() {
+        true => None,
+        false => Some(width),
+    };
+
+    output::say(
+        &Message::new(&row.head)
+            .with_tail(&row.overrides)
+            .with_look(Tone::Strong.into())
+            .with_indent(RULE_INDENT)
+            .with_column(column),
+    );
+
+    for part in &row.parts {
+        output::say(
+            &Message::new(part)
+                .with_look(Tone::Muted.into())
+                .with_indent(PART_INDENT),
+        );
+    }
+}
+
+fn column_width(rows: &[Row]) -> usize {
+    let widest = rows
+        .iter()
+        .filter(|row| !row.overrides.is_empty())
+        .map(|row| row.head.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    (widest + output::GAP.len()).min(RULE_COLUMN)
+}
+
+impl Row {
+    fn new(rule: &Rule) -> Self {
+        let parts = rule.pattern().parts();
+        let overrides = overrides(rule);
+
+        if parts.len() < 2 {
+            return Self {
+                head: rule.pattern().to_string(),
+                parts: Vec::new(),
+                overrides,
+            };
+        }
+
+        Self {
+            head: format!("any of {}", parts.len()),
+            parts,
+            overrides,
+        }
     }
 }
 
@@ -86,11 +156,7 @@ fn overrides(rule: &Rule) -> String {
         parts.push(format!("whole={whole}"));
     }
 
-    if parts.is_empty() {
-        return String::new();
-    }
-
-    format!("  {}", parts.join(" "))
+    parts.join(" ")
 }
 
 fn path() -> Result<()> {
@@ -132,7 +198,7 @@ mod tests {
                 Some(crate::files::LinkMode::Symbolic),
                 None
             )),
-            "  link=symbolic"
+            "link=symbolic"
         );
         assert_eq!(
             overrides(&Rule::new(
@@ -140,7 +206,45 @@ mod tests {
                 Some(crate::files::LinkMode::Hard),
                 Some(crate::files::ConflictPolicy::Skip)
             )),
-            "  link=hard conflict=skip"
+            "link=hard conflict=skip"
         );
+    }
+
+    #[test]
+    fn a_row_lists_the_alternatives_under_a_count() {
+        let row = Row::new(&Rule::new(
+            Matcher::Any(vec![glob(".cache/**"), glob("**/*.tmp")]),
+            None,
+            None,
+        ));
+
+        assert_eq!(row.head, "any of 2");
+        assert_eq!(row.parts, vec![".cache/**", "**/*.tmp"]);
+    }
+
+    #[test]
+    fn a_row_keeps_a_lone_pattern_on_its_line() {
+        let row = Row::new(&Rule::new(glob(".ssh/**"), None, None));
+
+        assert_eq!(row.head, ".ssh/**");
+        assert!(row.parts.is_empty());
+    }
+
+    #[test]
+    fn the_column_follows_the_widest_head_carrying_overrides() {
+        let rows = [
+            Row::new(&Rule::new(
+                glob(".a-very-long-pattern-with-no-keys/**"),
+                None,
+                None,
+            )),
+            Row::new(&Rule::new(
+                glob(".ssh/**"),
+                Some(crate::files::LinkMode::Copy),
+                None,
+            )),
+        ];
+
+        assert_eq!(column_width(&rows), ".ssh/**".len() + output::GAP.len());
     }
 }

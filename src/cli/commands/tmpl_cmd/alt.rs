@@ -7,7 +7,7 @@ use crate::files::{self, ConflictPolicy, Entry, SyncOutcome};
 use crate::lua::{Config, Content, Output, Shared};
 use crate::output;
 use crate::state::{self, Classes};
-use crate::utils::{self, Run, Workspace};
+use crate::utils::{self, Incoming, Run, Workspace};
 
 #[derive(Debug, Args)]
 pub struct AltArgs {
@@ -123,9 +123,21 @@ fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result
         .with_context(|| format!("tmpl alt: failed to place {}", output.dest().display()))?;
     let on_change = output.on_change().or_else(|| config.on_change(&relative));
 
-    run.settle(predicted, &relative, output.dest(), on_change, || {
-        write(config, &relative, policy, output)
-    })
+    run.settle(
+        predicted,
+        &relative,
+        output.dest(),
+        on_change,
+        incoming(output),
+        || write(config, &relative, policy, output),
+    )
+}
+
+fn incoming(output: &Output) -> Incoming<'_> {
+    match output.content() {
+        Content::Text(text) => Incoming::Text(text),
+        Content::File(source) => Incoming::File(source),
+    }
 }
 
 fn write(

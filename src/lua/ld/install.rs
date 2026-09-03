@@ -69,7 +69,7 @@ mod tests {
         assert(type(ld.rules) == "function", "rules is missing")
         assert(type(ld.task) == "function", "task is missing")
         assert(ld.surface == "bootstrap", "surface is wrong: " .. tostring(ld.surface))
-        for _, name in ipairs({ "out", "file", "render", "expand", "read", "exists", "glob", "json" }) do
+        for _, name in ipairs({ "out", "file", "render", "expand", "read", "exists", "glob", "concat", "json" }) do
           assert(type(ld.alt[name]) == "function", "alt." .. name .. " is missing")
         end
         assert(type(getmetatable(ld.git).__call) == "function", "git is not callable")

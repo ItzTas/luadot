@@ -11,7 +11,12 @@ const LABELS: [(SyncOutcome, &str, &str, Tone); 4] = [
     (SyncOutcome::Created, "create", "created", Tone::Good),
     (SyncOutcome::Replaced, "replace", "replaced", Tone::Warning),
     (SyncOutcome::Skipped, "skip", "skipped", Tone::Muted),
-    (SyncOutcome::AlreadySynced, "", "unchanged", Tone::Muted),
+    (
+        SyncOutcome::AlreadySynced,
+        "unchanged",
+        "unchanged",
+        Tone::Muted,
+    ),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

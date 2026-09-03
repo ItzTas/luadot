@@ -4,7 +4,9 @@ use super::super::constants::{
     CONFLICT, CONFLICT_TYPENAME, LINK, LINK_MODE_TYPENAME, MODE, ON_CHANGE,
 };
 use super::super::signature::{Collect, Describe, Field, Kind, Param, Signature, record};
-use super::constants::{CONTENT, DEST, EXISTS, EXPAND, FILE, GLOB, JSON, OUT, READ, RENDER};
+use super::constants::{
+    CONCAT, CONTENT, DEST, EXISTS, EXPAND, FILE, GLOB, JSON, OUT, READ, RENDER, WHEN,
+};
 
 const NAMESPACE_TYPENAME: &str = "ld.alt";
 
@@ -19,6 +21,11 @@ const FILE_TYPENAME: &str = "ld.File";
 
 const FILE_DOC: &str = "A file of the template as `ld.alt.file` hands it over, linked to its destination the way a managed file is.";
 
+const SECTION_TYPENAME: &str = "ld.Section";
+
+const SECTION_DOC: &str =
+    "One fragment of the file `ld.alt.concat` builds, and the condition it lands under.";
+
 const NAME_PARAM: Param = Param {
     name: "name",
     kind: Kind::String,
@@ -29,7 +36,7 @@ const VARS_PARAM: Param = Param {
     kind: Kind::Optional(&Kind::Table),
 };
 
-const SIGNATURES: [Signature; 8] = [
+const SIGNATURES: [Signature; 9] = [
     Signature {
         name: OUT,
         params: &[Param {
@@ -83,6 +90,21 @@ const SIGNATURES: [Signature; 8] = [
         doc: "The names of the files it matches, sorted, named the way `ld.alt.read` takes them; directories are never listed.",
     },
     Signature {
+        name: CONCAT,
+        params: &[
+            Param {
+                name: "sections",
+                kind: Kind::List(&Kind::Or(&[Kind::String, Kind::Named(SECTION_TYPENAME)])),
+            },
+            Param {
+                name: "separator",
+                kind: Kind::Optional(&Kind::String),
+            },
+        ],
+        returns: &[Kind::String],
+        doc: "The sections joined into one string, in the order they are given, with `separator` between them; a newline when none is given. A string is a section carrying only `content`.",
+    },
+    Signature {
         name: JSON,
         params: &[Param {
             name: "value",
@@ -126,6 +148,19 @@ const OUTPUT_FIELDS: [Field; 6] = [
     },
 ];
 
+const SECTION_FIELDS: [Field; 2] = [
+    Field {
+        name: CONTENT,
+        kind: Kind::String,
+        doc: "The text of the fragment, whatever produced it. Required.",
+    },
+    Field {
+        name: WHEN,
+        kind: Kind::Optional(&Kind::Boolean),
+        doc: "Whether the section lands. Defaults to `true`, and only `false` leaves it out; the `content` is already built either way.",
+    },
+];
+
 pub fn describe(walker: TypeWalker) -> TypeWalker {
     walker
         .namespace(NAMESPACE_TYPENAME, DOC, |record| {
@@ -133,4 +168,5 @@ pub fn describe(walker: TypeWalker) -> TypeWalker {
         })
         .record(record(OUTPUT_TYPENAME, OUTPUT_DOC).fields(&OUTPUT_FIELDS))
         .record(record(FILE_TYPENAME, FILE_DOC))
+        .record(record(SECTION_TYPENAME, SECTION_DOC).fields(&SECTION_FIELDS))
 }

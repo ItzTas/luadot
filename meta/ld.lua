@@ -107,7 +107,7 @@
 
 ---A command of the configuration's own, as `ld.task` takes it.
 ---@class ld.Task
----@field about? string One line saying what the task does, shown by `luadot task --list`.
+---@field about? string One line saying what the task does, shown by `luadot task`.
 ---@field run fun(argv: string[]): string? What runs, handed everything after the task name. Whatever it returns is written as a line; an error stops the command. Required.
 
 ---A file a template produces, as `ld.alt.out` takes it or `luadot.lua` returns it.
@@ -121,6 +121,11 @@
 
 ---A file of the template as `ld.alt.file` hands it over, linked to its destination the way a managed file is.
 ---@class ld.File
+
+---One fragment of the file `ld.alt.concat` builds, and the condition it lands under.
+---@class ld.Section
+---@field content string The text of the fragment, whatever produced it. Required.
+---@field when? boolean Whether the section lands. Defaults to `true`, and only `false` leaves it out; the `content` is already built either way.
 
 ---A class declaration.
 ---@class ld.Class
@@ -317,6 +322,12 @@ function ld.alt.exists(name) end
 ---@return string[]
 function ld.alt.glob(pattern) end
 
+---The sections joined into one string, in the order they are given, with `separator` between them; a newline when none is given. A string is a section carrying only `content`.
+---@param sections (string|ld.Section)[]
+---@param separator? string
+---@return string
+function ld.alt.concat(sections, separator) end
+
 ---That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both. The same call as `ld.json.encode`.
 ---@param value any
 ---@return string
@@ -497,6 +508,10 @@ function ld.on.push(options) end
 ---Runs a function before and after `rekey`.
 ---@param options ld.Around
 function ld.on.rekey(options) end
+
+---Runs a function before and after `relink`.
+---@param options ld.Around
+function ld.on.relink(options) end
 
 ---Runs a function before and after `restore`.
 ---@param options ld.Around

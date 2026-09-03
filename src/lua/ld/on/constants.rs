@@ -36,6 +36,8 @@ pub const PUSH: &str = "push";
 
 pub const REKEY: &str = "rekey";
 
+pub const RELINK: &str = "relink";
+
 pub const RESTORE: &str = "restore";
 
 pub const RM: &str = "rm";
@@ -60,7 +62,7 @@ pub const TMPL_NEW: &str = "tmpl new";
 
 pub type Customizer = fn(&Lua, Command) -> mlua::Result<Function>;
 
-pub const FUNCTIONS: [(&str, Command, Customizer); 21] = [
+pub const FUNCTIONS: [(&str, Command, Customizer); 22] = [
     (ADD, Command::Add, around::function),
     (APPLY, Command::Apply, around::function),
     (BOOTSTRAP, Command::Bootstrap, around::function),
@@ -76,6 +78,7 @@ pub const FUNCTIONS: [(&str, Command, Customizer); 21] = [
     (MV, Command::Mv, around::function),
     (PUSH, Command::Push, around::function),
     (REKEY, Command::Rekey, around::function),
+    (RELINK, Command::Relink, around::function),
     (RESTORE, Command::Restore, around::function),
     (RM, Command::Rm, around::function),
     (SETUP, Command::Setup, around::function),

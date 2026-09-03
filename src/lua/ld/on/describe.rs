@@ -3,8 +3,8 @@ use tealr::TypeWalker;
 use super::super::signature::{Collect, Describe, Field, Kind, Param, Signature, record};
 use super::constants::{
     ADD, ALT, APPLY, ARGS, BOOTSTRAP, CD, CLASS, CLONE, CONFIG, DIFF, EDIT, ENTRY, EXEC, GIT,
-    HINTS, INIT, MV, NEW, PUSH, REKEY, RENDER, RESTORE, RM, SETUP, STATUS, SUMMARY, SYNC, TAKE,
-    TOOL,
+    HINTS, INIT, MV, NEW, PUSH, REKEY, RELINK, RENDER, RESTORE, RM, SETUP, STATUS, SUMMARY, SYNC,
+    TAKE, TOOL,
 };
 use crate::files::{FileStatus, Side};
 use crate::lua::config::constants::{
@@ -188,7 +188,7 @@ const fn around(name: &'static str, doc: &'static str) -> Signature {
 }
 
 #[cfg(feature = "meta")]
-pub const SIGNATURES: [Signature; 21] = [
+pub const SIGNATURES: [Signature; 22] = [
     around(ADD, "Runs a function before and after `add`."),
     around(APPLY, "Runs a function before and after `apply`."),
     around(BOOTSTRAP, "Runs a function before and after `bootstrap`."),
@@ -212,6 +212,7 @@ pub const SIGNATURES: [Signature; 21] = [
     around(MV, "Runs a function before and after `mv`."),
     around(PUSH, "Runs a function before and after `push`."),
     around(REKEY, "Runs a function before and after `rekey`."),
+    around(RELINK, "Runs a function before and after `relink`."),
     around(RESTORE, "Runs a function before and after `restore`."),
     around(RM, "Runs a function before and after `rm`."),
     around(SETUP, "Runs a function before and after `setup`."),

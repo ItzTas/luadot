@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::builder::Resettable;
 use clap::{Args, CommandFactory};
 
-use super::super::constants::TASK_UNKNOWN;
+use super::super::constants::{TASK_RUNS, TASK_UNKNOWN};
 use super::super::types::Cli;
 use crate::lua::{self, Shared, Task};
 use crate::output;
@@ -13,15 +13,13 @@ use crate::utils;
 #[derive(Debug, Args)]
 pub struct TaskArgs {
     #[arg(
-        short,
         long,
-        help = "List the tasks the configuration registers, one per line"
+        help = "Print the name of every task, one per line, without what it does"
     )]
-    pub list: bool,
+    pub names: bool,
     #[arg(
         value_name = "NAME",
-        required_unless_present = "list",
-        help = "The task to run, one --list prints; `luadot <NAME>` is the same"
+        help = "The task to run, one `luadot task` lists; `luadot <NAME>` is the same"
     )]
     pub name: Option<String>,
     #[arg(
@@ -35,11 +33,14 @@ pub struct TaskArgs {
 
 pub fn task_cmd(args: TaskArgs) -> Result<()> {
     let config = lua::load_config()?;
-    if args.list {
-        return list(&config);
+    if args.names {
+        return listed(&config);
     }
 
-    let name = args.name.unwrap_or_default();
+    let Some(name) = args.name else {
+        return described(&config);
+    };
+
     match registered("task", &config, &name)? {
         Some(task) => run(&task, &name, args.args),
         None => bail!(
@@ -61,9 +62,33 @@ pub fn external_cmd(words: Vec<String>) -> Result<()> {
     }
 }
 
-fn list(config: &Shared) -> Result<()> {
+fn listed(config: &Shared) -> Result<()> {
     for (name, _) in utils::configured("task", config)?.tasks() {
         output::line(name);
+    }
+
+    Ok(())
+}
+
+fn described(config: &Shared) -> Result<()> {
+    let config = utils::configured("task", config)?;
+    if config.tasks().next().is_none() {
+        output::note(format!(
+            "no task registered; register one with `ld.task` in {}",
+            lua::config_path()?.display()
+        ));
+        return Ok(());
+    }
+
+    for (name, task) in config.tasks() {
+        match task.about() {
+            Some(about) => output::field(name, about),
+            None => output::title(name),
+        }
+    }
+
+    if config.hints() {
+        output::hint(TASK_RUNS);
     }
 
     Ok(())

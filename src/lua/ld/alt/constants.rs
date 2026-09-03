@@ -14,7 +14,13 @@ pub const EXISTS: &str = "exists";
 
 pub const GLOB: &str = "glob";
 
+pub const CONCAT: &str = "concat";
+
 pub const JSON: &str = "json";
+
+pub const WHEN: &str = "when";
+
+pub const SEPARATOR: &str = "\n";
 
 pub const DEST: &str = "dest";
 
