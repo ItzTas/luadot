@@ -1,9 +1,9 @@
 # Backups
 
-Every file luadot writes over is copied aside first: `apply` and `tmpl alt`
-save what they replace, `rm` saves the repository entry it deletes and the
-system symlink it writes over, and `take` run with no path saves the repository
-entries it replaces. `add` takes no backup, and neither does `take` on a path
+Every file luadot writes over is copied aside first: `apply`, `relink` and
+`tmpl alt` save what they replace, `rm` saves the repository entry it deletes
+and the system symlink it writes over, and `take` run with no path saves the
+repository entries it replaces. `add` takes no backup, and neither does `take` on a path
 you name.
 
 ```

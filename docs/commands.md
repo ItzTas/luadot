@@ -11,6 +11,7 @@
 | `luadot status [-t] [path]` | Lists the managed files whose system copy is not in sync, `-t` the files the templates produce too. |
 | `luadot diff [-t] [path]` | Shows what the repository holds and the system does not, `-t` what the templates produce too. |
 | `luadot apply [-n] [path]` | Puts the repository's files back on the system. |
+| `luadot relink [-n] [path]` | Links the repository's files again, leaving the ones the system changed. |
 | `luadot tmpl alt [-n] [path]` | Runs the templates and puts the files they produce on the system. |
 | `luadot tmpl new [-f] <path>` | Creates an empty template next to the file that path names, and starts managing it. |
 | `luadot restore [-l] [-y] [-n] [backup]` | Puts back the files an earlier `apply` or `tmpl alt` replaced. |
@@ -21,7 +22,7 @@
 | `luadot class [list\|set\|unset\|get]` | Lists the declared classes and answers them for this machine. |
 | `luadot bootstrap` | Runs the repository's `bootstrap.lua`. |
 | `luadot setup [-l] [name]...` | Runs the setup scripts the names ask for, `-l` prints the names instead. |
-| `luadot task [-l] <name> [args]...` | Runs a task the configuration registers, `-l` prints the names instead; `luadot <name> [args]...` is the same. |
+| `luadot task [name] [args]...`, `luadot task --names` | Runs a task the configuration registers, `luadot <name> [args]...` too. With no name, lists every task with what it does; `--names` prints the names alone. |
 | `luadot cd` | Starts a shell in the repository. |
 | `luadot sync [-m MSG] [--no-push]` | Stages what changed in the repository, commits it and pushes it. |
 | `luadot git <args>...` | Runs git inside the repository. |
@@ -138,7 +139,7 @@ Files not on the system:
         missing:     .bashrc
 
 Files not linked:
-  (use "luadot apply <path>..." to link them)
+  (use "luadot relink" to link them again)
         unlinked:    .vimrc
 
 Files that differ:
@@ -207,6 +208,40 @@ reports what they produce, without writing it. `diff --templates` shows the
 generated side under `generated/` rather than `repository/`. The files a
 template is made of are managed like any other, so they show up in both
 reports without the flag. [templates.md](templates.md) says more.
+
+## relink
+
+`relink` places the repository's files the way `apply` does, but stops at the
+ones the system changed. A file whose contents match and whose link broke is
+linked again, and a file the system does not have is written. A file that
+drifted is left where it is and counted as skipped, so an edit you made on the
+system survives the run.
+
+```
+$ luadot status
+Files not linked:
+  (use "luadot relink" to link them again)
+        unlinked:    .vimrc
+        unlinked:    .zshrc
+
+Files that differ:
+  (use "luadot diff <path>..." to see what changed)
+  (use "luadot apply" to keep the repository's copy, "luadot take" to keep the system's)
+        differs:     .gitconfig
+
+$ luadot relink
+replaced   .vimrc
+replaced   .zshrc
+skipped    .gitconfig
+luadot: relinked 12 path(s) (0 created, 2 replaced, 9 unchanged, 1 skipped)
+```
+
+`apply` writes the repository's copy over those three files; `relink` writes it
+over the first two. A file whose contents match but whose mode drifted counts
+as differing, so `relink` leaves that one to `apply` too.
+
+A path narrows the run, and `-n` reports what it would do without writing
+anything. What a real run replaces is backed up first.
 
 ## take
 
@@ -334,24 +369,44 @@ commit.
 
 ## Dry runs
 
-`-n` (or `--dry-run`) makes `apply`, `tmpl alt`, `rm` and `mv` report what they
-would do and touch nothing: nothing is written and no backup is taken. Only
-the files that would change are listed. A real run lists the ones it changed,
-and the summary counts the rest:
+`-n` (or `--dry-run`) makes `apply`, `relink`, `tmpl alt`, `rm` and `mv` report
+what they would do and touch nothing: nothing is written and no backup is
+taken. Every path is listed, the unchanged ones included, and under each file
+`apply` or `tmpl alt` would create, replace or skip comes the diff between what
+sits on the system and what the run would put there:
 
 ```
 $ luadot apply --dry-run
-create     .config/nvim/init.lua
+create     .config/mako/config
+  @@ -0,0 +1,2 @@
+  + font=monospace
+  + background-color=#111111
 replace    .zshrc
-luadot: would apply 12 file(s) (1 created, 1 replaced, 10 unchanged, 0 skipped)
+  @@ -1,4 +1,4 @@
+  - export EDITOR=vim
+  + export EDITOR=nvim
+    export PAGER=less
+    alias ll="ls -l"
+    setopt autocd
+unchanged  .gitconfig
+luadot: would apply 3 file(s) (1 created, 1 replaced, 1 unchanged, 0 skipped)
+```
 
+Three lines of context surround each change. A destination that already holds
+the right bytes says `no content change`, so the `replace` on it is about the
+mode or the link; one that is not text says `binary content`; a directory
+placed whole (`whole = true`) has no diff.
+
+A real run lists the files it changed, and the summary counts the rest:
+
+```
 $ luadot apply
 created    .config/nvim/init.lua
 replaced   .zshrc
 luadot: applied 12 file(s) (1 created, 1 replaced, 10 unchanged, 0 skipped)
 ```
 
-`-u` (or `--unchanged`) puts the files that were already in sync back in the
+`-u` (or `--unchanged`) puts the files that were already in sync back in that
 list:
 
 ```

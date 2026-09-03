@@ -444,8 +444,8 @@ ld.print.entry("create", "~/.bashrc", { tone = "good" })
 `config.lua` has one: `ld.on.add`, `ld.on.apply`, `ld.on.bootstrap`,
 `ld.on.cd`, `ld.on.class`, `ld.on.clone`, `ld.on.config`, `ld.on.diff`,
 `ld.on.edit`, `ld.on.exec`, `ld.on.git`, `ld.on.init`, `ld.on.mv`,
-`ld.on.push`, `ld.on.rekey`, `ld.on.restore`, `ld.on.rm`, `ld.on.setup`,
-`ld.on.status`, `ld.on.sync`, `ld.on.take`,
+`ld.on.push`, `ld.on.rekey`, `ld.on.relink`, `ld.on.restore`, `ld.on.rm`,
+`ld.on.setup`, `ld.on.status`, `ld.on.sync`, `ld.on.take`,
 and `ld.on.tmpl.alt` and `ld.on.tmpl.new` for the two `tmpl`
 actions. `completions`, `doc`, `man` and `meta` describe luadot itself and
 have none.
@@ -875,6 +875,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.on.mv(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `mv`. |
 | `ld.on.push(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `push`. |
 | `ld.on.rekey(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `rekey`. |
+| `ld.on.relink(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `relink`. |
 | `ld.on.restore(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `restore`. |
 | `ld.on.rm(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `rm`. |
 | `ld.on.setup(options)` | a table of `before`, `after` and `hints` | Runs a function before and after `setup`. |
@@ -895,6 +896,7 @@ opt` every row of a namespace, `luadot doc ld` the whole table, `luadot doc
 | `ld.regex.escape(text)` | a string | The text as an expression matching itself, every special character quoted. |
 
 The template calls (`ld.alt.out`, `ld.alt.file`, `ld.alt.render`,
-`ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob`, `ld.alt.json`)
-are documented in [templates.md](templates.md); the crypt calls in detail in
+`ld.alt.expand`, `ld.alt.read`, `ld.alt.exists`, `ld.alt.glob`,
+`ld.alt.concat`, `ld.alt.json`) are documented in
+[templates.md](templates.md); the crypt calls in detail in
 [secrets.md](secrets.md).
