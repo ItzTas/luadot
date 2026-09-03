@@ -94,10 +94,7 @@ const SIGNATURES: [Signature; 9] = [
         params: &[
             Param {
                 name: "sections",
-                kind: Kind::List(&Kind::Or(&[
-                    Kind::String,
-                    Kind::Named(SECTION_TYPENAME),
-                ])),
+                kind: Kind::List(&Kind::Or(&[Kind::String, Kind::Named(SECTION_TYPENAME)])),
             },
             Param {
                 name: "separator",
