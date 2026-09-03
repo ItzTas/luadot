@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.0-nightly.17](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.16..v0.1.0-nightly.17) - 2026-09-02
+#### Features
+- (**apply**) place a template's source files instead of skipping them - ([83a78a4](https://github.com/ItzTas/luadot/commit/83a78a49ebdb3581614ebd3ef2073b50b0c9f015)) - luadot
+#### Documentation
+- describe template source files as managed like any other - ([bb406a8](https://github.com/ItzTas/luadot/commit/bb406a8321c27e01dbef8c51320df118a9ea5e15)) - luadot
+
+- - -
+
 ## [v0.1.0-nightly.16](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.15..v0.1.0-nightly.16) - 2026-08-29
 #### Features
 - (**cli**) add -u/--unchanged to list files already in sync - ([6d5e48d](https://github.com/ItzTas/luadot/commit/6d5e48d37a2b54d8fbce8b49131a6fd357d98827)) - luadot
@@ -29,6 +37,7 @@ All notable changes to this project will be documented in this file. See [conven
 - (**cli**) ship the git-forwarding completion scripts as standalone files - ([e31140c](https://github.com/ItzTas/luadot/commit/e31140cbeaf0a2413bb88758e422c256159c22cb)) - luadot
 - (**ld**) warn when a mode rule asks for setuid or setgid - ([a357de3](https://github.com/ItzTas/luadot/commit/a357de3dc16077cb7b38be8365e3cd1be98ea428)) - luadot
 - (**meta**) regenerate ld.lua for the sys removal and hints option - ([53b198f](https://github.com/ItzTas/luadot/commit/53b198f96a9e4f262626ac8e1b3daaca4136da2e)) - luadot
+- (**version**) v0.1.0-nightly.16 [skip ci] - ([8e68f67](https://github.com/ItzTas/luadot/commit/8e68f67e25acb7e6e2732f41a55ae96b8df067ce)) - Tales Sabini
 - ignore the omo run-continuation directory - ([eb386aa](https://github.com/ItzTas/luadot/commit/eb386aabd7dfba83811ca9cd1fa1652b946f1fc2)) - luadot
 
 - - -
