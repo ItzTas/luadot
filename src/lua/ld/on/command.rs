@@ -1,7 +1,8 @@
 use super::super::constants::API;
 use super::constants::{
     ADD, ALT, APPLY, BOOTSTRAP, CD, CLASS, CLONE, CONFIG, DIFF, EDIT, EXEC, GIT, INIT, MV,
-    NAMESPACE, NEW, PUSH, REKEY, RESTORE, RM, SETUP, STATUS, SYNC, TAKE, TMPL, TMPL_ALT, TMPL_NEW,
+    NAMESPACE, NEW, PUSH, REKEY, RELINK, RESTORE, RM, SETUP, STATUS, SYNC, TAKE, TMPL, TMPL_ALT,
+    TMPL_NEW,
 };
 
 macro_rules! command {
@@ -20,7 +21,7 @@ macro_rules! command {
 
 command!(
     Add, Apply, Bootstrap, Cd, Class, Clone, Config, Diff, Edit, Exec, Git, Init, Mv, Push, Rekey,
-    Restore, Rm, Setup, Status, Sync, Take, TmplAlt, TmplNew,
+    Relink, Restore, Rm, Setup, Status, Sync, Take, TmplAlt, TmplNew,
 );
 
 impl Command {
@@ -41,6 +42,7 @@ impl Command {
             Self::Mv => MV,
             Self::Push => PUSH,
             Self::Rekey => REKEY,
+            Self::Relink => RELINK,
             Self::Restore => RESTORE,
             Self::Rm => RM,
             Self::Setup => SETUP,

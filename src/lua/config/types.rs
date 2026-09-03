@@ -520,6 +520,13 @@ impl Matcher {
         }
     }
 
+    pub fn parts(&self) -> Vec<String> {
+        match self {
+            Self::Any(matchers) => matchers.iter().flat_map(Self::parts).collect(),
+            leaf => vec![leaf.to_string()],
+        }
+    }
+
     fn matches(&self, relative: &Path) -> bool {
         match self {
             Self::Glob(pattern) => pattern.matches_path_with(relative, MATCH),

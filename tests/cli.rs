@@ -270,6 +270,73 @@ fn apply_names_an_unchanged_path_only_when_asked() {
 }
 
 #[test]
+fn apply_dry_run_shows_the_content_it_would_write() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    write(&repo.join(".zshrc"), "export EDITOR=nvim\nsetopt autocd\n");
+    write(&home.join(".zshrc"), "export EDITOR=vim\nsetopt autocd\n");
+    write(&repo.join(".vimrc"), "set number\n");
+    write_state(&home, &repo);
+
+    luadot(&home)
+        .args(["apply", home.join(".vimrc").to_str().unwrap()])
+        .assert()
+        .success();
+
+    luadot(&home)
+        .args(["apply", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("@@ -1,2 +1,2 @@"))
+        .stdout(predicate::str::contains("- export EDITOR=vim"))
+        .stdout(predicate::str::contains("+ export EDITOR=nvim"))
+        .stdout(predicate::str::contains("unchanged  .vimrc"));
+
+    assert_eq!(
+        read(&home.join(".zshrc")),
+        "export EDITOR=vim\nsetopt autocd\n"
+    );
+}
+
+#[test]
+fn relink_links_the_unlinked_and_leaves_the_drifted() {
+    use std::os::unix::fs::MetadataExt;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let repo = root.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    write(&repo.join(".vimrc"), "set number\n");
+    write(&repo.join(".zshrc"), "setopt autocd\n");
+    write_state(&home, &repo);
+
+    luadot(&home).arg("apply").assert().success();
+
+    std::fs::remove_file(home.join(".vimrc")).unwrap();
+    write(&home.join(".vimrc"), "set number\n");
+    std::fs::remove_file(home.join(".zshrc")).unwrap();
+    write(&home.join(".zshrc"), "setopt histignoredups\n");
+
+    luadot(&home)
+        .arg("relink")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("replaced   .vimrc"))
+        .stdout(predicate::str::contains("skipped    .zshrc"))
+        .stdout(predicate::str::contains(
+            "relinked 2 path(s) (0 created, 1 replaced, 0 unchanged, 1 skipped)",
+        ));
+
+    assert_eq!(
+        std::fs::metadata(home.join(".vimrc")).unwrap().ino(),
+        std::fs::metadata(repo.join(".vimrc")).unwrap().ino()
+    );
+    assert_eq!(read(&home.join(".zshrc")), "setopt histignoredups\n");
+}
+
+#[test]
 fn add_and_rm_stage_their_changes() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -1053,10 +1120,15 @@ fn task_runs_under_its_own_name() {
         .success()
         .stdout(predicate::str::diff("plug sync\n"));
     luadot(&home)
-        .args(["task", "--list"])
+        .args(["task", "--names"])
         .assert()
         .success()
         .stdout(predicate::str::diff("plug\n"));
+    luadot(&home)
+        .arg("task")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("plug").and(predicate::str::contains("Manage plugins")));
     luadot(&home).arg("stauts").assert().code(2).stderr(
         predicate::str::contains("unrecognized subcommand 'stauts'")
             .and(predicate::str::contains("'status'")),

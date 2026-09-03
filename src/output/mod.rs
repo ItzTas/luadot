@@ -1,4 +1,5 @@
 mod constants;
+mod diff;
 mod format;
 mod look;
 mod message;
@@ -9,6 +10,7 @@ mod prompt;
 mod tone;
 
 pub use constants::{FIELD_WIDTH, GAP, ITEM_WIDTH, LABEL_WIDTH};
+pub use diff::changes;
 pub use format::{column, notice};
 pub use look::Look;
 pub use message::{Message, Stream};

@@ -29,7 +29,7 @@ pub const RUN: &str = "run";
 
 pub const TASK_KEYS: [&str; 2] = [ABOUT, RUN];
 
-pub const BUILTINS: [&str; 28] = [
+pub const BUILTINS: [&str; 29] = [
     "init",
     "clone",
     "add",
@@ -39,6 +39,7 @@ pub const BUILTINS: [&str; 28] = [
     "status",
     "diff",
     "apply",
+    "relink",
     "tmpl",
     "restore",
     "edit",

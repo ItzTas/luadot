@@ -8,6 +8,7 @@ mod editor;
 mod host;
 mod outputs;
 mod paths;
+mod place;
 mod repo;
 mod run;
 mod span;
@@ -26,8 +27,9 @@ pub use outputs::{output_placement, output_relative, output_status, outputs};
 pub use paths::{
     config_dir, data_dir, expand, home_dir, managed_relative, relative, repo_path, system_path,
 };
+pub use place::Placer;
 pub use repo::{destination, managed_path, require_repo};
-pub use run::{Run, dry_run, finished, set_command, set_dry_run, started};
+pub use run::{Incoming, Run, dry_run, finished, set_command, set_dry_run, started};
 pub use span::{seconds, span};
 pub use units::{Managed, Unit, units, whole_link};
 pub use workspace::{

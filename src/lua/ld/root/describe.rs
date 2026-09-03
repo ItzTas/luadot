@@ -79,7 +79,7 @@ const TASK_FIELDS: [Field; 2] = [
     Field {
         name: ABOUT,
         kind: Kind::Optional(&Kind::String),
-        doc: "One line saying what the task does, shown by `luadot task --list`.",
+        doc: "One line saying what the task does, shown by `luadot task`.",
     },
     Field {
         name: RUN,

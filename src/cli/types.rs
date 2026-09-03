@@ -2,8 +2,8 @@ use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
     AddArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs, DocArgs,
-    EditArgs, ExecArgs, GitArgs, InitArgs, MetaArgs, MvArgs, PushArgs, RekeyArgs, RestoreArgs,
-    RmArgs, SetupArgs, StatusArgs, SyncArgs, TakeArgs, TaskArgs, TmplArgs,
+    EditArgs, ExecArgs, GitArgs, InitArgs, MetaArgs, MvArgs, PushArgs, RekeyArgs, RelinkArgs,
+    RestoreArgs, RmArgs, SetupArgs, StatusArgs, SyncArgs, TakeArgs, TaskArgs, TmplArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -59,6 +59,8 @@ pub enum Cmd {
     Diff(DiffArgs),
     #[command(about = "Put the repository's files back on the system")]
     Apply(ApplyArgs),
+    #[command(about = "Link the repository's files again, leaving what the system changed")]
+    Relink(RelinkArgs),
     #[command(about = "Create the repository's templates and run them")]
     Tmpl(TmplArgs),
     #[command(about = "Put back the files an earlier apply or tmpl alt replaced")]
