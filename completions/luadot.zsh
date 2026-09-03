@@ -16,7 +16,9 @@ _luadot_git() {
 
 _luadot_names() {
     local -a names
-    names=(${(f)"$($words[1] $1 --list 2>/dev/null)"})
+    local flag=--list
+    [[ $1 == task ]] && flag=--names
+    names=(${(f)"$($words[1] $1 $flag 2>/dev/null)"})
     (( $#names )) || return 1
     _describe -t $1 $1 names
 }

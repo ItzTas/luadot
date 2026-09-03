@@ -21,7 +21,9 @@ end
 
 function __luadot_names
     set -l tokens (commandline --current-process --cut-at-cursor --tokenize)
-    $tokens[1] $argv[1] --list 2>/dev/null
+    set -l flag --list
+    test $argv[1] = task; and set flag --names
+    $tokens[1] $argv[1] $flag 2>/dev/null
 end
 
 complete -c luadot -n "__fish_seen_subcommand_from git push" -f -a "(__luadot_git_completions)"

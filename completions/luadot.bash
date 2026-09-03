@@ -57,8 +57,9 @@ _luadot_git() {
 }
 
 _luadot_names() {
-    local names
-    names=$("$1" "$3" --list 2>/dev/null) || return 1
+    local names flag=--list
+    [[ "$3" == task ]] && flag=--names
+    names=$("$1" "$3" "$flag" 2>/dev/null) || return 1
     [[ -n "$names" ]] || return 1
     mapfile -t COMPREPLY < <(compgen -W "$names" -- "$2")
 }
