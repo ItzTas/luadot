@@ -2275,7 +2275,7 @@ dependencies = [
 
 [[package]]
 name = "luadot"
-version = "0.1.0-nightly.17"
+version = "0.1.0-nightly.18"
 dependencies = [
  "anstream",
  "anstyle",

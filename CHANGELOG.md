@@ -2,11 +2,25 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
-## [v0.1.0-nightly.17](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.16..v0.1.0-nightly.17) - 2026-09-02
+## [v0.1.0-nightly.18](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.17..v0.1.0-nightly.18) - 2026-09-03
+#### Features
+- (**cli**) add the relink command - ([427381a](https://github.com/ItzTas/luadot/commit/427381ab8f2bb7a8212bd9408acbbd2f576213b2)) - luadot
+#### Documentation
+- document relink, diff output and template placement - ([73846cf](https://github.com/ItzTas/luadot/commit/73846cfc8dcd90a074b442e61d61ec7e913e038b)) - luadot
+#### Miscellaneous Chores
+- regenerate the completions and ld.lua - ([a376812](https://github.com/ItzTas/luadot/commit/a376812d3aafc6ef70afa665dd383ec098c125a9)) - luadot
+#### Style
+- (**ld**) format the alt sections param kind - ([1c6a292](https://github.com/ItzTas/luadot/commit/1c6a292caf0d02eed6516e196ba77d00d858b2e7)) - luadot
+
+- - -
+
+## [v0.1.0-nightly.17](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.16..v0.1.0-nightly.17) - 2026-09-03
 #### Features
 - (**apply**) place a template's source files instead of skipping them - ([83a78a4](https://github.com/ItzTas/luadot/commit/83a78a49ebdb3581614ebd3ef2073b50b0c9f015)) - luadot
 #### Documentation
 - describe template source files as managed like any other - ([bb406a8](https://github.com/ItzTas/luadot/commit/bb406a8321c27e01dbef8c51320df118a9ea5e15)) - luadot
+#### Miscellaneous Chores
+- (**version**) v0.1.0-nightly.17 [skip ci] - ([067e48d](https://github.com/ItzTas/luadot/commit/067e48d254b3bde0bf544412a7ae4899900e3af9)) - Tales Sabini
 
 - - -
 
