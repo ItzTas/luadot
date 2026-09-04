@@ -2,85 +2,16 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
-## [v0.1.0-nightly.19](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.18..v0.1.0-nightly.19) - 2026-09-03
+## [v0.2.1](https://github.com/ItzTas/luadot/compare/286da8c0c67f00dde4b27a070a24f8773d0d4229..v0.2.1) - 2026-08-25
 #### Bug Fixes
-- (**ci**) give the binaries job the memory it needs - ([6dc1ff2](https://github.com/ItzTas/luadot/commit/6dc1ff2d386893b88e54968aff5be779f827200d)) - luadot
+- (**changelog**) put back the releases the truncation dropped - ([64a36a5](https://github.com/ItzTas/luadot/commit/64a36a55bfcbb56100c709aaf701e67c7627b303)) - luadot
+- (**changelog**) keep the releases below a partial render - ([286da8c](https://github.com/ItzTas/luadot/commit/286da8c0c67f00dde4b27a070a24f8773d0d4229)) - luadot
 
 - - -
 
-## [v0.1.0-nightly.18](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.17..v0.1.0-nightly.18) - 2026-09-03
-#### Features
-- (**cli**) add the relink command - ([427381a](https://github.com/ItzTas/luadot/commit/427381ab8f2bb7a8212bd9408acbbd2f576213b2)) - luadot
-#### Documentation
-- document relink, diff output and template placement - ([73846cf](https://github.com/ItzTas/luadot/commit/73846cfc8dcd90a074b442e61d61ec7e913e038b)) - luadot
+## [v0.2.0](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.13..v0.2.0) - 2026-08-25
 #### Miscellaneous Chores
-- (**version**) v0.1.0-nightly.18 [skip ci] - ([366a5b8](https://github.com/ItzTas/luadot/commit/366a5b80fcc3503907c2c3afb87cc0e3903248ab)) - Tales Sabini
-- regenerate the completions and ld.lua - ([a376812](https://github.com/ItzTas/luadot/commit/a376812d3aafc6ef70afa665dd383ec098c125a9)) - luadot
-#### Style
-- (**ld**) format the alt sections param kind - ([1c6a292](https://github.com/ItzTas/luadot/commit/1c6a292caf0d02eed6516e196ba77d00d858b2e7)) - luadot
-
-- - -
-
-## [v0.1.0-nightly.17](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.16..v0.1.0-nightly.17) - 2026-09-03
-#### Features
-- (**apply**) place a template's source files instead of skipping them - ([83a78a4](https://github.com/ItzTas/luadot/commit/83a78a49ebdb3581614ebd3ef2073b50b0c9f015)) - luadot
-#### Documentation
-- describe template source files as managed like any other - ([bb406a8](https://github.com/ItzTas/luadot/commit/bb406a8321c27e01dbef8c51320df118a9ea5e15)) - luadot
-#### Miscellaneous Chores
-- (**version**) v0.1.0-nightly.17 [skip ci] - ([067e48d](https://github.com/ItzTas/luadot/commit/067e48d254b3bde0bf544412a7ae4899900e3af9)) - Tales Sabini
-
-- - -
-
-## [v0.1.0-nightly.16](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.15..v0.1.0-nightly.16) - 2026-08-29
-#### Features
-- (**cli**) add -u/--unchanged to list files already in sync - ([6d5e48d](https://github.com/ItzTas/luadot/commit/6d5e48d37a2b54d8fbce8b49131a6fd357d98827)) - luadot
-- (**opt**) add the hints option - ([2797497](https://github.com/ItzTas/luadot/commit/2797497f7c0683fe56f097f42ad481132dbe031c)) - luadot
-- (**take**) take everything the repository holds with no path - ([9c05ae3](https://github.com/ItzTas/luadot/commit/9c05ae33436e3db6b49dc6f78a04328b8f624a09)) - luadot
-#### Bug Fixes
-- (**config**) refuse a config.lua others can write or own - ([31fcfdf](https://github.com/ItzTas/luadot/commit/31fcfdff0976bb6853e816c92b89dc2afe3e7e57)) - luadot
-- (**crypt**) leave decrypted plaintext readable by its owner alone - ([09b2d86](https://github.com/ItzTas/luadot/commit/09b2d865ac24d9fa1ac785b335985da97617ecf1)) - luadot
-- (**files**) never place mode or owner through a symlink - ([85bd7d3](https://github.com/ItzTas/luadot/commit/85bd7d3663b05c83d80b3b411d20eebb211771f2)) - luadot
-- (**ld**) export HINTS from the ld module - ([740c6eb](https://github.com/ItzTas/luadot/commit/740c6eb1596c30aed50a227b03d833824449270d)) - luadot
-- (**paths**) confine the xdg directories to the home - ([eeff0df](https://github.com/ItzTas/luadot/commit/eeff0dfca5d7b71d1ebdee25aac4e272db215348)) - luadot
-- (**restore**) keep restoration inside what luadot manages - ([b181d83](https://github.com/ItzTas/luadot/commit/b181d837cc97ebe2deb07dc25acb4362d3bad8d8)) - luadot
-- (**state**) keep the data directory and the state file private - ([7440379](https://github.com/ItzTas/luadot/commit/7440379aef2c483d1191e188d60debacfe4559a5)) - luadot
-#### Tests
-- (**alt**) drop the sys reference from the expand fixture - ([2aca696](https://github.com/ItzTas/luadot/commit/2aca696eedeaeefb0c9964bbac7b6ece54f02ffc)) - luadot
-- (**cli**) record the plaintext mode without gnu-only stat - ([5346a22](https://github.com/ItzTas/luadot/commit/5346a2206d2f24da7b34d370fd11c2f7463e6f84)) - luadot
-- (**on**) assert every command reaches its function and its definition - ([2551fd5](https://github.com/ItzTas/luadot/commit/2551fd511afff5c3004120fb79efccbd87f064fa)) - luadot
-#### Refactoring
-- (**files**) add link_at, dedupe the symlink check in add, mv and rm - ([a271cf4](https://github.com/ItzTas/luadot/commit/a271cf4d679aebeef09d65e3714bb91a0e16149b)) - luadot
-- (**json**) decode and encode through mlua's LuaSerdeExt - ([9baf965](https://github.com/ItzTas/luadot/commit/9baf96554139c3183bb797c6e069c6dcb3548af2)) - luadot
-- (**ld**) move meta descriptions out of constants into describe - ([e69ed1d](https://github.com/ItzTas/luadot/commit/e69ed1d0b0b78bac89b4f95b9ec5fea77736240c)) - luadot
-- (**ld**) remove the sys namespace - ([46ef030](https://github.com/ItzTas/luadot/commit/46ef03079503c5969ba986fc83cd34e264a13bd1)) - luadot
-- (**on**) derive the command list from the enum - ([6be4e6a](https://github.com/ItzTas/luadot/commit/6be4e6a56ab99d7a05e3f182d1210707fb7f7af7)) - luadot
-#### Miscellaneous Chores
-- (**cli**) ship the git-forwarding completion scripts as standalone files - ([e31140c](https://github.com/ItzTas/luadot/commit/e31140cbeaf0a2413bb88758e422c256159c22cb)) - luadot
-- (**ld**) warn when a mode rule asks for setuid or setgid - ([a357de3](https://github.com/ItzTas/luadot/commit/a357de3dc16077cb7b38be8365e3cd1be98ea428)) - luadot
-- (**meta**) regenerate ld.lua for the sys removal and hints option - ([53b198f](https://github.com/ItzTas/luadot/commit/53b198f96a9e4f262626ac8e1b3daaca4136da2e)) - luadot
-- (**version**) v0.1.0-nightly.16 [skip ci] - ([8e68f67](https://github.com/ItzTas/luadot/commit/8e68f67e25acb7e6e2732f41a55ae96b8df067ce)) - Tales Sabini
-- ignore the omo run-continuation directory - ([eb386aa](https://github.com/ItzTas/luadot/commit/eb386aabd7dfba83811ca9cd1fa1652b946f1fc2)) - luadot
-
-- - -
-
-## [v0.1.0-nightly.15](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.14..v0.1.0-nightly.15) - 2026-08-25
-#### Miscellaneous Chores
-- (**version**) v0.1.0-nightly.15 [skip ci] - ([1073fba](https://github.com/ItzTas/luadot/commit/1073fbaf74f7e55c2d9f8c77da76cf873abbb82d)) - Tales Sabini
-
-- - -
-
-## [v0.1.0-nightly.14](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.13..v0.1.0-nightly.14) - 2026-08-25
-#### Features
-- (**cli**) add whole-directory adoption and a take command - ([226b4cf](https://github.com/ItzTas/luadot/commit/226b4cf5f43778acc08b32a845a5055e7f844501)) - luadot
-#### Bug Fixes
-- (**changelog**) keep the releases below a partial render - ([e4f1dc7](https://github.com/ItzTas/luadot/commit/e4f1dc7e8e0835400d53c337b6e5afa62604e3e0)) - luadot
-#### Documentation
-- document track, whole directories, and take - ([8285228](https://github.com/ItzTas/luadot/commit/8285228898883bce22bd4a2ad5e5636f3389fa5e)) - luadot
-#### Tests
-- trim redundant words from test names - ([923f829](https://github.com/ItzTas/luadot/commit/923f829fbf5ec99a412ca2667a78a19f712047cf)) - luadot
-#### Miscellaneous Chores
-- (**meta**) regenerate ld.lua doc comments - ([de2aaa6](https://github.com/ItzTas/luadot/commit/de2aaa62459e4b97ea091d7075c49c6823304984)) - luadot
-- (**version**) v0.1.0-nightly.14 [skip ci] - ([70d3d0c](https://github.com/ItzTas/luadot/commit/70d3d0cd91d346a7b472c33593ba640aa427e426)) - Tales Sabini
+- bring main up to nightly - ([d8d81b2](https://github.com/ItzTas/luadot/commit/d8d81b2a35ef1c0bec37899953885639bad20445)) - luadot
 
 - - -
 
@@ -183,7 +114,7 @@ All notable changes to this project will be documented in this file. See [conven
 
 - - -
 
-## [v0.1.0-nightly.8](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.7..v0.1.0-nightly.8) - 2026-08-21
+## [v0.1.0-nightly.8](https://github.com/ItzTas/luadot/compare/6bce4afaf739d2b95b24ae8d0dfc6d963ced8dd8..v0.1.0-nightly.8) - 2026-08-21
 #### Features
 - (**cli**) write editor definitions for the configuration - ([201b8b4](https://github.com/ItzTas/luadot/commit/201b8b4d195fc754f29845b834c74e1e2b2b754a)) - Tales
 - (**cli**) add `luadot doc` and `luadot man` - ([5120ba2](https://github.com/ItzTas/luadot/commit/5120ba2bb2200e3ffdde88d84190fc81aa7fdc64)) - Tales
@@ -210,6 +141,13 @@ All notable changes to this project will be documented in this file. See [conven
 - (**lua**) collect the rule keys into one array and refuse the rest - ([bd82a4b](https://github.com/ItzTas/luadot/commit/bd82a4bde9ab9b3629b88d0de97eeb91a9b51b2c)) - Tales
 - (**version**) v0.1.0-nightly.8 [skip ci] - ([d8a15df](https://github.com/ItzTas/luadot/commit/d8a15df3d3588ed52fd8721ff26bd76de8f1a9a2)) - Tales Sabini
 - require the humanizer skill for documentation edits - ([6bce4af](https://github.com/ItzTas/luadot/commit/6bce4afaf739d2b95b24ae8d0dfc6d963ced8dd8)) - Tales
+
+- - -
+
+
+- - -
+
+## [v0.1.0](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.7..v0.1.0) - 2026-08-20
 
 - - -
 

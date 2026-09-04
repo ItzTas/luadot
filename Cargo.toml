@@ -1,6 +1,6 @@
 [package]
 name = "luadot"
-version = "0.1.0-nightly.19"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.87"
 description = "A dotfiles manager configured in Lua"
