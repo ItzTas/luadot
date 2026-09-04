@@ -51,9 +51,10 @@ The pipeline in `.gitlab/workflows/ci.yml` does it, in this order:
      pushes. Nothing is committed when the rendered files are unchanged.
 
 `aur-stable` and `aur-nightly` `need` `bump` and `source-tarball`; `aur-bin`
-needs `bump` and `binaries`. `source-tarball` and `binaries` share the
-`release-assets` resource group, so the two never write to the same release at
-once.
+needs `bump` and `binaries`. `source-tarball`, `binaries` and `crates-io` share
+the `release-assets` resource group, so no two of them write to the same release
+at once, and the two that compile the crate never run together. See [Release
+assets](#release-assets) for why the second part matters.
 
 ## The changelog
 
@@ -101,10 +102,13 @@ since the cross-built one cannot be run on the builder.
 
 The k8s runner gives a job 2 GiB and one CPU by default, and a fat-LTO build of
 both targets overruns that: the pod is killed with `OOMKilled` partway through.
-So `binaries` raises its own ceiling with `KUBERNETES_MEMORY_LIMIT` and
-`KUBERNETES_CPU_LIMIT`, and caps `CARGO_BUILD_JOBS` at 2. Its requests stay at
-1 GiB and 500m, since a pod that asks the node for the whole ceiling up front
-waits for a slot that never comes.
+So `binaries` raises its own ceiling to 3 GiB and two CPUs with
+`KUBERNETES_MEMORY_LIMIT` and `KUBERNETES_CPU_LIMIT`, and caps
+`CARGO_BUILD_JOBS` at 2. Its requests stay at 1 GiB and 500m, since a pod that
+asks the node for the whole ceiling up front waits for a slot that never comes.
+The node runs GitLab itself, so two Rust builds at that ceiling are enough to
+starve it: the kubelet taints the node and the taint manager deletes both pods
+mid-job. That is what the `release-assets` resource group is for.
 
 `packaging/release/deb.sh <tag>` turns each of those tarballs into a Debian
 package, `dist/luadot_<version>-1_<amd64|arm64>.deb`, with the completions in

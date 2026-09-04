@@ -5,7 +5,7 @@ crates-io:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
   image: rust:latest
-  resource_group: crates-io
+  resource_group: release-assets
   needs:
     - job: bump
       artifacts: true

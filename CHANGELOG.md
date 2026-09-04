@@ -2,6 +2,20 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.3.1-nightly.1](https://github.com/ItzTas/luadot/compare/v0.3.0-nightly.2..v0.3.1-nightly.1) - 2026-09-04
+#### Miscellaneous Chores
+- merge main into nightly - ([63d57cb](https://github.com/ItzTas/luadot/commit/63d57cba6471dd42adc2de92d32115237808fc1b)) - luadot
+
+- - -
+
+## [v0.3.0-nightly.2](https://github.com/ItzTas/luadot/compare/a3f094a856346f8a4af9a0b3ac1ae0b44977d922..v0.3.0-nightly.2) - 2026-09-04
+#### Bug Fixes
+- (**ci**) stop the release jobs from starving the runner node - ([a3f094a](https://github.com/ItzTas/luadot/commit/a3f094a856346f8a4af9a0b3ac1ae0b44977d922)) - luadot
+#### Miscellaneous Chores
+- (**version**) v0.3.0-nightly.2 [skip ci] - ([6f12858](https://github.com/ItzTas/luadot/commit/6f12858cd1e7e84647b9223a90b883f0a3c8f7e3)) - Tales Sabini
+
+- - -
+
 ## [v0.3.0](https://github.com/ItzTas/luadot/compare/v0.3.0-nightly.1..v0.3.0) - 2026-09-04
 
 - - -
