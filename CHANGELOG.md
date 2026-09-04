@@ -2,9 +2,7 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
-## [v0.3.0-nightly.2](https://github.com/ItzTas/luadot/compare/v0.3.0-nightly.1..v0.3.0-nightly.2) - 2026-09-04
-#### Bug Fixes
-- (**ci**) stop the release jobs from starving the runner node - ([a3f094a](https://github.com/ItzTas/luadot/commit/a3f094a856346f8a4af9a0b3ac1ae0b44977d922)) - luadot
+## [v0.3.0](https://github.com/ItzTas/luadot/compare/v0.3.0-nightly.1..v0.3.0) - 2026-09-04
 
 - - -
 
