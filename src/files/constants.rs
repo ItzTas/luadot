@@ -6,10 +6,6 @@ pub const TEMPLATE_SUFFIX: &str = ".luadot";
 
 pub const MODE_BITS: u32 = 0o7777;
 
-pub const STAGED_PREFIX: &str = "luadot";
-
-pub const STAGED_ATTEMPTS: u32 = 64;
-
 pub const CHOWN: &str = "chown";
 
 pub const MIRROR_PREFIX: &str = "luadot-diff";

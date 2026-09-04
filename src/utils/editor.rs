@@ -50,7 +50,7 @@ mod tests {
     use super::build_command;
 
     #[test]
-    fn build_command_forwards_editor_arguments() {
+    fn build_command_forwards_arguments() {
         let command = build_command("code -w", Path::new("/repo/.bashrc"));
 
         assert_eq!(command.get_program(), OsStr::new("code"));

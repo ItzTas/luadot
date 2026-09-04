@@ -54,7 +54,7 @@ mod tests {
     }
 
     #[test]
-    fn a_call_answers_with_the_string_it_returns() {
+    fn a_call_answers_with_its_string() {
         let lua = Lua::new();
         let call = call(
             &lua,
@@ -65,7 +65,7 @@ mod tests {
     }
 
     #[test]
-    fn a_call_returning_anything_else_is_reported() {
+    fn any_other_return_is_reported() {
         let lua = Lua::new();
         let call = call(&lua, "return function() return 1 end");
 

@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 
-use super::super::super::constants::TEMPLATE_SKELETON;
 use super::super::{AddArgs, add_cmd};
 use crate::files;
 use crate::lua::{self, Placed, TEMPLATE_FILE};
@@ -142,7 +141,7 @@ fn create_dir(template: &Path) -> Result<()> {
         .with_context(|| format!("tmpl new: failed to create {}", template.display()))?;
 
     let script = template.join(TEMPLATE_FILE);
-    std::fs::write(&script, TEMPLATE_SKELETON)
+    std::fs::write(&script, "return \"\"\n")
         .with_context(|| format!("tmpl new: failed to create {}", script.display()))
 }
 

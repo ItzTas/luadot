@@ -95,7 +95,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_color_wins_over_the_color_of_the_tone() {
+    fn a_color_wins_over_the_tone() {
         let look = Look::from(Tone::Good).with_fg(Some(AnsiColor::Red.into()));
 
         assert_eq!(look.style().get_fg_color(), Some(AnsiColor::Red.into()));

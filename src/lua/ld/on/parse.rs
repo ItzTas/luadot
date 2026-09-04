@@ -3,7 +3,7 @@ use mlua::{Table, Value};
 use super::super::constants::API;
 use super::super::parse::external;
 pub use super::super::parse::known;
-use super::constants::{ENTRY, RENDER, SUMMARY};
+use super::constants::{ENTRY, HINTS, RENDER, SUMMARY};
 use crate::lua::config::constants::{AFTER, BEFORE};
 use crate::lua::{Around, Call, Custom, Report};
 
@@ -12,6 +12,10 @@ pub fn report(call: &str, options: &Table) -> mlua::Result<Report> {
         .with_entry(custom(call, options, ENTRY, false)?)
         .with_summary(custom(call, options, SUMMARY, true)?)
         .with_render(custom(call, options, RENDER, false)?))
+}
+
+pub fn hints(call: &str, options: &Table) -> mlua::Result<Option<Custom>> {
+    custom(call, options, HINTS, false)
 }
 
 pub fn around(call: &str, options: &Table) -> mlua::Result<Around> {

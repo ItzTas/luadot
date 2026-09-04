@@ -89,7 +89,7 @@ mod tests {
     use crate::lua::runtime::runtime;
 
     #[test]
-    fn span_rejects_a_string_without_a_known_unit() {
+    fn span_rejects_an_unknown_unit() {
         let lua = runtime().unwrap();
         let value = Value::String(lua.create_string("30").unwrap());
 
@@ -102,7 +102,7 @@ mod tests {
     }
 
     #[test]
-    fn count_rejects_a_fraction_and_anything_that_is_not_a_number() {
+    fn count_rejects_a_non_integer() {
         for value in [Value::Number(1.5), Value::Boolean(true), Value::Nil] {
             let err = count("opt", &value, "backup_keep").unwrap_err().to_string();
 

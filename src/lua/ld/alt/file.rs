@@ -59,7 +59,7 @@ mod tests {
     use crate::lua::{Content, from_template};
 
     #[test]
-    fn reaches_a_file_outside_the_template_directory() {
+    fn reaches_outside_the_template() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
         let outside = root.path().join("outside.zsh");

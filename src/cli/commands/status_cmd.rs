@@ -1,11 +1,12 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Args;
 
 use crate::crypt;
 use crate::files::{self, Entry, FileStatus, Side};
-use crate::lua::{Command, Config, Shared, StatusCounts, StatusFile};
+use crate::git;
+use crate::lua::{Command, Config, Hint, Shared, StatusCounts, StatusFile};
 use crate::output::{self, Tone};
 use crate::state::{self, Classes};
 use crate::utils::{self, Workspace};
@@ -52,7 +53,7 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
 
     if files.is_empty() && templates.is_empty() {
         output::note("nothing is managed");
-        return Ok(());
+        return waiting(&config, &home, &repo);
     }
 
     let skipped = match args.templates {
@@ -62,6 +63,7 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
 
     output::title(format!("{STATUS_HEAD} {}", repo.display()));
     managed_side(&config, &home, &repo, &files, skipped)?;
+    waiting(&config, &home, &repo)?;
 
     if skipped > 0 || templates.is_empty() {
         return Ok(());
@@ -69,6 +71,24 @@ pub fn status_cmd(args: StatusArgs) -> Result<()> {
     drop(config);
 
     generated_side(&shared, &home, &repo, &templates)
+}
+
+fn waiting(config: &Config, home: &Path, repo: &Path) -> Result<()> {
+    if config.adoption_roots().is_empty() {
+        return Ok(());
+    }
+
+    let mut excludes = git::Excludes::open("status", repo)?;
+    let waiting = utils::adoptable("status", home, repo, config, &mut excludes)?.len();
+    if waiting == 0 {
+        return Ok(());
+    }
+
+    output::note(format!(
+        "{waiting} file(s) an `auto` rule covers, not managed yet; `luadot add` takes them"
+    ));
+
+    Ok(())
 }
 
 fn managed_side(
@@ -111,38 +131,75 @@ fn managed_files(
     let lock = config.crypt_lock();
     let mut identity = config.crypt_identity(home);
 
-    let mut reported = Vec::new();
-    for file in files.iter().map(Entry::path) {
-        let relative = utils::relative(repo, file);
-        let split = crypt::split(relative);
-        let logical = split
-            .as_ref()
-            .map(|(stripped, _)| stripped.as_path())
-            .unwrap_or(relative);
-        let dest = utils::system_path(home, repo, &repo.join(logical))?;
-        let status = match &split {
-            Some((stripped, backend)) => crypt::status(
-                "status",
-                *backend,
-                lock,
-                identity.path("status")?,
-                file,
-                &dest,
-                config.mode(stripped),
-            ),
-            None => files::file_status(config.placement(relative), file, &dest),
-        }
-        .with_context(|| format!("status: failed to inspect {}", dest.display()))?;
+    let paths: Vec<PathBuf> = files
+        .iter()
+        .map(|entry| entry.path().to_path_buf())
+        .collect();
+    let managed = utils::units("status", config, repo, paths)?;
 
-        reported.push(StatusFile::new(
-            relative.to_path_buf(),
-            dest,
-            Side::Repository,
-            status,
-        ));
+    let mut reported = Vec::new();
+    for one in &managed {
+        reported.push(match one {
+            utils::Managed::Unit(unit) => unit_file(config, home, repo, unit)?,
+            utils::Managed::File(file) => {
+                status_file(config, lock, &mut identity, home, repo, file)?
+            }
+        });
     }
 
     Ok(reported)
+}
+
+fn unit_file(config: &Config, home: &Path, repo: &Path, unit: &utils::Unit) -> Result<StatusFile> {
+    let relative = utils::relative(repo, unit.root());
+    let dest = utils::system_path(home, repo, unit.root())?;
+    let link = utils::whole_link("status", config, relative)?;
+    let status = files::dir_status(link, unit.root(), &dest)
+        .with_context(|| format!("status: failed to inspect {}", dest.display()))?;
+
+    Ok(StatusFile::new(
+        relative.to_path_buf(),
+        dest,
+        Side::Repository,
+        status,
+    ))
+}
+
+fn status_file(
+    config: &Config,
+    lock: crypt::Lock,
+    identity: &mut crypt::Identity,
+    home: &Path,
+    repo: &Path,
+    file: &Path,
+) -> Result<StatusFile> {
+    let relative = utils::relative(repo, file);
+    let split = crypt::split(relative);
+    let logical = split
+        .as_ref()
+        .map(|(stripped, _)| stripped.as_path())
+        .unwrap_or(relative);
+    let dest = utils::system_path(home, repo, &repo.join(logical))?;
+    let status = match &split {
+        Some((stripped, backend)) => crypt::status(
+            "status",
+            *backend,
+            lock,
+            identity.path("status")?,
+            file,
+            &dest,
+            config.mode(stripped),
+        ),
+        None => files::file_status(config.placement(relative), file, &dest),
+    }
+    .with_context(|| format!("status: failed to inspect {}", dest.display()))?;
+
+    Ok(StatusFile::new(
+        logical.to_path_buf(),
+        dest,
+        Side::Repository,
+        status,
+    ))
 }
 
 fn generated_files(
@@ -187,8 +244,7 @@ fn show(config: &Config, reported: &[StatusFile]) -> Result<()> {
     }
 
     let Some(custom) = config.status().entry() else {
-        grouped(reported);
-        return Ok(());
+        return grouped(config, reported);
     };
 
     for file in reported {
@@ -198,8 +254,8 @@ fn show(config: &Config, reported: &[StatusFile]) -> Result<()> {
     Ok(())
 }
 
-fn grouped(reported: &[StatusFile]) {
-    for (state, title, hint) in STATUS_SECTIONS {
+fn grouped(config: &Config, reported: &[StatusFile]) -> Result<()> {
+    for (state, title, hints) in STATUS_SECTIONS {
         let listed: Vec<&StatusFile> = reported
             .iter()
             .filter(|file| file.state() == state)
@@ -210,11 +266,15 @@ fn grouped(reported: &[StatusFile]) {
 
         let (tone, label) = display(state);
         output::section(title);
-        output::hint(hint);
+        for &line in hints {
+            utils::hint(config, Command::Status, Hint::new(state.name(), line))?;
+        }
         for file in listed {
             output::item(tone, format!("{label}:"), file.path().display());
         }
     }
+
+    Ok(())
 }
 
 fn summary(config: &Config, side: Side, reported: &[StatusFile], templates: usize) -> Result<()> {
@@ -331,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn the_states_are_counted_one_by_one_for_the_configuration() {
+    fn every_state_is_counted() {
         let states = counts(&[FileStatus::Synced, FileStatus::Differs]).states();
 
         assert_eq!(states.len(), STATUS_LABELS.len());
@@ -341,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn a_template_is_reported_through_the_file_it_produces() {
+    fn a_template_reports_its_output() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");

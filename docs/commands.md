@@ -4,12 +4,14 @@
 | --- | --- |
 | `luadot init [dir]` | Creates an empty dotfiles repository and makes it the managed one. |
 | `luadot clone <url> [dir]` | Clones a dotfiles repository and makes it the managed one. |
-| `luadot add <path>...` | Starts managing a file or directory, mirroring it into the repository. |
+| `luadot add [path]...` | Starts managing a file or directory, mirroring it into the repository; with no path, whatever a `track = "auto"` rule covers. |
+| `luadot take [path]...` | Stores a managed file or directory as the system holds it, and links it again; with no path, everything the repository holds. |
 | `luadot rm [-y] [-n] <path>...` | Stops managing a file or directory, leaving the system copy in place. |
 | `luadot mv [-n] <path>... <dest>` | Moves a managed file or directory, in the repository and on the system. |
 | `luadot status [-t] [path]` | Lists the managed files whose system copy is not in sync, `-t` the files the templates produce too. |
 | `luadot diff [-t] [path]` | Shows what the repository holds and the system does not, `-t` what the templates produce too. |
 | `luadot apply [-n] [path]` | Puts the repository's files back on the system. |
+| `luadot relink [-n] [path]` | Links the repository's files again, leaving the ones the system changed. |
 | `luadot tmpl alt [-n] [path]` | Runs the templates and puts the files they produce on the system. |
 | `luadot tmpl new [-f] <path>` | Creates an empty template next to the file that path names, and starts managing it. |
 | `luadot restore [-l] [-y] [-n] [backup]` | Puts back the files an earlier `apply` or `tmpl alt` replaced. |
@@ -20,7 +22,7 @@
 | `luadot class [list\|set\|unset\|get]` | Lists the declared classes and answers them for this machine. |
 | `luadot bootstrap` | Runs the repository's `bootstrap.lua`. |
 | `luadot setup [-l] [name]...` | Runs the setup scripts the names ask for, `-l` prints the names instead. |
-| `luadot task [-l] <name> [args]...` | Runs a task the configuration registers, `-l` prints the names instead; `luadot <name> [args]...` is the same. |
+| `luadot task [name] [args]...`, `luadot task --names` | Runs a task the configuration registers, `luadot <name> [args]...` too. With no name, lists every task with what it does; `--names` prints the names alone. |
 | `luadot cd` | Starts a shell in the repository. |
 | `luadot sync [-m MSG] [--no-push]` | Stages what changed in the repository, commits it and pushes it. |
 | `luadot git <args>...` | Runs git inside the repository. |
@@ -95,6 +97,33 @@ path is read on every command; luadot never moves the directory for you.
 ld.opt.repo_dir("~/dotfiles")
 ```
 
+## add
+
+`add` takes the paths you name. With none, it takes what the `track = "auto"`
+rules cover and the repository does not hold yet:
+
+```lua
+ld.rules({
+  { match = ".config/nvim/**", track = "auto" },
+  { match = ".config/nvim/spell/**", track = "manual" },
+})
+```
+
+```
+$ luadot add
+added      .config/nvim/init.lua
+added      .config/nvim/lua/plugins.lua
+added 2 file(s)
+```
+
+luadot looks under the literal part of each pattern, `~/.config/nvim` for the
+rule above, so `track = "auto"` needs a `match` opening on a name: a pattern
+starting with `*` or a `regex` is refused, since neither says where to look.
+A file the repository already holds, one a template produces and one the
+repository's ignore rules exclude are all left where they are. Everything the
+rules say about a file, from `link` to `encrypt`, holds for the ones taken this
+way.
+
 ## status
 
 `status` reads like `git status`: one section per state, each naming the
@@ -110,11 +139,12 @@ Files not on the system:
         missing:     .bashrc
 
 Files not linked:
-  (use "luadot apply <path>..." to link them)
+  (use "luadot relink" to link them again)
         unlinked:    .vimrc
 
 Files that differ:
   (use "luadot diff <path>..." to see what changed)
+  (use "luadot apply" to keep the repository's copy, "luadot take" to keep the system's)
         differs:     .zshrc
 ```
 
@@ -130,11 +160,18 @@ With nothing left to apply, the sections go away and the line under the header
 says so. Every line is replaceable through `ld.on.status`; see
 [customizing a command](ld.md#customizing-a-command).
 
+A last line counts the files a `track = "auto"` rule covers and the repository
+does not hold yet:
+
+```
+1 file(s) an `auto` rule covers, not managed yet; `luadot add` takes them
+```
+
 ## diff
 
 `diff` shows the content behind a `differs`. The repository is the left side,
 the system the right side: what the diff adds is what `apply` would overwrite,
-what it removes is what `add` would bring in. A path narrows the report to
+what it removes is what `take` would bring in. A path narrows the report to
 that file or everything below that directory. A file the system does not have
 shows as a deleted file; one reported `unlinked` holds the same content and
 has nothing to show.
@@ -165,10 +202,94 @@ mode       .ssh/config 0644 -> 0600
 `ld.on.diff` replaces any of it, the compare program included; see
 [customizing a command](ld.md#customizing-a-command).
 
-Templates are left out of both reports; the summary says how many were. `-t`
-(or `--templates`) resolves them and reports the files they produce, without
-writing them. `diff --templates` shows the generated side under `generated/`
-rather than `repository/`. [templates.md](templates.md) says more.
+The files templates produce are left out of both reports; the summary says how
+many templates were held back. `-t` (or `--templates`) resolves them and
+reports what they produce, without writing it. `diff --templates` shows the
+generated side under `generated/` rather than `repository/`. The files a
+template is made of are managed like any other, so they show up in both
+reports without the flag. [templates.md](templates.md) says more.
+
+## relink
+
+`relink` places the repository's files the way `apply` does, but stops at the
+ones the system changed. A file whose contents match and whose link broke is
+linked again, and a file the system does not have is written. A file that
+drifted is left where it is and counted as skipped, so an edit you made on the
+system survives the run.
+
+```
+$ luadot status
+Files not linked:
+  (use "luadot relink" to link them again)
+        unlinked:    .vimrc
+        unlinked:    .zshrc
+
+Files that differ:
+  (use "luadot diff <path>..." to see what changed)
+  (use "luadot apply" to keep the repository's copy, "luadot take" to keep the system's)
+        differs:     .gitconfig
+
+$ luadot relink
+replaced   .vimrc
+replaced   .zshrc
+skipped    .gitconfig
+luadot: relinked 12 path(s) (0 created, 2 replaced, 9 unchanged, 1 skipped)
+```
+
+`apply` writes the repository's copy over those three files; `relink` writes it
+over the first two. A file whose contents match but whose mode drifted counts
+as differing, so `relink` leaves that one to `apply` too.
+
+A path narrows the run, and `-n` reports what it would do without writing
+anything. What a real run replaces is backed up first.
+
+## take
+
+`take` is `apply` in the other direction: the system copy goes into the
+repository and the file is linked again.
+
+A hard link makes both copies the same file, so editing either one edits both.
+An editor that writes a new file over the old one instead of writing into it
+breaks that link, and neovim, VS Code and `sed -i` all do. From there the two
+copies drift, and `apply` would write the system's edit away.
+
+```
+$ luadot status
+Files that differ:
+  (use "luadot diff <path>..." to see what changed)
+  (use "luadot apply" to keep the repository's copy, "luadot take" to keep the system's)
+        differs:     .zshrc
+
+$ luadot take ~/.zshrc
+replaced   .zshrc
+luadot: took 1 file(s) (0 added, 1 replaced)
+```
+
+A path names a file or a directory, the way `add` does. A directory takes the
+files the repository already holds and leaves the rest out, so a new file under
+a managed directory still needs `add`. A file the repository does not hold is
+refused, and so is one a template produces.
+
+With no path, `take` covers every file the repository holds, whole directories
+included, and leaves out the ones the system has no copy of:
+
+```
+$ luadot take
+replaced   .vimrc
+replaced   .zshrc
+luadot: took 2 file(s) (0 added, 2 replaced)
+luadot: backed up 2 file(s) in ~/.local/share/luadot/backups/1786677956412
+```
+
+The repository entries it writes over are saved first, under their own path.
+`take <path>` takes no backup.
+
+The rules are read again for what it stores: a file with an `encrypt` rule is
+re-encrypted for the recipients set now, one tracked in LFS stays there, and a
+`symbolic` rule stores the content and points the system copy back at it. The
+repository's copy is replaced through a temporary file beside it, so a run that
+fails leaves the copy that was there. Permission bits stay where `apply` puts
+them.
 
 ## rm
 
@@ -248,18 +369,48 @@ commit.
 
 ## Dry runs
 
-`-n` (or `--dry-run`) makes `apply`, `tmpl alt`, `rm` and `mv` report what they
-would do and touch nothing: nothing is written and no backup is taken. Only
-the files that would change are listed. A real run names every file it went through,
-unchanged ones included:
+`-n` (or `--dry-run`) makes `apply`, `relink`, `tmpl alt`, `rm` and `mv` report
+what they would do and touch nothing: nothing is written and no backup is
+taken. Every path is listed, the unchanged ones included, and under each file
+`apply` or `tmpl alt` would create, replace or skip comes the diff between what
+sits on the system and what the run would put there:
 
 ```
 $ luadot apply --dry-run
-create     .config/nvim/init.lua
+create     .config/mako/config
+  @@ -0,0 +1,2 @@
+  + font=monospace
+  + background-color=#111111
 replace    .zshrc
-luadot: would apply 12 file(s) (1 created, 1 replaced, 10 unchanged, 0 skipped)
+  @@ -1,4 +1,4 @@
+  - export EDITOR=vim
+  + export EDITOR=nvim
+    export PAGER=less
+    alias ll="ls -l"
+    setopt autocd
+unchanged  .gitconfig
+luadot: would apply 3 file(s) (1 created, 1 replaced, 1 unchanged, 0 skipped)
+```
 
+Three lines of context surround each change. A destination that already holds
+the right bytes says `no content change`, so the `replace` on it is about the
+mode or the link; one that is not text says `binary content`; a directory
+placed whole (`whole = true`) has no diff.
+
+A real run lists the files it changed, and the summary counts the rest:
+
+```
 $ luadot apply
+created    .config/nvim/init.lua
+replaced   .zshrc
+luadot: applied 12 file(s) (1 created, 1 replaced, 10 unchanged, 0 skipped)
+```
+
+`-u` (or `--unchanged`) puts the files that were already in sync back in that
+list:
+
+```
+$ luadot apply --unchanged
 created    .config/nvim/init.lua
 replaced   .zshrc
 unchanged  .gitconfig

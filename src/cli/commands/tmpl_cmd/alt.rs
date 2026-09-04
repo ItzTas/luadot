@@ -7,7 +7,7 @@ use crate::files::{self, ConflictPolicy, Entry, SyncOutcome};
 use crate::lua::{Config, Content, Output, Shared};
 use crate::output;
 use crate::state::{self, Classes};
-use crate::utils::{self, Run, Workspace};
+use crate::utils::{self, Incoming, Run, Workspace};
 
 #[derive(Debug, Args)]
 pub struct AltArgs {
@@ -123,9 +123,21 @@ fn place(config: &Config, home: &Path, output: &Output, run: &mut Run) -> Result
         .with_context(|| format!("tmpl alt: failed to place {}", output.dest().display()))?;
     let on_change = output.on_change().or_else(|| config.on_change(&relative));
 
-    run.settle(predicted, &relative, output.dest(), on_change, || {
-        write(config, &relative, policy, output)
-    })
+    run.settle(
+        predicted,
+        &relative,
+        output.dest(),
+        on_change,
+        incoming(output),
+        || write(config, &relative, policy, output),
+    )
+}
+
+fn incoming(output: &Output) -> Incoming<'_> {
+    match output.content() {
+        Content::Text(text) => Incoming::Text(text),
+        Content::File(source) => Incoming::File(source),
+    }
 }
 
 fn write(
@@ -167,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn a_selected_variant_lands_on_the_mirrored_path() {
+    fn a_variant_lands_on_the_mirror() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
@@ -196,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_content_is_written_and_then_left_alone() {
+    fn generated_content_is_written_once() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
@@ -236,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn a_replaced_file_is_backed_up_before_it_goes() {
+    fn a_replaced_file_is_backed_up() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
@@ -286,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    fn a_declared_mode_lands_on_the_generated_file() {
+    fn a_declared_mode_lands_on_it() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");
@@ -324,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn a_command_runs_only_when_the_file_changes() {
+    fn a_command_runs_only_on_change() {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let repo = root.path().join("repo");

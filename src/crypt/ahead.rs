@@ -5,7 +5,7 @@ use std::thread;
 use anyhow::{Result, anyhow};
 
 use super::backend::Backend;
-use super::constants::DECRYPT_WIDTH;
+const DECRYPT_WIDTH: usize = 8;
 use super::identity::Identity;
 use super::lock::Lock;
 use super::plugin::plugged;
@@ -135,7 +135,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_a_run_that_cannot_prompt_reads_more_than_one_secret_at_a_time() {
+    fn reads_ahead_only_without_a_prompt() {
         let dir = tempfile::tempdir().unwrap();
         let key = dir.path().join("key.txt");
         let plugin = dir.path().join("plugin.txt");

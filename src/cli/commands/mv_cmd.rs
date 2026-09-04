@@ -7,10 +7,9 @@ use clap::Args;
 use crate::crypt;
 use crate::files::{self, Entry, LinkMode};
 use crate::git;
+use crate::lua::Shared;
 use crate::output::{self, Tone};
 use crate::utils::{self, Workspace};
-
-use super::super::constants::{MOVE_ARROW, MOVE_LABEL, MOVE_PREDICTION};
 
 #[derive(Debug, Args)]
 pub struct MvArgs {
@@ -59,6 +58,7 @@ pub fn mv_cmd(args: MvArgs) -> Result<()> {
         output::note("nothing to move");
         return Ok(());
     }
+    check_wholes(&config, &repo, &moves)?;
     if args.dry_run {
         return foresee(&repo, &moves);
     }
@@ -66,7 +66,7 @@ pub fn mv_cmd(args: MvArgs) -> Result<()> {
     let mut counts = Counts::default();
     for one in &moves {
         counts.record(carry(&repo, one)?);
-        output::entry(Tone::Good, MOVE_LABEL, shown(&repo, one));
+        output::entry(Tone::Good, "moved", shown(&repo, one));
     }
 
     let left: Vec<PathBuf> = moves
@@ -89,7 +89,7 @@ fn foresee(repo: &Path, moves: &[Move]) -> Result<()> {
     let mut counts = Counts::default();
     for one in moves {
         counts.record(predict(one)?);
-        output::entry(Tone::Muted, MOVE_PREDICTION, shown(repo, one));
+        output::entry(Tone::Muted, "move", shown(repo, one));
     }
     output::note(counts.summary("would move", moves.len()));
 
@@ -98,10 +98,28 @@ fn foresee(repo: &Path, moves: &[Move]) -> Result<()> {
 
 fn shown(repo: &Path, one: &Move) -> String {
     format!(
-        "{}{MOVE_ARROW}{}",
+        "{} -> {}",
         utils::relative(repo, one.entry.path()).display(),
         utils::relative(repo, &one.dest).display()
     )
+}
+
+fn check_wholes(shared: &Shared, repo: &Path, moves: &[Move]) -> Result<()> {
+    let config = utils::configured("mv", shared)?;
+    for one in moves {
+        for path in [one.entry.path(), one.dest.as_path()] {
+            let logical = crypt::logical(utils::relative(repo, path));
+            if let Some(root) = config.unit_root(&logical) {
+                bail!(
+                    "mv: {} is inside {}, which is placed whole; adjust the rule before moving it",
+                    utils::relative(repo, path).display(),
+                    root.display()
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn plan(home: &Path, repo: &Path, sources: &[String], dest: &str) -> Result<Vec<Move>> {
@@ -280,15 +298,9 @@ fn predict(one: &Move) -> Result<Moved> {
 }
 
 fn points(link: &Path, root: &Path) -> Result<Option<PathBuf>> {
-    let Some(meta) = files::metadata("mv", link)? else {
+    let Some(target) = files::link_at("mv", link)? else {
         return Ok(None);
     };
-    if !meta.file_type().is_symlink() {
-        return Ok(None);
-    }
-
-    let target = std::fs::read_link(link)
-        .with_context(|| format!("mv: failed to read {}", link.display()))?;
     let Ok(inside) = target.strip_prefix(root) else {
         return Ok(None);
     };
@@ -335,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rename_keeps_the_form_the_repository_stores_the_secret_in() {
+    fn a_rename_keeps_the_secret_form() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -355,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_hands_every_file_below_it_the_same_move() {
+    fn a_directory_moves_every_file_below() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -381,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn several_paths_need_a_directory_to_land_in() {
+    fn several_paths_need_a_directory() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -405,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn a_destination_the_repository_already_holds_is_refused() {
+    fn an_existing_destination_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -425,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn a_symlink_into_the_repository_points_at_the_file_where_it_landed() {
+    fn a_system_symlink_follows_the_move() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -450,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn a_repository_symlink_points_at_the_system_file_where_it_landed() {
+    fn a_repository_symlink_follows_the_move() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -478,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn a_system_copy_of_its_own_travels_with_the_file() {
+    fn a_standalone_copy_travels_along() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -502,7 +514,7 @@ mod tests {
     }
 
     #[test]
-    fn a_template_carries_the_suffix_and_the_file_it_produced() {
+    fn a_template_moves_with_its_output() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");

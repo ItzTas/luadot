@@ -1,8 +1,10 @@
 # Backups
 
-Every file luadot writes over is copied aside first: `apply` and `tmpl alt`
-save what they replace, `rm` saves the repository entry it deletes and the
-system symlink it writes over. `add` takes no backup.
+Every file luadot writes over is copied aside first: `apply`, `relink` and
+`tmpl alt` save what they replace, `rm` saves the repository entry it deletes
+and the system symlink it writes over, and `take` run with no path saves the
+repository entries it replaces. `add` takes no backup, and neither does `take` on a path
+you name.
 
 ```
 luadot: applied 12 file(s) (0 created, 1 replaced, 11 unchanged, 0 skipped)
@@ -11,8 +13,8 @@ luadot: backed up 1 file(s) in ~/.local/share/luadot/backups/1786677956412
 
 One directory per run, named after the millisecond it ran, holding each saved
 file under its absolute path: `/home/u/.zshrc` is kept at
-`<run>/home/u/.zshrc`, and the repository entry `rm` deletes under the
-repository's own path. A symlink is kept as a symlink; nothing is written for
+`<run>/home/u/.zshrc`, and the repository entries `rm` and `take` save under
+the repository's own path. A symlink is kept as a symlink; nothing is written for
 a file that was created rather than replaced.
 
 ## restore
@@ -46,6 +48,11 @@ luadot: restored 2 file(s) from backup 1786677956412 (1 created, 1 replaced)
 
 Restoring writes plain copies, so the files it touches stop being linked to
 the repository until the next `apply`.
+
+A saved file only goes back where luadot manages: under your home directory,
+or under the repository when it sits outside the home. A backup directory
+holding any other absolute path is refused by name, so nothing is put back
+past those two roots.
 
 ## Location and pruning
 

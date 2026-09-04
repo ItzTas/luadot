@@ -28,7 +28,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn a_tilde_and_a_relative_path_start_at_the_home_directory() {
+    fn tilde_and_relative_start_at_home() {
         let home = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(home.path().join(".local/share")).unwrap();
 

@@ -73,6 +73,7 @@ fn filter(verbose: u8) -> EnvFilter {
 
 fn dispatch(cli: Cli) -> Result<()> {
     utils::set_dry_run(dry_run(&cli.command));
+    output::set_unchanged(cli.unchanged);
     if let Some(command) = customized(&cli.command) {
         utils::set_command(command);
     }
@@ -85,6 +86,7 @@ fn dispatch(cli: Cli) -> Result<()> {
 fn run_command(command: Cmd) -> Result<()> {
     match command {
         Cmd::Add(args) => commands::add_cmd(args),
+        Cmd::Take(args) => commands::take_cmd(args),
         Cmd::Restore(args) => commands::restore_cmd(args),
         Cmd::Apply(args) => commands::apply_cmd(args),
         Cmd::Bootstrap => commands::bootstrap_cmd(),
@@ -104,6 +106,7 @@ fn run_command(command: Cmd) -> Result<()> {
         Cmd::Mv(args) => commands::mv_cmd(args),
         Cmd::Push(args) => commands::push_cmd(args),
         Cmd::Rekey(args) => commands::rekey_cmd(args),
+        Cmd::Relink(args) => commands::relink_cmd(args),
         Cmd::Rm(args) => commands::rm_cmd(args),
         Cmd::Setup(args) => commands::setup_cmd(args),
         Cmd::Status(args) => commands::status_cmd(args),
@@ -119,6 +122,7 @@ fn dry_run(command: &Cmd) -> bool {
         Cmd::Apply(args) => args.dry_run,
         Cmd::Mv(args) => args.dry_run,
         Cmd::Rekey(args) => args.dry_run,
+        Cmd::Relink(args) => args.dry_run,
         Cmd::Restore(args) => args.dry_run,
         Cmd::Rm(args) => args.dry_run,
         Cmd::Tmpl(args) => args.dry_run(),
@@ -142,7 +146,9 @@ fn customized(command: &Cmd) -> Option<Command> {
         Cmd::Init(_) => Some(Command::Init),
         Cmd::Mv(_) => Some(Command::Mv),
         Cmd::Push(_) => Some(Command::Push),
+        Cmd::Take(_) => Some(Command::Take),
         Cmd::Rekey(_) => Some(Command::Rekey),
+        Cmd::Relink(_) => Some(Command::Relink),
         Cmd::Restore(_) => Some(Command::Restore),
         Cmd::Rm(_) => Some(Command::Rm),
         Cmd::Setup(_) => Some(Command::Setup),
@@ -165,7 +171,7 @@ mod tests {
     }
 
     #[test]
-    fn a_tmpl_action_is_customized_on_its_own() {
+    fn a_tmpl_action_is_customized() {
         assert_eq!(
             customized(&parsed(&["luadot", "tmpl", "alt"])),
             Some(Command::TmplAlt)

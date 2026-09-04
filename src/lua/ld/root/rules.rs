@@ -1,9 +1,13 @@
 use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::{API, CONFLICT, LINK, MATCH, MODE, ON_CHANGE};
-use super::super::parse::{conflict_policy, external, link_mode, matcher, mode_bits, owner_name};
-use super::constants::{AUTOCOMMIT, AUTOPUSH, ENCRYPT, IGNORE, LFS, OWNER, RULE_KEYS};
-use crate::lua::{Config, Matcher, Rule};
+use super::super::parse::{
+    conflict_policy, external, link_mode, matcher, mode_bits, owner_name, special_bits, track,
+};
+use super::constants::{AUTOCOMMIT, AUTOPUSH, ENCRYPT, LFS, OWNER, RULE_KEYS, TRACK, WHOLE};
+use crate::files::LinkMode;
+use crate::lua::{Config, Matcher, Rule, Track};
+use crate::output;
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, list: Table| {
@@ -42,26 +46,69 @@ fn rule(entry: &Table) -> mlua::Result<Rule> {
     let link: Option<String> = entry.get(LINK)?;
     let conflict: Option<String> = entry.get(CONFLICT)?;
     let on_change: Option<String> = entry.get(ON_CHANGE)?;
-    let ignore: Option<bool> = entry.get(IGNORE)?;
+    let track = track(entry.get(TRACK)?)?;
     let mode: Option<String> = entry.get(MODE)?;
     let owner: Option<String> = entry.get(OWNER)?;
     let encrypt: Option<bool> = entry.get(ENCRYPT)?;
     let lfs: Option<bool> = entry.get(LFS)?;
     let autocommit: Option<bool> = entry.get(AUTOCOMMIT)?;
     let autopush: Option<bool> = entry.get(AUTOPUSH)?;
+    let whole: Option<bool> = entry.get(WHOLE)?;
     tracked(&pattern, lfs, encrypt)?;
+    placed_whole(whole, link.as_deref(), encrypt)?;
+    adopted(&pattern, track)?;
 
     Ok(
         Rule::new(pattern, link_mode(link)?, conflict_policy(conflict)?)
             .with_on_change(on_change)
-            .with_ignore(ignore)
-            .with_mode(mode.map(|raw| mode_bits(&raw, "a rule")).transpose()?)
+            .with_track(track)
+            .with_mode(placed_mode(mode)?)
             .with_owner(owner.map(|raw| owner_name(&raw, "a rule")).transpose()?)
             .with_encrypt(encrypt)
             .with_lfs(lfs)
             .with_autocommit(autocommit)
-            .with_autopush(autopush),
+            .with_autopush(autopush)
+            .with_whole(whole),
     )
+}
+
+fn placed_mode(raw: Option<String>) -> mlua::Result<Option<u32>> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+
+    let bits = mode_bits(&raw, "a rule")?;
+    if let Some(names) = special_bits(bits) {
+        output::warn(format!(
+            "`{API}.rules`: `{MODE}` {raw} asks for {names} on every file it places"
+        ));
+    }
+
+    Ok(Some(bits))
+}
+
+fn placed_whole(
+    whole: Option<bool>,
+    link: Option<&str>,
+    encrypt: Option<bool>,
+) -> mlua::Result<()> {
+    if whole != Some(true) {
+        return Ok(());
+    }
+    if link == Some(LinkMode::Hard.name()) {
+        return Err(external(format!(
+            "a rule placing directories `{WHOLE}` takes `{LINK}` \"{}\" or \"{}\"",
+            LinkMode::Symbolic.name(),
+            LinkMode::Copy.name()
+        )));
+    }
+    if encrypt == Some(true) {
+        return Err(external(format!(
+            "a rule takes `{WHOLE}` or `{ENCRYPT}`, not both"
+        )));
+    }
+
+    Ok(())
 }
 
 fn tracked(pattern: &Matcher, lfs: Option<bool>, encrypt: Option<bool>) -> mlua::Result<()> {
@@ -80,6 +127,17 @@ fn tracked(pattern: &Matcher, lfs: Option<bool>, encrypt: Option<bool>) -> mlua:
     }
 
     Ok(())
+}
+
+fn adopted(pattern: &Matcher, track: Option<Track>) -> mlua::Result<()> {
+    if track != Some(Track::Auto) || pattern.rooted() {
+        return Ok(());
+    }
+
+    Err(external(format!(
+        "`{TRACK}` = `{}` needs a `{MATCH}` pattern opening on a name, luadot looks under it instead of walking your whole home",
+        Track::Auto.name()
+    )))
 }
 
 fn expressive(pattern: &Matcher) -> bool {
@@ -110,14 +168,14 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use crate::files::{ConflictPolicy, LinkMode};
-    use crate::lua::{Config, from_source};
+    use crate::lua::{Config, Track, from_source};
 
     fn configure(source: &str) -> Config {
         from_source(source).unwrap()
     }
 
     #[test]
-    fn override_the_defaults_for_matching_files() {
+    fn overrides_the_defaults() {
         let config = configure(
             r#"
             ld.opt.link("hard")
@@ -158,12 +216,12 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_marks_the_files_it_matches_as_never_managed() {
+    fn a_rule_marks_files_unmanaged() {
         let config = configure(
             r#"
             ld.rules({
-              { match = "*.swp", ignore = true },
-              { match = ".cache/**", ignore = true },
+              { match = "*.swp", track = "never" },
+              { match = ".cache/**", track = "never" },
             })
             "#,
         );
@@ -171,6 +229,41 @@ mod tests {
         assert!(config.is_ignored(Path::new(".vimrc.swp")));
         assert!(config.is_ignored(Path::new(".cache/nvim/log")));
         assert!(!config.is_ignored(Path::new(".vimrc")));
+    }
+
+    #[test]
+    fn a_rule_marks_files_adopted() {
+        let config = configure(
+            r#"
+            ld.rules({
+              { match = ".config/nvim/**", track = "auto" },
+              { match = ".config/nvim/spell/**", track = "manual" },
+            })
+            "#,
+        );
+
+        assert_eq!(
+            config.track(Path::new(".config/nvim/init.lua")),
+            Track::Auto
+        );
+        assert_eq!(
+            config.track(Path::new(".config/nvim/spell/en.add")),
+            Track::Manual
+        );
+        assert_eq!(config.track(Path::new(".bashrc")), Track::Manual);
+        assert_eq!(config.adoption_roots(), [PathBuf::from(".config/nvim")]);
+    }
+
+    #[test]
+    fn rejects_an_adopted_pattern_without_a_root() {
+        for pattern in [r#"match = "**/*.toml""#, r#"regex = "\\.toml$""#] {
+            let err = format!(
+                "{:#}",
+                from_source(&format!(r#"ld.rules({{ {pattern}, track = "auto" }})"#)).unwrap_err()
+            );
+
+            assert!(err.contains("opening on a name"), "{pattern}");
+        }
     }
 
     #[test]
@@ -197,7 +290,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_marks_the_files_it_matches_as_encrypted() {
+    fn a_rule_marks_files_encrypted() {
         let config = configure(
             r#"
             ld.rules({
@@ -214,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_sends_the_files_it_matches_to_lfs_in_the_order_it_was_declared() {
+    fn a_rule_sends_files_to_lfs() {
         let config = configure(
             r#"
             ld.rules({
@@ -235,7 +328,29 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_rule_encrypting_what_it_sends_to_lfs() {
+    fn rejects_a_whole_rule_hard_linking() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = ".config/nvim", whole = true, link = "hard" })"#)
+                .unwrap_err()
+        );
+
+        assert!(err.contains("takes `link` \"symbolic\" or \"copy\""));
+    }
+
+    #[test]
+    fn rejects_a_whole_rule_encrypting() {
+        let err = format!(
+            "{:#}",
+            from_source(r#"ld.rules({ match = ".gnupg", whole = true, encrypt = true })"#)
+                .unwrap_err()
+        );
+
+        assert!(err.contains("takes `whole` or `encrypt`, not both"));
+    }
+
+    #[test]
+    fn rejects_encrypt_with_lfs() {
         let err = format!(
             "{:#}",
             from_source(r#"ld.rules({ match = ".secret.iso", lfs = true, encrypt = true })"#)
@@ -246,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn a_regex_matches_what_a_glob_cannot_express() {
+    fn a_regex_matches_beyond_a_glob() {
         let config = configure(
             r#"
             ld.rules({ regex = "^\\.config/(nvim|zsh)/", link = "symbolic" })

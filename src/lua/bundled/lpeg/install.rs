@@ -1,6 +1,10 @@
 use mlua::{Function, Lua, Table, Value};
 
-use super::constants::{INDEX, LPEG_MODULE, RE_MODULE, REQUIRE};
+use super::constants::{LPEG_MODULE, RE_MODULE};
+
+const REQUIRE: &str = "require";
+
+const INDEX: &str = "__index";
 
 pub fn install(lua: &Lua, ld: &Table) -> mlua::Result<()> {
     let meta = lua.create_table()?;

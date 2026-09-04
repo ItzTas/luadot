@@ -80,7 +80,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn rewrites_every_match_and_says_how_many() {
+    fn rewrites_every_match_and_counts() {
         assert_eq!(
             eval(
                 r#"
@@ -94,7 +94,7 @@ mod tests {
     }
 
     #[test]
-    fn a_function_builds_each_replacement_out_of_the_match() {
+    fn a_function_builds_each_replacement() {
         assert_eq!(
             eval(
                 r#"

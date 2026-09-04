@@ -112,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn place_writes_a_missing_destination_with_a_private_mode() {
+    fn place_writes_a_private_file() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join("nested/.netrc");
 
@@ -176,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn plain_status_weighs_the_contents_and_the_mode() {
+    fn plain_status_weighs_content_and_mode() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join("wg0.conf");
 

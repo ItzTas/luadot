@@ -1,6 +1,5 @@
 use anyhow::Result;
 
-use super::constants::HOOK_LABEL;
 use super::run::hook;
 use crate::files::SyncOutcome;
 use crate::output::{self, Tone};
@@ -36,7 +35,7 @@ impl Hooks {
     pub fn finish(&self, command: &str) -> Result<()> {
         for line in &self.lines {
             if self.dry_run {
-                output::entry(Tone::Muted, HOOK_LABEL, line);
+                output::entry(Tone::Muted, "run", line);
                 continue;
             }
 
@@ -52,7 +51,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_a_file_that_changed_records_its_command() {
+    fn only_a_changed_file_records() {
         let mut hooks = Hooks::default();
         hooks.record(SyncOutcome::Created, Some("created"));
         hooks.record(SyncOutcome::Replaced, Some("replaced"));

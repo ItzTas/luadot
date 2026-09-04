@@ -1,6 +1,12 @@
-use anstyle::Style;
+use anstyle::{AnsiColor, Style};
 
-use super::constants::STYLES;
+const STYLES: [(Tone, Style); 5] = [
+    (Tone::Good, AnsiColor::Green.on_default()),
+    (Tone::Warning, AnsiColor::Yellow.on_default()),
+    (Tone::Bad, AnsiColor::Red.on_default()),
+    (Tone::Strong, Style::new().bold()),
+    (Tone::Muted, Style::new().dimmed()),
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tone {

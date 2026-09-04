@@ -12,6 +12,12 @@
 ---| "skip"
 ---| "error"
 
+---How luadot picks a file up: `auto` adds it on its own, `manual` waits for `luadot add`, `never` leaves it alone.
+---@alias ld.Track
+---| "auto"
+---| "manual"
+---| "never"
+
 ---The tool that encrypts and decrypts managed files.
 ---@alias ld.Backend
 ---| "age"
@@ -90,17 +96,18 @@
 ---@field link? ld.LinkMode How the matching files are placed.
 ---@field conflict? ld.Conflict Answer when the system copy differs.
 ---@field on_change? string A command line that runs after `apply` or `tmpl alt` created or replaced one of those files.
----@field ignore? boolean Whether the matching files are left unmanaged.
+---@field track? ld.Track How luadot picks the matching files up: `"auto"` adds them on its own when `luadot add` runs with no path, `"manual"` waits for an explicit `luadot add`, `"never"` leaves them unmanaged. `"auto"` needs a `match` pattern opening on a literal name, since that is where luadot looks.
 ---@field mode? string Three or four octal digits, the permission bits a matching file is placed with, and put back when they drift. An encrypted file carries `600` without it.
 ---@field owner? string `"user"` or `"user:group"`, who owns a matching file once placed, set through `chown`.
 ---@field encrypt? boolean Whether `add` stores the matching files encrypted.
 ---@field lfs? boolean Whether the matching files are stored in Git LFS. Needs `match`, since git attributes have no regular expressions, and does not go with `encrypt`. luadot writes the patterns into the repository's `.local/share/luadot/git/attributes`, between the `# luadot:lfs` markers, and copies that file into `.git/info/attributes`.
 ---@field autocommit? boolean Whether `add`, `rm` and `mv` commit on their own once one of those files is staged.
 ---@field autopush? boolean Whether that commit is pushed too. It commits on its own, so `autocommit` comes with it, and `autocommit = false` holds both back.
+---@field whole? boolean Whether a matching directory is placed whole, as one symlink or one copy of the tree, instead of file by file. Takes `link` `"symbolic"` or `"copy"`, and every file inside is stored: nothing under the directory may be excluded, encrypted, or a template.
 
 ---A command of the configuration's own, as `ld.task` takes it.
 ---@class ld.Task
----@field about? string One line saying what the task does, shown by `luadot task --list`.
+---@field about? string One line saying what the task does, shown by `luadot task`.
 ---@field run fun(argv: string[]): string? What runs, handed everything after the task name. Whatever it returns is written as a line; an error stops the command. Required.
 
 ---A file a template produces, as `ld.alt.out` takes it or `luadot.lua` returns it.
@@ -114,6 +121,11 @@
 
 ---A file of the template as `ld.alt.file` hands it over, linked to its destination the way a managed file is.
 ---@class ld.File
+
+---One fragment of the file `ld.alt.concat` builds, and the condition it lands under.
+---@class ld.Section
+---@field content string The text of the fragment, whatever produced it. Required.
+---@field when? boolean Whether the section lands. Defaults to `true`, and only `false` leaves it out; the `content` is already built either way.
 
 ---A class declaration.
 ---@class ld.Class
@@ -142,10 +154,16 @@
 ---@field branch? string The branch to check out. Defaults to the remote's `HEAD`.
 ---@field depth? integer How many commits of history to fetch, one or more; `1` is the commit the branch points at alone. Defaults to all of it.
 
----A function to run before the command and one after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
+---A function to run before the command and one after it, and what its hints print. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.Around
 ---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
 ---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
+---@field hints? (fun(hint: ld.Hint): string?)|false Runs for every hint the command would write, in place of it. `false` silences them, and `ld.opt.hints(false)` silences the hints of every command.
+
+---One of the lines a command writes to say which call comes next, as it hands it to `hints`.
+---@class ld.Hint
+---@field name string Which hint it is: for `status`, the section it opens, like `"differs"`.
+---@field default string The line it stands in for.
 
 ---What `diff` prints and which program compares the two sides, and a function to run before and after it. Whatever a function returns is written as a line; a function returning nothing writes nothing.
 ---@class ld.DiffOptions
@@ -153,6 +171,7 @@
 ---@field args? string|string[] Extra arguments for whichever program compares the two sides; right after `diff` when git runs.
 ---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 ---@field entry? (fun(file: ld.DiffFile): string?)|false Runs for every drifted file, in place of the line the command would have written. `false` silences the line.
+---@field hints? (fun(hint: ld.Hint): string?)|false Runs for every hint the command would write, in place of it. `false` silences them, and `ld.opt.hints(false)` silences the hints of every command.
 ---@field render? (fun(files: ld.DiffFile[]): string?)|false Runs once, with every drifted file, and takes the whole report over; nothing is compared afterwards. `false` reports the files without diffing them.
 ---@field summary? (fun(counts: ld.DiffCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
 ---@field tool? string|string[] The program comparing the two sides instead of `git diff`, with its arguments; it gets the two sides as two directories, its last two arguments. Exit status 0 or 1 counts as success.
@@ -162,12 +181,13 @@
 ---@field after? (fun(): string?)|false Runs once the command is done; a command that fails stops before it. Calls add up, in order; `false` drops the functions registered so far.
 ---@field before? (fun(): string?)|false Runs once `config.lua` ran, before the command does anything. Calls add up, in order; `false` drops the functions registered so far.
 ---@field entry? (fun(file: ld.StatusFile): string?)|false Runs for every inspected file, synced ones included, in place of the line and the sections the command would have written. `false` silences them.
+---@field hints? (fun(hint: ld.Hint): string?)|false Runs for every hint the command would write, in place of it. `false` silences them, and `ld.opt.hints(false)` silences the hints of every command.
 ---@field render? (fun(files: ld.StatusFile[]): string?)|false Runs once, with every inspected file, and takes the whole report over.
 ---@field summary? (fun(counts: ld.StatusCounts): string?)|string|false Replaces the line each side opens with; a string stands as it is, `false` silences it.
 
 ---A drifted file, as `diff` hands it to `entry` and `render`.
 ---@class ld.DiffFile
----@field path string The path as the repository writes it: `.bashrc`.
+---@field path string The path as you use it: `.bashrc`, and `.netrc` for a secret the repository keeps as `.netrc.age`.
 ---@field system string The absolute path of the system copy.
 ---@field side ld.Side `"repository"` for a managed file, `"generated"` for one a template produced.
 ---@field state ld.DiffState Where the file stands.
@@ -176,7 +196,7 @@
 
 ---An inspected file, synced or not, as `status` hands it to `entry` and `render`.
 ---@class ld.StatusFile
----@field path string The path as the repository writes it: `.bashrc`.
+---@field path string The path as you use it: `.bashrc`, and `.netrc` for a secret the repository keeps as `.netrc.age`.
 ---@field system string The absolute path of the system copy.
 ---@field side ld.Side `"repository"` for a managed file, `"generated"` for one a template produced.
 ---@field state ld.StatusState Where the file stands.
@@ -219,10 +239,11 @@
 ---@field backup_dir? string Where those copies land. `~` and a relative path resolve against your home directory. Defaults to `~/.local/share/luadot/backups`.
 ---@field backup_keep? integer How many backups to keep, one or more; the oldest ones are dropped once there are more. Defaults to keeping every one of them.
 ---@field conflict? ld.Conflict Default answer when `apply` finds a differing file already on the system.
+---@field hints? boolean Whether a command writes the lines saying which call comes next. Defaults to `true`, and a `hints` given to `ld.on` wins over it.
 ---@field lfs? boolean Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
 ---@field link? ld.LinkMode Default strategy used to link a managed file.
 ---@field passphrase_warn? boolean Whether passphrase mode says it is weaker than keys. Defaults to `true`.
----@field pkg_warn? boolean Whether a call is warned about where it is slow or has no effect. Defaults to `true`.
+---@field pkg_warn? boolean Whether a call is warned about where it has no effect. Defaults to `true`.
 ---@field repo_dir? string The repository luadot manages, winning over the one `clone` left behind. `~` and a relative path resolve against your home directory.
 
 ---The table beside the text, styling the line.
@@ -245,12 +266,6 @@
 ---@class ld.SetupOptions
 ---@field order? string[] The names that run first, in this order; the rest follow.
 
----One graphics card.
----@class ld.Card
----@field vendor string A short name (`nvidia`, `amd`, `intel`), or the PCI identifier when the vendor is not a known one.
----@field name string The model as `lspci` reports it, empty when `lspci` is not installed.
----@field driver string The kernel driver bound to the card.
-
 ---The interface luadot installs in every script it runs: `config.lua`, `bootstrap.lua`, the setup scripts, the templates and `luadot exec`. A call does the same thing wherever it runs, on the one configuration the command is using.
 ---@class ld
 ---@field surface ld.Surface Which script is running. `config.lua` runs before every command, so expensive work belongs elsewhere; `bootstrap.lua` runs once.
@@ -258,7 +273,7 @@
 ---@field re table LPeg's `re` module, the table `require("re")` returns, loaded when first reached.
 ld = {}
 
----Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, marks them as never managed, marks them as encrypted, stores them in Git LFS, and commits and pushes them on their own. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.
+---Overrides `link` and `conflict` for the files a glob or a regular expression matches, names an `on_change` command for them, sets the `mode` and `owner` they are placed with, says how they are `track`ed, marks them as encrypted, stores them in Git LFS, commits and pushes them on their own, and places matching directories `whole`. A single rule needs no list around it. Calls accumulate, and the last matching rule wins, key by key.
 ---@param rules ld.Rule|ld.Rule[]
 function ld.rules(rules) end
 
@@ -307,6 +322,12 @@ function ld.alt.exists(name) end
 ---@return string[]
 function ld.alt.glob(pattern) end
 
+---The sections joined into one string, in the order they are given, with `separator` between them; a newline when none is given. A string is a section carrying only `content`.
+---@param sections (string|ld.Section)[]
+---@param separator? string
+---@return string
+function ld.alt.concat(sections, separator) end
+
 ---That value as JSON, indented, with sorted keys. A table is a list or a table of names, never both. The same call as `ld.json.encode`.
 ---@param value any
 ---@return string
@@ -328,7 +349,7 @@ ld.class = {}
 ---@return string?
 function ld.class.get(name) end
 
----Runs commands and returns their standard output, trailing newline removed. A non-zero exit stops the script; standard error and standard input stay on the terminal. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
+---Runs commands and returns their standard output, trailing newline removed. A non-zero exit stops the script; standard error and standard input stay on the terminal. Slow: it belongs in `bootstrap.lua` or a setup script.
 ---@class ld.cmd
 ---@field [string] fun(...: string): string Indexed by a program name, runs the program itself with no shell in the way, every argument literal, and returns what it printed: `ld.cmd.git("status")`.
 ---@overload fun(line: string): string
@@ -393,7 +414,7 @@ function ld.fs.read(path) end
 ---@param text string
 function ld.fs.write(path, text) end
 
----Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else; `ld.git.clone` and `ld.git.at` reach other repositories. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
+---Runs git inside the managed repository: literal arguments, standard output returned, a non-zero status stops the script. A call before a repository is set stops instead of running git somewhere else; `ld.git.clone` and `ld.git.at` reach other repositories. Slow: it belongs in `bootstrap.lua` or a setup script.
 ---@class ld.git
 ---@overload fun(...: string): string
 ld.git = {}
@@ -424,7 +445,7 @@ function ld.json.encode(value) end
 ---@return any
 function ld.json.decode(text) end
 
----One call per command, taking a table: functions to run `before` and `after` the command, and what `status` and `diff` print. Every function registered for a moment runs, in the order it was registered; what `status` and `diff` print is replaced by a later call, key by key. Every command is customized apart.
+---One call per command, taking a table: functions to run `before` and `after` the command, what its hints print, and what `status` and `diff` print. Every function registered for a moment runs, in the order it was registered; the rest is replaced by a later call, key by key. Every command is customized apart.
 ---@class ld.on
 ld.on = {}
 
@@ -488,6 +509,10 @@ function ld.on.push(options) end
 ---@param options ld.Around
 function ld.on.rekey(options) end
 
+---Runs a function before and after `relink`.
+---@param options ld.Around
+function ld.on.relink(options) end
+
 ---Runs a function before and after `restore`.
 ---@param options ld.Around
 function ld.on.restore(options) end
@@ -507,6 +532,10 @@ function ld.on.status(options) end
 ---Runs a function before and after `sync`.
 ---@param options ld.Around
 function ld.on.sync(options) end
+
+---Runs a function before and after `take`.
+---@param options ld.Around
+function ld.on.take(options) end
 
 ---The two `tmpl` actions, customized apart.
 ---@class ld.on.tmpl
@@ -553,6 +582,10 @@ function ld.opt.backup_keep(count) end
 ---@param policy ld.Conflict
 function ld.opt.conflict(policy) end
 
+---Whether a command writes the lines saying which call comes next. Defaults to `true`, and a `hints` given to `ld.on` wins over it.
+---@param enabled boolean
+function ld.opt.hints(enabled) end
+
 ---Whether luadot installs the Git LFS filters and writes the attributes the rules ask for. Defaults to `true`, and has no effect without `git-lfs` on your PATH.
 ---@param enabled boolean
 function ld.opt.lfs(enabled) end
@@ -565,7 +598,7 @@ function ld.opt.link(mode) end
 ---@param enabled boolean
 function ld.opt.passphrase_warn(enabled) end
 
----Whether a call is warned about where it is slow or has no effect. Defaults to `true`.
+---Whether a call is warned about where it has no effect. Defaults to `true`.
 ---@param enabled boolean
 function ld.opt.pkg_warn(enabled) end
 
@@ -586,7 +619,7 @@ ld.path = {}
 ---@class ld.pkg
 ld.pkg = {}
 
----Installs packages through the system package manager. Slow: it belongs in `bootstrap.lua` or a setup script, and warns elsewhere.
+---Installs packages through the system package manager. Slow: it belongs in `bootstrap.lua` or a setup script.
 ---@param packages string|string[]
 function ld.pkg.install(packages) end
 
@@ -685,7 +718,7 @@ ld.rtp = {}
 ---@param dir string
 function ld.rtp.add(dir) end
 
----The setup scripts of the repository, under `.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`, and warns elsewhere.
+---The setup scripts of the repository, under `.config/luadot/setup/`: `<name>.lua`, `<name>.sh`, or a `<name>/` directory holding an `init.lua` or an `init.sh`. Running one is slow: it belongs in `bootstrap.lua`.
 ---@class ld.setup
 ---@overload fun(name: string)
 ld.setup = {}
@@ -697,27 +730,3 @@ function ld.setup.list() end
 ---Runs every setup script, the ones `order` names first.
 ---@param options? ld.SetupOptions
 function ld.setup.all(options) end
-
----The machine the script is running on.
----@class ld.sys
----@field ram integer The memory of the machine, in bytes, the kernel's raw `MemTotal`: a little under the installed memory, so round it yourself: `math.ceil(ld.sys.ram / 1024 ^ 3)`.
-ld.sys = {}
-
----`true` on a machine with a battery of its own, `false` on one without; the battery of a mouse or a keyboard does not count.
----@return boolean
-function ld.sys.has_battery() end
-
----The first card, and every card as a list: `for _, card in ipairs(ld.sys.gpu)`.
----@class ld.sys.gpu
----@field vendor string A short name (`nvidia`, `amd`, `intel`), or the PCI identifier when the vendor is not a known one.
----@field name string The model as `lspci` reports it, empty when `lspci` is not installed.
----@field driver string The kernel driver bound to the card.
----@field [integer] ld.Card Every card, in order.
-ld.sys.gpu = {}
-
----The host.
----@class ld.sys.host
----@field name string The hostname.
----@field os string The operating system, as Rust names it: `linux`.
----@field arch string The architecture: `x86_64`, `aarch64`.
-ld.sys.host = {}

@@ -33,7 +33,12 @@ binaries:
       artifacts: true
   variables:
     CARGO_HOME: $CI_PROJECT_DIR/.cargo
+    CARGO_BUILD_JOBS: "2"
     GIT_DEPTH: 0
+    KUBERNETES_MEMORY_REQUEST: 1Gi
+    KUBERNETES_MEMORY_LIMIT: 4Gi
+    KUBERNETES_CPU_REQUEST: 500m
+    KUBERNETES_CPU_LIMIT: "2"
   cache:
     key:
       files:

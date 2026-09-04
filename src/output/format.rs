@@ -1,9 +1,9 @@
 use std::fmt::Display;
 
-use super::constants::{GAP, PREFIX};
+use super::constants::GAP;
 
 pub fn notice(message: impl Display) -> String {
-    format!("{PREFIX}: {message}")
+    format!("luadot: {message}")
 }
 
 pub fn column(text: impl Display, width: usize) -> String {

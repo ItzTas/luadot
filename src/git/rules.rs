@@ -2,14 +2,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use super::constants::RULES_DIR;
 use crate::utils::{data_dir, home_dir, managed_relative};
 
 pub fn dir(command: &str, repo: &Path) -> Result<PathBuf> {
-    let relative =
-        managed_relative(&home_dir()?, &data_dir()?.join(RULES_DIR)).with_context(|| {
-            format!("{command}: the data directory cannot hold the rules git reads")
-        })?;
+    let relative = managed_relative(&home_dir()?, &data_dir()?.join("git")).with_context(|| {
+        format!("{command}: the data directory cannot hold the rules git reads")
+    })?;
 
     Ok(repo.join(relative))
 }
@@ -19,7 +17,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_rules_live_where_the_data_directory_mirrors_into_the_repository() {
+    fn rules_live_under_the_data_mirror() {
         let repo = Path::new("/repo");
         let home = home_dir().unwrap();
         let data = data_dir().unwrap();

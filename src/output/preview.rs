@@ -1,14 +1,22 @@
 use std::fmt::Display;
+use std::sync::OnceLock;
 
 use super::print::entry;
 use super::tone::Tone;
 use crate::files::SyncOutcome;
 
+static UNCHANGED: OnceLock<bool> = OnceLock::new();
+
 const LABELS: [(SyncOutcome, &str, &str, Tone); 4] = [
     (SyncOutcome::Created, "create", "created", Tone::Good),
     (SyncOutcome::Replaced, "replace", "replaced", Tone::Warning),
     (SyncOutcome::Skipped, "skip", "skipped", Tone::Muted),
-    (SyncOutcome::AlreadySynced, "", "unchanged", Tone::Muted),
+    (
+        SyncOutcome::AlreadySynced,
+        "unchanged",
+        "unchanged",
+        Tone::Muted,
+    ),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,11 +25,23 @@ enum Phase {
     Settled,
 }
 
+pub fn set_unchanged(shown: bool) {
+    let _ = UNCHANGED.set(shown);
+}
+
+fn unchanged_shown() -> bool {
+    UNCHANGED.get().copied().unwrap_or(false)
+}
+
 pub fn preview(outcome: SyncOutcome, path: impl Display) {
     announce(display(outcome, Phase::Planned), path);
 }
 
 pub fn report(outcome: SyncOutcome, path: impl Display) {
+    if outcome == SyncOutcome::AlreadySynced && !unchanged_shown() {
+        return;
+    }
+
     announce(display(outcome, Phase::Settled), path);
 }
 

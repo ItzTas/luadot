@@ -2,7 +2,9 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::constants::{CONFIG_KEY, DIR};
+const DIR: &str = ".githooks";
+
+const CONFIG_KEY: &str = "core.hooksPath";
 
 pub fn install() {
     let Ok(manifest) = env::var("CARGO_MANIFEST_DIR") else {

@@ -9,7 +9,7 @@ mod status;
 mod table;
 
 pub use command::Command;
-pub use constants::NAMESPACE;
+pub use constants::{HINTS, NAMESPACE};
 #[cfg(feature = "meta")]
 pub use describe::describe;
 pub use table::table;

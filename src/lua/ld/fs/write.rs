@@ -27,7 +27,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn writes_the_text_and_the_directories_leading_to_the_file() {
+    fn writes_the_text_and_its_parents() {
         let home = tempfile::tempdir().unwrap();
 
         eval(
@@ -43,7 +43,7 @@ mod tests {
     }
 
     #[test]
-    fn a_path_that_cannot_be_written_is_reported() {
+    fn an_unwritable_path_is_reported() {
         let home = tempfile::tempdir().unwrap();
         std::fs::write(home.path().join("plugins"), "a file, not a directory").unwrap();
 

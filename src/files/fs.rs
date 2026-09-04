@@ -1,6 +1,6 @@
 use std::fs::{File, Metadata, OpenOptions, Permissions};
 use std::io::Write;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -27,6 +27,30 @@ pub fn create_parent(command: &str, path: &Path) -> Result<()> {
     };
     std::fs::create_dir_all(parent)
         .with_context(|| format!("{command}: failed to create {}", parent.display()))
+}
+
+pub fn private_dir(command: &str, dir: &Path, mode: u32) -> Result<()> {
+    let failed = || format!("{command}: failed to create {}", dir.display());
+
+    if let Some(above) = dir.parent() {
+        std::fs::create_dir_all(above).with_context(failed)?;
+    }
+    match std::fs::DirBuilder::new().mode(mode).create(dir) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => narrowed(command, dir, mode),
+        Err(err) => Err(err).with_context(failed),
+    }
+}
+
+fn narrowed(command: &str, dir: &Path, mode: u32) -> Result<()> {
+    let meta = std::fs::metadata(dir)
+        .with_context(|| format!("{command}: failed to inspect {}", dir.display()))?;
+    if mode_bits(&meta) == mode {
+        return Ok(());
+    }
+
+    std::fs::set_permissions(dir, Permissions::from_mode(mode))
+        .with_context(|| format!("{command}: failed to set the mode of {}", dir.display()))
 }
 
 pub fn prune_parents(command: &str, root: &Path, file: &Path) -> Result<()> {
@@ -61,6 +85,19 @@ pub fn link_target(command: &str, source: &Path) -> Result<(Metadata, Option<Pat
         .with_context(|| format!("{command}: failed to read {}", source.display()))?;
 
     Ok((meta, Some(target)))
+}
+
+pub fn link_at(command: &str, path: &Path) -> Result<Option<PathBuf>> {
+    let Some(meta) = metadata(command, path)? else {
+        return Ok(None);
+    };
+    if !meta.file_type().is_symlink() {
+        return Ok(None);
+    }
+
+    std::fs::read_link(path)
+        .map(Some)
+        .with_context(|| format!("{command}: failed to read {}", path.display()))
 }
 
 pub fn read_contents(command: &str, path: &Path) -> Result<Vec<u8>> {
@@ -100,24 +137,56 @@ pub fn write_contents(
     let failed = || format!("{command}: failed to write {}", dest.display());
 
     let mut options = OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    options.write(true).create_new(true);
     if let Some(mode) = mode {
         options.mode(mode);
     }
 
     let file = options.open(dest).with_context(failed)?;
-    persist(file, contents).with_context(failed)?;
+    if let Some(mode) = mode {
+        file.set_permissions(Permissions::from_mode(mode))
+            .with_context(|| format!("{command}: failed to set the mode of {}", dest.display()))?;
+    }
 
-    let Some(mode) = mode else {
-        return Ok(());
-    };
-
-    std::fs::set_permissions(dest, Permissions::from_mode(mode))
-        .with_context(|| format!("{command}: failed to set the mode of {}", dest.display()))
+    persist(file, contents).with_context(failed)
 }
 
 fn persist(mut file: File, contents: &[u8]) -> std::io::Result<()> {
     file.write_all(contents)?;
 
     file.sync_all()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bits(path: &Path) -> u32 {
+        mode_bits(&std::fs::symlink_metadata(path).unwrap())
+    }
+
+    #[test]
+    fn a_private_directory_is_narrowed_whatever_it_was() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("share/luadot");
+
+        private_dir("state", &dir, 0o700).unwrap();
+        assert_eq!(bits(&dir), 0o700);
+
+        std::fs::set_permissions(&dir, Permissions::from_mode(0o755)).unwrap();
+        private_dir("state", &dir, 0o700).unwrap();
+        assert_eq!(bits(&dir), 0o700);
+    }
+
+    #[test]
+    fn a_taken_name_is_never_written_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("staged");
+        std::fs::write(&dest, "planted").unwrap();
+
+        let err = write_contents("apply", &dest, b"mine", None).unwrap_err();
+
+        assert!(err.to_string().contains("failed to write"));
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "planted");
+    }
 }

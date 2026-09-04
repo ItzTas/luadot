@@ -5,7 +5,7 @@ use tracing::debug;
 
 use super::atomic::replace_file;
 use super::constants::COMMAND;
-use super::fs::{exists, regular_file};
+use super::fs::{exists, link_target, regular_file};
 use super::placement::Placement;
 use super::{LinkMode, link};
 
@@ -57,9 +57,7 @@ fn sync(
     source: &Path,
     dest: &Path,
 ) -> Result<SyncOutcome> {
-    if !source.is_file() {
-        bail!("files: {} is not a file", source.display());
-    }
+    placeable(placement, source)?;
 
     if !exists(COMMAND, dest)? {
         place(placement, source, dest)?;
@@ -87,12 +85,38 @@ pub fn refused(command: &str, policy: ConflictPolicy, dest: &Path) -> Result<Opt
     }
 }
 
+fn placeable(placement: Placement, source: &Path) -> Result<()> {
+    let (meta, target) = link_target(COMMAND, source)?;
+    if target.is_none() {
+        if !meta.file_type().is_file() {
+            bail!("files: {} is not a file", source.display());
+        }
+        return Ok(());
+    }
+
+    if placement.mode().is_none() && placement.owner().is_none() {
+        return Ok(());
+    }
+
+    bail!(
+        "files: {} is a symlink, so a `mode` or an `owner` would land on what it points at",
+        source.display()
+    )
+}
+
 fn place(placement: Placement, source: &Path, dest: &Path) -> Result<()> {
     replace_file(COMMAND, dest, |staged| {
         link(placement.link(), source, staged)?;
 
-        placement.set_on(COMMAND, staged)
+        placement.set_on(COMMAND, attributed(placement.link(), source, staged))
     })
+}
+
+fn attributed<'a>(mode: LinkMode, source: &'a Path, staged: &'a Path) -> &'a Path {
+    match mode {
+        LinkMode::Symbolic => source,
+        LinkMode::Hard | LinkMode::Copy => staged,
+    }
 }
 
 pub(super) fn already_synced(mode: LinkMode, source: &Path, dest: &Path) -> Result<bool> {
@@ -182,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn a_hard_link_the_filesystems_refused_reads_as_synced_on_the_next_run() {
+    fn a_refused_hard_link_reads_as_synced() {
         let Some(elsewhere) = other_device() else {
             return;
         };
@@ -215,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn creates_a_hard_link_when_destination_is_missing() {
+    fn creates_a_hard_link() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
         let dest = dir.path().join("dest");
@@ -238,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn symbolic_mode_creates_a_symlink_and_detects_it() {
+    fn symbolic_mode_creates_a_symlink() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
         let dest = dir.path().join("dest");
@@ -272,7 +296,35 @@ mod tests {
     }
 
     #[test]
-    fn a_mode_lands_on_the_placed_file_and_is_put_back_when_it_drifts() {
+    fn a_symlink_entry_refuses_a_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = dir.path().join("outside");
+        let source = dir.path().join("source");
+        let dest = dir.path().join("dest");
+        write(&outside, "root only");
+        std::os::unix::fs::symlink(&outside, &source).unwrap();
+
+        let err = sync_file(
+            ConflictPolicy::Overwrite,
+            placed(LinkMode::Hard).with_mode(Some(0o777)),
+            &source,
+            &dest,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert_eq!(
+            err,
+            format!(
+                "files: {} is a symlink, so a `mode` or an `owner` would land on what it points at",
+                source.display()
+            )
+        );
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn a_mode_is_restored_on_drift() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = tempfile::tempdir().unwrap();

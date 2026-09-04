@@ -3,16 +3,16 @@ use std::path::Path;
 use anyhow::Result;
 use tracing::debug;
 
-use super::constants::{COMMIT, COMMITTED, MESSAGE, MESSAGE_FLAG, MESSAGE_FROM, STAGED};
+use super::constants::MESSAGE;
 use super::run::{present, run, succeeds};
 use crate::utils;
 
 pub fn staged(repo: &Path) -> bool {
-    present(repo) && !succeeds(repo, STAGED)
+    present(repo) && !succeeds(repo, ["diff", "--cached", "--quiet"])
 }
 
 pub fn committed(repo: &Path) -> bool {
-    present(repo) && succeeds(repo, COMMITTED)
+    present(repo) && succeeds(repo, ["rev-parse", "--verify", "HEAD"])
 }
 
 pub fn commit(command: &str, repo: &Path, message: &str) -> Result<bool> {
@@ -21,7 +21,7 @@ pub fn commit(command: &str, repo: &Path, message: &str) -> Result<bool> {
     }
 
     debug!(repo = %repo.display(), message, "committing");
-    run(command, repo, [COMMIT, MESSAGE_FLAG, message])?;
+    run(command, repo, ["commit", "-m", message])?;
 
     Ok(true)
 }
@@ -35,7 +35,7 @@ fn default(host: &str) -> String {
         return MESSAGE.to_string();
     }
 
-    format!("{MESSAGE_FROM} {host}")
+    format!("sync from {host}")
 }
 
 #[cfg(test)]
@@ -56,7 +56,7 @@ mod tests {
     }
 
     #[test]
-    fn a_staged_file_becomes_a_commit_carrying_the_message() {
+    fn a_staged_file_becomes_a_commit() {
         let repo = repository();
         stage(repo.path(), "tracked");
 

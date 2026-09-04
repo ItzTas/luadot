@@ -1,8 +1,9 @@
 use anyhow::{Context, Result, bail};
 
-use super::constants::{JSON_FAILED, JSON_FLAG, USAGE};
 use super::render::render;
 use crate::lua::ld::walker;
+
+const JSON_FLAG: &str = "--json";
 
 pub fn generate(args: impl Iterator<Item = String>) -> Result<String> {
     let args: Vec<String> = args.collect();
@@ -10,8 +11,10 @@ pub fn generate(args: impl Iterator<Item = String>) -> Result<String> {
 
     match args.as_slice() {
         [] => Ok(render(&walker())),
-        [flag] if *flag == JSON_FLAG => walker().to_json_pretty().context(JSON_FAILED),
-        _ => bail!("{USAGE}"),
+        [flag] if *flag == JSON_FLAG => walker()
+            .to_json_pretty()
+            .context("luadot-meta: failed to serialize the description"),
+        _ => bail!("luadot-meta: usage: luadot-meta [--json]"),
     }
 }
 
@@ -20,7 +23,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_json_carries_the_description_for_the_documentation_generator() {
+    fn the_json_carries_the_description() {
         let json = generate([JSON_FLAG.to_string()].into_iter()).unwrap();
         let walker: tealr::TypeWalker = serde_json::from_str(&json).unwrap();
 

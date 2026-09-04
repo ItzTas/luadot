@@ -4,7 +4,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use super::constants::{IDENTITY_FILE, SECRET_MODE, SHELL, SHELL_ARG};
+use super::constants::{SECRET_MODE, SHELL, SHELL_ARG};
 use super::edit::Workspace;
 use crate::files::write_mode;
 
@@ -94,7 +94,7 @@ fn provide(command: &str, provider: &Provider) -> Result<(Workspace, PathBuf)> {
     }
 
     let workspace = Workspace::create(command)?;
-    let path = workspace.file(OsStr::new(IDENTITY_FILE));
+    let path = workspace.file(OsStr::new("identity"));
     write_mode(command, &path, &output.stdout, SECRET_MODE)?;
 
     Ok((workspace, path))
@@ -107,7 +107,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_provided_identity_lands_in_a_private_file() {
+    fn a_provided_identity_is_private() {
         let mut identity = Identity::new(Some(Key::Command(Provider::Line(
             "printf 'AGE-SECRET-KEY-1TEST\n'".to_string(),
         ))));
@@ -125,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn the_provider_runs_once_for_the_whole_command() {
+    fn the_provider_runs_once() {
         let dir = tempfile::tempdir().unwrap();
         let counter = dir.path().join("runs");
         let mut identity = Identity::new(Some(Key::Command(Provider::Line(format!(
@@ -141,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn dropping_the_identity_takes_the_provided_file_along() {
+    fn dropping_it_removes_the_file() {
         let path = {
             let mut identity = Identity::new(Some(Key::Command(Provider::Line(
                 "printf 'AGE-SECRET-KEY-1TEST\n'".to_string(),

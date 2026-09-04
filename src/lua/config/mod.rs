@@ -3,16 +3,19 @@ pub mod constants;
 mod custom;
 mod diff;
 mod file;
+mod hint;
 mod load;
 mod report;
 mod starter;
 mod status;
 mod task;
+mod trust;
 mod types;
 
 pub use around::{Around, Chain, Moment};
 pub use custom::{Call, Custom};
 pub use diff::{Diff, DiffCounts, DiffFile, DiffState, Tool};
+pub use hint::Hint;
 #[cfg(test)]
 pub use load::from_source;
 pub use load::{config_path, load_config};
@@ -20,4 +23,4 @@ pub use report::Report;
 pub use starter::place as place_starter;
 pub use status::{StatusCounts, StatusFile};
 pub use task::Task;
-pub use types::{Class, Config, Matcher, Rule, Shared};
+pub use types::{Class, Config, Matcher, Rule, Shared, Track};

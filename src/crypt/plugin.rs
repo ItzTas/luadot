@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use anyhow::{Result, bail};
 
 use super::backend::Backend;
-use super::constants::{EXECUTABLE, PLUGIN_BINARY, PLUGIN_IDENTITY, PLUGIN_RECIPIENT};
+const EXECUTABLE: u32 = 0o111;
 use super::lock::Lock;
 
 static CHECKED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
@@ -104,12 +104,12 @@ fn remember<T: Ord>(memo: &Mutex<BTreeSet<T>>, key: T) {
 }
 
 fn binary(name: &str) -> String {
-    format!("{PLUGIN_BINARY}{name}")
+    format!("age-plugin-{name}")
 }
 
 fn from_recipient(recipient: &str) -> Option<String> {
     let lowered = recipient.to_lowercase();
-    let name = lowered.rsplit_once('1')?.0.strip_prefix(PLUGIN_RECIPIENT)?;
+    let name = lowered.rsplit_once('1')?.0.strip_prefix("age1")?;
     match name.is_empty() {
         true => None,
         false => Some(name.to_string()),
@@ -131,7 +131,7 @@ fn from_identity(contents: &str) -> Vec<String> {
 
 fn named(line: &str) -> Option<String> {
     let name = line
-        .strip_prefix(PLUGIN_IDENTITY)?
+        .strip_prefix("AGE-PLUGIN-")?
         .rsplit_once('-')?
         .0
         .to_lowercase();
@@ -161,7 +161,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_identity_file_names_every_plugin_once() {
+    fn names_every_plugin_once() {
         let contents = concat!(
             "AGE-PLUGIN--1QQQPQ\n",
             "AGE-SECRET-KEY-1QQQPQ\n",

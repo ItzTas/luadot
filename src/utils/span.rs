@@ -1,4 +1,17 @@
-use super::constants::{SPAN_SUFFIXES, SPAN_UNITS};
+const SPAN_UNITS: [(u64, &str); 4] = [
+    (86_400, "day"),
+    (3_600, "hour"),
+    (60, "minute"),
+    (1, "second"),
+];
+
+const SPAN_SUFFIXES: [(&str, u64); 5] = [
+    ("s", 1),
+    ("m", 60),
+    ("h", 3_600),
+    ("d", 86_400),
+    ("w", 604_800),
+];
 
 pub fn seconds(raw: &str) -> Option<u64> {
     let trimmed = raw.trim();
@@ -44,7 +57,7 @@ mod tests {
     }
 
     #[test]
-    fn a_span_is_told_in_the_largest_unit_that_fits() {
+    fn a_span_uses_the_largest_unit() {
         assert_eq!(span(1), "1 second");
         assert_eq!(span(59), "59 seconds");
         assert_eq!(span(60), "1 minute");

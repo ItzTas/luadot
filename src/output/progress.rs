@@ -1,10 +1,13 @@
 use std::io::stderr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use prodash::render::line::{JoinHandle, Options, StreamKind};
 use prodash::tree::{Item, Root};
 
-use super::constants::{PROGRESS_DELAY, PROGRESS_FRAME_RATE};
+const PROGRESS_FRAME_RATE: f32 = 6.0;
+
+const PROGRESS_DELAY: Duration = Duration::from_millis(200);
 
 pub struct Progress {
     root: Arc<Root>,

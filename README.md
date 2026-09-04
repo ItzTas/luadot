@@ -9,19 +9,15 @@ and a server without a branch or a copy for each.
 
 The repository mirrors your home directory, path for path: `.zshrc` in the
 repository is `~/.zshrc` on the machine. Rules decide how each file is placed:
-linked hard, symbolic or copied, ignored, encrypted, kept in Git LFS, or
-generated per machine by a template.
+linked hard, symbolic or copied, left alone, taken in on its own, encrypted,
+kept in Git LFS, or generated per machine by a template.
 
 ```lua
 ld.rules({
   { match = ".ssh/id_*", encrypt = true },
   { match = ".config/mako/**", on_change = "makoctl reload" },
-  { match = ".cache/**", ignore = true },
+  { match = ".cache/**", track = "never" },
 })
-
-if ld.sys.has_battery() then
-  ld.rules({ match = ".config/tlp/**", link = "symbolic" })
-end
 ```
 
 ## Quick start
@@ -33,8 +29,8 @@ luadot git commit -m "first"
 ```
 
 On the next machine, `luadot clone` then `luadot apply`. After that,
-`luadot status` lists what drifted, `luadot diff` shows it, and `luadot sync`
-commits and pushes it.
+`luadot status` lists what drifted, `luadot diff` shows it, `luadot apply` and
+`luadot take` settle it either way, and `luadot sync` commits and pushes it.
 
 ## Install
 

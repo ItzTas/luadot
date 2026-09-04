@@ -26,7 +26,7 @@ mod tests {
     use crate::lua::from_source;
 
     #[test]
-    fn a_page_is_kept_once_under_the_home_directory() {
+    fn a_page_is_kept_once() {
         let config = from_source(
             r#"
             ld.doc.page("~/plugins/lazyld/docs/lazyld.md")

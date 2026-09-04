@@ -16,7 +16,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn creates_every_directory_leading_there_and_accepts_one_already_there() {
+    fn creates_parents_and_accepts_existing() {
         let home = tempfile::tempdir().unwrap();
 
         eval(

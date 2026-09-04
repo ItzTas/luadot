@@ -88,7 +88,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_mirrors_the_config_location_into_the_repo() {
+    fn resolve_mirrors_the_config_path() {
         let path = resolve(
             Path::new("/home/u"),
             Path::new("/home/u/.config/luadot"),
@@ -103,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn runs_the_script_with_the_bootstrap_api_and_modules() {
+    fn runs_with_the_bootstrap_api() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");
@@ -139,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn the_script_knows_the_directory_it_lives_in() {
+    fn the_script_knows_its_directory() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let repo = dir.path().join("repo");

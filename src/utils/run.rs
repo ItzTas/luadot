@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
@@ -62,6 +63,37 @@ fn fire(command: Command, shared: &Shared, moment: Moment) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Incoming<'a> {
+    Text(&'a str),
+    Bytes(&'a [u8]),
+    File(&'a Path),
+    Tree,
+}
+
+impl Incoming<'_> {
+    fn contents(&self) -> Option<Cow<'_, [u8]>> {
+        match self {
+            Self::Text(text) => Some(Cow::Borrowed(text.as_bytes())),
+            Self::Bytes(bytes) => Some(Cow::Borrowed(bytes)),
+            Self::File(source) => std::fs::read(source).ok().map(Cow::Owned),
+            Self::Tree => None,
+        }
+    }
+}
+
+fn foreseen(predicted: SyncOutcome, incoming: Incoming<'_>, dest: &Path) {
+    if predicted == SyncOutcome::AlreadySynced {
+        return;
+    }
+
+    let Some(contents) = incoming.contents() else {
+        return;
+    };
+
+    output::changes(std::fs::read(dest).ok().as_deref(), &contents);
+}
+
 #[derive(Debug, Default)]
 pub struct Run {
     dry_run: bool,
@@ -97,10 +129,12 @@ impl Run {
         relative: &Path,
         dest: &Path,
         on_change: Option<&str>,
+        incoming: Incoming<'_>,
         sync: impl FnOnce() -> Result<SyncOutcome>,
     ) -> Result<SyncOutcome> {
         if self.dry_run {
             output::preview(predicted, relative.display());
+            foreseen(predicted, incoming, dest);
             self.hooks.record(predicted, on_change);
             return Ok(predicted);
         }
@@ -116,6 +150,15 @@ impl Run {
         self.hooks.record(outcome, on_change);
 
         Ok(outcome)
+    }
+
+    pub fn left(&self, relative: &Path) -> SyncOutcome {
+        match self.dry_run {
+            true => output::preview(SyncOutcome::Skipped, relative.display()),
+            false => output::report(SyncOutcome::Skipped, relative.display()),
+        }
+
+        SyncOutcome::Skipped
     }
 
     pub fn finish(&self, command: &str) -> Result<()> {
@@ -139,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn a_function_that_breaks_names_the_command_the_call_and_the_moment() {
+    fn a_failure_names_command_call_moment() {
         let shared = shared(r#"ld.on.tmpl.alt({ before = function() error("broken") end })"#);
 
         let err = format!(

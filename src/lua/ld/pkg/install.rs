@@ -7,14 +7,10 @@ use mlua::{Function, Lua, Value};
 
 use super::super::constants::API;
 use super::super::parse::external;
-use super::super::surface;
 use super::constants::{INSTALL, MANAGERS, NAMESPACE, SUDO};
 
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(|lua, packages: Value| {
-        surface::slow(lua, &format!("{NAMESPACE}.{INSTALL}"));
-        install(&packages)
-    })
+    lua.create_function(|_, packages: Value| install(&packages))
 }
 
 fn install(value: &Value) -> mlua::Result<()> {
@@ -131,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn detect_prefers_managers_in_declaration_order() {
+    fn detect_follows_declaration_order() {
         let (_dir, path) = path_with(&["dnf", "pacman"]);
 
         let (manager, _) = detect(Some(&path)).unwrap();
@@ -140,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn build_command_prefixes_sudo_when_available() {
+    fn build_command_prefixes_sudo() {
         let command = build_command("pacman", &["-S"], true, &["git".to_string()]);
 
         assert_eq!(command.get_program(), OsStr::new("sudo"));

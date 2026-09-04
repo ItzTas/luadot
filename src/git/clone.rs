@@ -9,7 +9,6 @@ use gix::sec::Trust;
 use gix::sec::trust::DefaultForLevel;
 use tracing::debug;
 
-use super::constants::{CHECKOUT_TASK, FETCH_TASK};
 use super::empty::require_empty;
 use super::{info, lfs};
 use crate::output::Progress;
@@ -92,11 +91,11 @@ fn checkout(command: &str, mut fetch: PrepareFetch) -> Result<gix::Repository> {
     let progress = Progress::new();
 
     let (mut checkout, _outcome) = fetch
-        .fetch_then_checkout(progress.task(FETCH_TASK), &should_interrupt)
+        .fetch_then_checkout(progress.task("fetch"), &should_interrupt)
         .with_context(|| format!("{command}: failed to fetch repository"))?;
 
     let (repo, _outcome) = checkout
-        .main_worktree(progress.task(CHECKOUT_TASK), &should_interrupt)
+        .main_worktree(progress.task("checkout"), &should_interrupt)
         .with_context(|| format!("{command}: failed to checkout worktree"))?;
 
     drop(progress);
@@ -160,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn cloning_pulls_a_file_the_attributes_of_the_repository_send_through_lfs() {
+    fn cloning_pulls_an_lfs_file() {
         if !lfs::available() {
             return;
         }
@@ -188,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn a_plain_clone_takes_the_branch_and_the_depth_asked_for() {
+    fn a_clone_takes_branch_and_depth() {
         let origin = repository();
         commit(origin.path(), "first");
         super::super::run::quiet(
@@ -219,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn a_plain_clone_refuses_a_directory_holding_something() {
+    fn a_clone_refuses_a_full_directory() {
         let origin = repository();
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("kept"), "").unwrap();

@@ -32,17 +32,32 @@ struct Entry {
     pages: Vec<String>,
 }
 
+struct Registered {
+    pages: Vec<(String, String)>,
+    hints: bool,
+}
+
+impl Default for Registered {
+    fn default() -> Self {
+        Self {
+            pages: Vec::new(),
+            hints: true,
+        }
+    }
+}
+
 type Finder = fn(&Entry, &str, &str) -> bool;
 
 pub fn doc_cmd(args: DocArgs) -> Result<()> {
-    let entries = entries_with(&registered());
+    let Registered { pages, hints } = registered();
+    let entries = entries_with(&pages);
 
     if args.list {
         listing(&entries, false);
         return Ok(());
     }
     let Some(call) = args.call.as_deref() else {
-        listing(&entries, true);
+        listing(&entries, hints);
         return Ok(());
     };
 
@@ -68,11 +83,11 @@ fn describe(entries: &[&Entry], pages: bool) {
         output::line(format!("{GAP}{}", entry.effect));
 
         if entry.arguments != DOC_NO_ARGUMENTS {
-            output::hint(format!("{DOC_TAKES}{}", entry.arguments));
+            output::detail(format!("{DOC_TAKES}{}", entry.arguments));
         }
 
         if pages {
-            output::hint(format!("{DOC_WRITTEN_IN}{}", entry.pages.join(", ")));
+            output::detail(format!("{DOC_WRITTEN_IN}{}", entry.pages.join(", ")));
         }
     }
 }
@@ -133,32 +148,35 @@ fn listed(entries: &[Entry]) -> Vec<String> {
     names
 }
 
-fn registered() -> Vec<(String, String)> {
-    let pages = match registered_pages() {
-        Ok(pages) => pages,
+fn registered() -> Registered {
+    let (pages, hints) = match configured() {
+        Ok(read) => read,
         Err(err) => {
             output::warn(format!("{err:#}"));
-            return Vec::new();
+            return Registered::default();
         }
     };
 
-    pages
-        .into_iter()
-        .filter_map(|path| match std::fs::read_to_string(&path) {
-            Ok(text) => Some((path.display().to_string(), text)),
-            Err(err) => {
-                output::warn(format!("doc: failed to read {}: {err}", path.display()));
-                None
-            }
-        })
-        .collect()
+    Registered {
+        pages: pages
+            .into_iter()
+            .filter_map(|path| match std::fs::read_to_string(&path) {
+                Ok(text) => Some((path.display().to_string(), text)),
+                Err(err) => {
+                    output::warn(format!("doc: failed to read {}: {err}", path.display()));
+                    None
+                }
+            })
+            .collect(),
+        hints,
+    }
 }
 
-fn registered_pages() -> Result<Vec<PathBuf>> {
-    let config = lua::load_config()?;
-    let pages = utils::configured("doc", &config)?.doc_pages().to_vec();
+fn configured() -> Result<(Vec<PathBuf>, bool)> {
+    let shared = lua::load_config()?;
+    let config = utils::configured("doc", &shared)?;
 
-    Ok(pages)
+    Ok((config.doc_pages().to_vec(), config.hints()))
 }
 
 fn entries_with(pages: &[(String, String)]) -> Vec<Entry> {
@@ -312,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn a_row_carries_its_signature_its_arguments_and_its_effect() {
+    fn a_row_carries_the_three_columns() {
         let entries = entries();
         let entry = only(&entries, "opt.link");
 
@@ -325,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn a_namespace_answers_with_every_call_under_it() {
+    fn a_namespace_lists_its_calls() {
         let entries = entries();
         let found = found(&entries, "regex").unwrap();
 
@@ -338,14 +356,14 @@ mod tests {
     }
 
     #[test]
-    fn a_call_the_interface_does_not_carry_is_refused() {
+    fn an_unknown_call_is_refused() {
         let error = found(&entries(), "opt.colour").unwrap_err().to_string();
 
         assert!(error.starts_with("doc: `opt.colour` is not a call"));
     }
 
     #[test]
-    fn a_registered_page_answers_for_its_namespaced_calls_and_nothing_else() {
+    fn a_page_answers_only_its_calls() {
         let page = (
             "/plugins/lazyld/docs/lazyld.md".to_string(),
             "# lazyld\n\n| Call | Arguments | Effect |\n| --- | --- | --- |\n\

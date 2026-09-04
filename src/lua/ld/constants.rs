@@ -1,5 +1,6 @@
 use crate::crypt::Backend;
 use crate::files::{ConflictPolicy, LinkMode};
+use crate::lua::Track;
 
 pub const API: &str = "ld";
 
@@ -15,6 +16,8 @@ pub const ON_CHANGE: &str = "on_change";
 
 pub const MODE: &str = "mode";
 
+pub const SPECIAL_BITS: [(u32, &str); 2] = [(0o4000, "setuid"), (0o2000, "setgid")];
+
 pub const LINK_MODES: [(&str, LinkMode); 3] = [
     ("hard", LinkMode::Hard),
     ("symbolic", LinkMode::Symbolic),
@@ -25,6 +28,12 @@ pub const CONFLICT_POLICIES: [(&str, ConflictPolicy); 3] = [
     ("overwrite", ConflictPolicy::Overwrite),
     ("skip", ConflictPolicy::Skip),
     ("error", ConflictPolicy::Error),
+];
+
+pub const TRACK_KINDS: [(&str, Track); 3] = [
+    ("auto", Track::Auto),
+    ("manual", Track::Manual),
+    ("never", Track::Never),
 ];
 
 pub const CRYPT_BACKENDS: [(&str, Backend); 2] = [("age", Backend::Age), ("gpg", Backend::Gpg)];
@@ -69,17 +78,10 @@ pub const INTEGER_INDEX: &str = "[integer]";
 pub const LINK_MODE_TYPENAME: &str = "ld.LinkMode";
 
 #[cfg(feature = "meta")]
-pub const LINK_MODE_DOC: &str =
-    "How a managed file is placed on the system: a hard link, a symbolic link or a copy.";
-
-#[cfg(feature = "meta")]
 pub const CONFLICT_TYPENAME: &str = "ld.Conflict";
 
 #[cfg(feature = "meta")]
-pub const CONFLICT_DOC: &str = "What happens when the system copy differs: it is overwritten, the file is skipped, or the run stops.";
+pub const TRACK_TYPENAME: &str = "ld.Track";
 
 #[cfg(feature = "meta")]
 pub const BACKEND_TYPENAME: &str = "ld.Backend";
-
-#[cfg(feature = "meta")]
-pub const BACKEND_DOC: &str = "The tool that encrypts and decrypts managed files.";

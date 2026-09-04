@@ -4,7 +4,6 @@ use mlua::{Function, Lua, Table, Value};
 
 use super::super::constants::API;
 use super::super::parse::{chain, external, known};
-use super::super::surface;
 use super::super::value::{count, path, text};
 use super::constants::{BRANCH, CLONE, CLONE_KEYS, DEPTH, NAMESPACE};
 use crate::git;
@@ -14,7 +13,6 @@ use crate::utils::expand;
 pub fn function(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, (url, dir, options): (Value, Value, Option<Table>)| {
         let call = format!("{NAMESPACE}.{CLONE}");
-        surface::slow(lua, &call);
 
         let url = text(NAMESPACE, &url, CLONE)?;
         let raw = path(NAMESPACE, &dir, CLONE, "a directory")?;
@@ -78,7 +76,7 @@ mod tests {
     }
 
     #[test]
-    fn clones_into_a_directory_under_the_home_directory() {
+    fn clones_under_the_home_directory() {
         let origin = committed();
         let home = tempfile::tempdir().unwrap();
 
@@ -98,7 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_an_unknown_option_and_a_depth_of_nothing() {
+    fn rejects_a_bad_option_or_depth() {
         let home = tempfile::tempdir().unwrap();
 
         let err = eval(

@@ -82,7 +82,7 @@ mod tests {
     }
 
     #[test]
-    fn a_star_stays_inside_one_segment_and_two_cross_them() {
+    fn one_star_stays_in_a_segment() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
         write(&dir.join("conf.d/nested/deep.zsh"), "deep");
@@ -96,7 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pattern_climbing_out_names_what_read_reaches() {
+    fn a_pattern_climbing_out_is_readable() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
         write(

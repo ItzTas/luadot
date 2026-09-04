@@ -2,7 +2,7 @@ use mlua::{Function, Lua, Table};
 
 use super::command::Command;
 use super::constants::{AROUND_KEYS, NAMESPACE};
-use super::parse::{around, known};
+use super::parse::{around, hints, known};
 use crate::lua::Config;
 
 pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
@@ -10,7 +10,11 @@ pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
         let call = format!("{NAMESPACE}.{}", command.path());
         known(&call, &options, &AROUND_KEYS)?;
         let around = around(&call, &options)?;
-        Config::building(lua, |config| config.set_around(command, around))
+        let hints = hints(&call, &options)?;
+        Config::building(lua, |config| {
+            config.set_around(command, around);
+            config.set_command_hints(command, hints);
+        })
     })
 }
 
@@ -19,9 +23,9 @@ mod tests {
     use crate::lua::{Command, Custom, Moment, from_source};
 
     #[test]
-    fn a_function_is_kept_for_the_command_it_was_set_on() {
+    fn a_function_is_kept_per_command() {
         let config = from_source(
-            r#"ld.on.apply({ before = function() return "applying on " .. ld.sys.host.name end })"#,
+            r#"ld.on.apply({ before = function() return "applying on " .. ld.path.home end })"#,
         )
         .unwrap();
 
@@ -35,7 +39,7 @@ mod tests {
     }
 
     #[test]
-    fn every_function_registered_for_a_moment_is_kept_in_order() {
+    fn functions_are_kept_in_order() {
         let config = from_source(
             r#"
             ld.on.apply({ before = function() return "first" end })
@@ -56,7 +60,24 @@ mod tests {
     }
 
     #[test]
-    fn the_tmpl_actions_are_customized_apart() {
+    fn a_later_call_replaces_the_hints() {
+        let config = from_source(
+            r#"
+            ld.on.apply({ hints = function() end })
+            ld.on.apply({ hints = false })
+            "#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            config.command_hints(Command::Apply),
+            Some(Custom::Silent)
+        ));
+        assert!(config.command_hints(Command::Add).is_none());
+    }
+
+    #[test]
+    fn tmpl_actions_are_kept_apart() {
         let config = from_source(
             r#"
             ld.on.tmpl.alt({ after = function() end })

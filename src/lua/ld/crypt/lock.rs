@@ -119,7 +119,7 @@ mod tests {
     }
 
     #[test]
-    fn a_table_carries_the_recipients_and_the_identity() {
+    fn recipients_and_identity_from_a_table() {
         let config = from_source(
             r#"
             ld.crypt.lock({
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn a_written_identity_carrying_a_space_is_a_command() {
+    fn a_spaced_identity_is_a_command() {
         assert_eq!(
             identity(r#"ld.crypt.lock({ identity = "pass show age/key" })"#),
             Key::Command(Provider::Line("pass show age/key".to_string()))
@@ -148,7 +148,7 @@ mod tests {
     }
 
     #[test]
-    fn a_type_names_what_the_guess_would_have_missed() {
+    fn an_explicit_type_beats_the_guess() {
         assert_eq!(
             identity(r#"ld.crypt.lock({ identity = { type = "file", "/mnt/my key.txt" } })"#),
             Key::File(PathBuf::from("/mnt/my key.txt"))
@@ -160,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn several_words_are_a_program_and_its_arguments() {
+    fn a_word_list_is_a_command_line() {
         let expected = Key::Command(Provider::Program(vec![
             "op".to_string(),
             "read".to_string(),

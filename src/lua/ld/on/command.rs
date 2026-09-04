@@ -1,34 +1,28 @@
 use super::super::constants::API;
 use super::constants::{
     ADD, ALT, APPLY, BOOTSTRAP, CD, CLASS, CLONE, CONFIG, DIFF, EDIT, EXEC, GIT, INIT, MV,
-    NAMESPACE, NEW, PUSH, REKEY, RESTORE, RM, SETUP, STATUS, SYNC, TMPL, TMPL_ALT, TMPL_NEW,
+    NAMESPACE, NEW, PUSH, REKEY, RELINK, RESTORE, RM, SETUP, STATUS, SYNC, TAKE, TMPL, TMPL_ALT,
+    TMPL_NEW,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Command {
-    Add,
-    Apply,
-    Bootstrap,
-    Cd,
-    Class,
-    Clone,
-    Config,
-    Diff,
-    Edit,
-    Exec,
-    Git,
-    Init,
-    Mv,
-    Push,
-    Rekey,
-    Restore,
-    Rm,
-    Setup,
-    Status,
-    Sync,
-    TmplAlt,
-    TmplNew,
+macro_rules! command {
+    ($($variant:ident),+ $(,)?) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        pub enum Command {
+            $($variant,)+
+        }
+
+        #[cfg(test)]
+        impl Command {
+            pub const ALL: &'static [Self] = &[$(Self::$variant,)+];
+        }
+    };
 }
+
+command!(
+    Add, Apply, Bootstrap, Cd, Class, Clone, Config, Diff, Edit, Exec, Git, Init, Mv, Push, Rekey,
+    Relink, Restore, Rm, Setup, Status, Sync, Take, TmplAlt, TmplNew,
+);
 
 impl Command {
     pub fn name(self) -> &'static str {
@@ -48,11 +42,13 @@ impl Command {
             Self::Mv => MV,
             Self::Push => PUSH,
             Self::Rekey => REKEY,
+            Self::Relink => RELINK,
             Self::Restore => RESTORE,
             Self::Rm => RM,
             Self::Setup => SETUP,
             Self::Status => STATUS,
             Self::Sync => SYNC,
+            Self::Take => TAKE,
             Self::TmplAlt => TMPL_ALT,
             Self::TmplNew => TMPL_NEW,
         }

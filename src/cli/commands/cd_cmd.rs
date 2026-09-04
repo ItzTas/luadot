@@ -7,8 +7,6 @@ use anyhow::{Context, Result};
 
 use crate::{lua, utils};
 
-use super::super::constants::DEFAULT_SHELL;
-
 pub fn cd_cmd() -> Result<()> {
     let config = lua::load_config()?;
     let repo = utils::require_repo("cd", utils::configured("cd", &config)?.repo_dir())?;
@@ -29,7 +27,7 @@ fn resolve_shell(shell: Option<OsString>) -> String {
     shell
         .filter(|value| !value.is_empty())
         .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| DEFAULT_SHELL.to_string())
+        .unwrap_or_else(|| "/bin/sh".to_string())
 }
 
 fn build_command(shell: &str, repo: &Path) -> Command {

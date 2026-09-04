@@ -5,7 +5,6 @@ use anyhow::Result;
 use crate::lua::{self, Placed};
 use crate::output::{self, Tone};
 
-use super::constants::{DEFINITIONS_KEPT, DEFINITIONS_MERGED, DEFINITIONS_WROTE};
 use super::paths::{config_dir, data_dir, home_dir};
 
 pub fn place_definitions(command: &str, dir: &Path, registered: &[PathBuf]) -> Result<()> {
@@ -34,10 +33,13 @@ pub fn offer_definitions(command: &str, registered: &[PathBuf]) {
 
 fn report(command: &str, placed: &Placed) {
     match placed {
-        Placed::Written(path) => output::entry(Tone::Good, DEFINITIONS_WROTE, path.display()),
-        Placed::Merged(path) => output::entry(Tone::Good, DEFINITIONS_MERGED, path.display()),
+        Placed::Written(path) => output::entry(Tone::Good, "wrote", path.display()),
+        Placed::Merged(path) => output::entry(Tone::Good, "merged", path.display()),
         Placed::Kept(path, wanted) => {
-            output::warn(format!("{command}: {} {DEFINITIONS_KEPT}", path.display()));
+            output::warn(format!(
+                "{command}: {} could not be parsed and was left alone; add this to it:",
+                path.display()
+            ));
             output::line(wanted);
         }
     }

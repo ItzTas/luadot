@@ -4,15 +4,19 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use tracing::debug;
 
-use super::constants::{ADD, ADD_ALL, REMOVE, SEPARATOR};
 use super::run::{present, quiet};
 
 pub fn stage(command: &str, repo: &Path, paths: &[PathBuf]) -> Result<()> {
-    change(command, repo, &ADD, paths)
+    change(command, repo, &["add"], paths)
 }
 
 pub fn unstage(command: &str, repo: &Path, paths: &[PathBuf]) -> Result<()> {
-    change(command, repo, &REMOVE, paths)
+    change(
+        command,
+        repo,
+        &["rm", "-r", "--cached", "--ignore-unmatch", "--quiet"],
+        paths,
+    )
 }
 
 pub fn stage_all(command: &str, repo: &Path) -> Result<()> {
@@ -21,7 +25,7 @@ pub fn stage_all(command: &str, repo: &Path) -> Result<()> {
     }
 
     debug!(repo = %repo.display(), "staging everything");
-    quiet(command, repo, ADD_ALL)
+    quiet(command, repo, ["add", "-A"])
 }
 
 fn change(command: &str, repo: &Path, head: &[&str], paths: &[PathBuf]) -> Result<()> {
@@ -35,7 +39,7 @@ fn change(command: &str, repo: &Path, head: &[&str], paths: &[PathBuf]) -> Resul
 
 fn arguments<'a>(head: &'a [&'a str], paths: &'a [PathBuf]) -> Vec<&'a OsStr> {
     let mut arguments: Vec<&OsStr> = head.iter().copied().map(OsStr::new).collect();
-    arguments.push(OsStr::new(SEPARATOR));
+    arguments.push(OsStr::new("--"));
     arguments.extend(paths.iter().map(|path| path.as_os_str()));
 
     arguments
@@ -82,7 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn unstaging_records_the_removal_of_a_path_already_gone() {
+    fn unstaging_records_a_missing_path() {
         let repo = repository();
         let file = repo.path().join(".bashrc");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();

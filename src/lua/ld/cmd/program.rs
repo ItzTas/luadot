@@ -18,11 +18,11 @@ fn program(lua: &Lua, name: String) -> mlua::Result<Function> {
         )));
     }
 
-    lua.create_function(move |lua, args: Variadic<String>| {
+    lua.create_function(move |_, args: Variadic<String>| {
         let mut command = Command::new(&name);
         command.args(args.iter());
 
-        run(lua, command, NAMESPACE, &display(&name, &args))
+        run(command, NAMESPACE, &display(&name, &args))
     })
 }
 
@@ -31,7 +31,7 @@ mod tests {
     use super::super::fixture::eval;
 
     #[test]
-    fn runs_the_indexed_program_with_its_arguments() {
+    fn runs_the_program_with_arguments() {
         assert_eq!(
             eval(r#"return cmd.printf("%s-%s", "one", "two")"#).unwrap(),
             "one-two"

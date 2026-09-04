@@ -58,7 +58,7 @@ mod tests {
     }
 
     #[test]
-    fn limit_rejects_a_fraction_a_negative_number_and_anything_else() {
+    fn limit_rejects_anything_but_a_count() {
         for value in [Value::Number(1.5), Value::Integer(-1), Value::Boolean(true)] {
             let err = limit(&value, "gsub").unwrap_err().to_string();
 

@@ -93,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn the_machine_and_the_classes_are_reachable() {
+    fn classes_are_reachable() {
         let root = tempfile::tempdir().unwrap();
         let mut classes = Classes::default();
         classes.set("form-factor", "laptop");
@@ -101,19 +101,16 @@ mod tests {
         let output = load(
             root.path(),
             ".zshrc.luadot",
-            "<%= type(ld.sys.host.name) %> on a <%= ld.class.get(\"form-factor\") %>",
+            "on a <%= ld.class.get(\"form-factor\") %>",
             &classes,
         )
         .unwrap();
 
-        assert_eq!(
-            output.content(),
-            &Content::Text("string on a laptop".to_string())
-        );
+        assert_eq!(output.content(), &Content::Text("on a laptop".to_string()));
     }
 
     #[test]
-    fn the_alternatives_resolve_next_to_the_file_itself() {
+    fn alternatives_resolve_beside_the_file() {
         let root = tempfile::tempdir().unwrap();
         let beside = root.path().join("repo");
         std::fs::create_dir_all(&beside).unwrap();

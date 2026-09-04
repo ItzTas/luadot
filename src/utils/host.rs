@@ -1,13 +1,13 @@
 use std::env;
 use std::path::Path;
 
-use super::constants::{HOSTNAME_FILES, HOSTNAME_VAR};
+const HOSTNAME_FILES: [&str; 2] = ["/proc/sys/kernel/hostname", "/etc/hostname"];
 
 pub fn host_name() -> String {
     HOSTNAME_FILES
         .iter()
         .find_map(|path| read(Path::new(path)))
-        .or_else(|| env::var(HOSTNAME_VAR).ok().and_then(trimmed))
+        .or_else(|| env::var("HOSTNAME").ok().and_then(trimmed))
         .unwrap_or_default()
 }
 

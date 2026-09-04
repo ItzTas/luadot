@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use super::block::stitched;
-use super::constants::{MARKER_END, MARKER_START, RULES_ATTRIBUTES, TRACKED, UNTRACKED};
+use super::constants::RULES_ATTRIBUTES;
 use super::rules;
 use crate::files;
 
@@ -43,8 +43,8 @@ pub fn sync(command: &str, repo: &Path, patterns: &[(String, bool)]) -> Result<b
 fn rendered(current: &str, patterns: &[(String, bool)]) -> String {
     stitched(
         current,
-        MARKER_START,
-        MARKER_END,
+        "# luadot:lfs",
+        "# /luadot:lfs",
         &attributes(patterns).join("\n"),
     )
 }
@@ -58,8 +58,8 @@ fn attributes(patterns: &[(String, bool)]) -> Vec<String> {
                 .map(move |pattern| (pattern, *tracked))
         })
         .map(|(pattern, tracked)| match tracked {
-            true => format!("{pattern} {TRACKED}"),
-            false => format!("{pattern} {UNTRACKED}"),
+            true => format!("{pattern} filter=lfs diff=lfs merge=lfs -text"),
+            false => format!("{pattern} -filter -diff -merge text"),
         })
         .collect()
 }
@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pattern_naming_a_directory_carries_its_subtree() {
+    fn a_pattern_covers_its_subtree() {
         assert_eq!(
             expanded(".config/nvim"),
             [".config/nvim", ".config/nvim/**"]
@@ -99,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn the_block_keeps_the_lines_written_by_hand() {
+    fn the_block_keeps_handwritten_lines() {
         let current = "* text=auto\n.claude/settings.json merge=claude-settings\n";
 
         let rendered = rendered(current, &tracked(&["Videos/**"]));
@@ -111,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn dropping_every_pattern_takes_the_block_out_again() {
+    fn an_empty_set_removes_the_block() {
         let written = rendered("* text=auto\n", &tracked(&["Videos/**"]));
 
         assert_eq!(rendered(&written, &[]), "* text=auto\n");

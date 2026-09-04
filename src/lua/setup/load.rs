@@ -6,7 +6,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use super::constants::{INIT_STEM, LUA_EXT, SETUP_DIR, SH_EXT};
+use super::constants::{INIT_STEM, LUA_EXT, SH_EXT};
 use crate::lua::Shared;
 use crate::lua::ld::{Paths, Surface};
 use crate::lua::script::run_script;
@@ -57,7 +57,7 @@ pub fn run_one(
 }
 
 pub fn setup_dir(command: &str, home: &Path, config: &Path, repo: &Path) -> Result<PathBuf> {
-    utils::repo_path(home, repo, &config.join(SETUP_DIR))
+    utils::repo_path(home, repo, &config.join("setup"))
         .with_context(|| format!("{command}: failed to locate the setup directory"))
 }
 
@@ -244,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn list_is_sorted_and_deduplicates_stems() {
+    fn list_is_sorted_and_deduplicated() {
         let root = tempfile::tempdir().unwrap();
         let (home, config, repo) = dirs(root.path());
         write_setup(&home, &config, &repo, "ufw.lua", "");
@@ -269,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn ordered_puts_the_requested_order_first() {
+    fn ordered_puts_the_request_first() {
         let names = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let order = ["c".to_string(), "a".to_string()];
 
@@ -277,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn runs_a_lua_setup_with_the_bootstrap_api() {
+    fn runs_with_the_bootstrap_api() {
         let root = tempfile::tempdir().unwrap();
         let (home, config, repo) = dirs(root.path());
         write_setup(
@@ -335,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn a_setup_cycle_is_reported_instead_of_recursing() {
+    fn a_cycle_is_reported() {
         let root = tempfile::tempdir().unwrap();
         let (home, config, repo) = dirs(root.path());
         write_setup(&home, &config, &repo, "loop.lua", r#"ld.setup("loop")"#);

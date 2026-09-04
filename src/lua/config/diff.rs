@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn a_customization_only_replaces_the_keys_it_carries() {
+    fn a_customization_replaces_its_keys() {
         let mut diff = Diff::default()
             .with_report(Report::default().with_summary(Some(Custom::Silent)))
             .with_args(Some(vec!["--stat".to_string()]));

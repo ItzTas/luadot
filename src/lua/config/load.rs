@@ -5,6 +5,7 @@ use anyhow::{Context, Result, anyhow};
 use tracing::debug;
 
 use super::constants::CONFIG_FILE;
+use super::trust;
 use super::types::{Config, Shared};
 use crate::lua::constants::MODULES_DIR;
 use crate::lua::ld::{API, Paths, Surface, install};
@@ -40,6 +41,8 @@ pub fn config_path() -> Result<PathBuf> {
 }
 
 fn load_from(path: &Path) -> Result<Shared> {
+    trust::trusted(path)?;
+
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -119,13 +122,13 @@ mod tests {
     }
 
     #[test]
-    fn requires_modules_from_the_lua_directory() {
+    fn requires_from_the_lua_directory() {
         let dir = tempfile::tempdir().unwrap();
         let modules = dir.path().join(MODULES_DIR);
         std::fs::create_dir_all(modules.join("editors")).unwrap();
         std::fs::write(
             modules.join("patterns.lua"),
-            r#"return { { match = "*.swp", ignore = true }, { match = ".cache/**", ignore = true } }"#,
+            r#"return { { match = "*.swp", track = "never" }, { match = ".cache/**", track = "never" } }"#,
         )
         .unwrap();
         std::fs::write(

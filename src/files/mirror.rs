@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn each_side_keeps_the_managed_path_below_its_own_directory() {
+    fn each_side_keeps_the_managed_path() {
         let mirror = Mirror::open("diff").unwrap();
         let relative = Path::new(".config/nvim/init.lua");
         mirror
@@ -198,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn the_root_is_private_and_goes_away_with_the_mirror() {
+    fn the_root_is_private_and_temporary() {
         let mirror = Mirror::open("diff").unwrap();
         let root = mirror.root().to_path_buf();
         mirror

@@ -86,7 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn every_function_registered_for_a_moment_is_kept_in_order() {
+    fn functions_are_kept_in_order() {
         let mut chain = Chain::default();
 
         chain.add(Around::default().with_before(text("first")));
@@ -101,7 +101,7 @@ mod tests {
     }
 
     #[test]
-    fn a_registration_only_touches_the_moments_it_carries() {
+    fn a_registration_only_sets_its_moments() {
         let mut chain = Chain::default();
 
         chain.add(Around::default().with_before(text("first")));
@@ -113,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn false_drops_the_functions_registered_so_far() {
+    fn false_drops_what_was_registered() {
         let mut chain = Chain::default();
 
         chain.add(Around::default().with_before(text("first")));
@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn each_moment_is_read_by_the_key_the_configuration_writes() {
+    fn each_moment_is_read_by_its_key() {
         assert_eq!(Moment::Before.key(), "before");
         assert_eq!(Moment::After.key(), "after");
     }

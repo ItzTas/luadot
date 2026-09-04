@@ -322,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn a_comment_produces_nothing_and_keeps_the_lines() {
+    fn a_comment_produces_nothing() {
         assert_eq!(
             scan("a\n<%# a note\nspanning %>\nb").unwrap(),
             vec![literal("a\n", 1), literal("\nb", 3)]
@@ -330,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn the_slurping_pair_welds_the_surrounding_lines() {
+    fn the_slurping_pair_welds_lines() {
         let source = "export A=1\n  <%_ for _, dir in ipairs(paths) do -%>\npath+=(<%= dir %>)\n  <%_ end -%>\n";
 
         assert_eq!(
@@ -347,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn a_close_inside_a_lua_string_does_not_close() {
+    fn a_close_inside_a_string_is_text() {
         assert_eq!(
             scan(r#"<% local s = "100%>" %>"#).unwrap(),
             vec![statement(r#" local s = "100%>" "#, 1)]

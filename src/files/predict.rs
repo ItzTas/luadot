@@ -30,7 +30,7 @@ mod tests {
     }
 
     #[test]
-    fn a_diverging_destination_follows_the_policy() {
+    fn divergence_follows_the_policy() {
         for status in [FileStatus::Unlinked, FileStatus::Differs] {
             assert_eq!(
                 predict(ConflictPolicy::Overwrite, status, dest()).unwrap(),

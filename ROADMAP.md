@@ -38,17 +38,15 @@ exists and leaves the home copy where it is. What is still missing:
 ## Encrypted files
 
 Encrypted files exist: an `encrypt` rule makes `add` store ciphertext under a
-`.age`/`.gpg` extension, `apply`, `status`, `edit` and `rm` decrypt through the
-`age` or `gpg` binary, configured by `ld.crypt.backend`, `ld.crypt.recipients`,
-`ld.crypt.identity`, `ld.crypt.identity_command` and `ld.crypt.passphrase`, and
-`luadot rekey` re-encrypts everything for the recipients set now. What was left
-out of that first pass:
+`.age`/`.gpg` extension, `apply`, `status`, `diff`, `edit` and `rm` decrypt
+through the `age` or `gpg` binary, configured by `ld.crypt.backend`,
+`ld.crypt.recipients`, `ld.crypt.identity`, `ld.crypt.identity_command` and
+`ld.crypt.passphrase`, and `luadot rekey` re-encrypts everything for the
+recipients set now. What was left out of that first pass:
 
-- **`diff` over an encrypted file.** It still compares the stored ciphertext;
-  comparing the decrypted content means staging it into the same private mirror
-  `diff` already builds, so no plaintext outlives the command.
 - **A Rust implementation as a fallback.** Everything shells out to the
   `age`/`gpg` binaries; a machine without them cannot decrypt. Any crate
   considered has to be checked for current maintenance before it is added.
-- **Skipping over a failed decryption.** `apply` aborts with the backend's
-  error; whether a warn-and-continue mode is worth having is unsettled.
+- **Skipping over a failed decryption.** `diff` warns and leaves the file out,
+  `apply` aborts with the backend's error. Whether `apply` should have a
+  warn-and-continue mode of its own is unsettled.

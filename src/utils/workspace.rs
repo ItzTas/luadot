@@ -62,8 +62,21 @@ pub fn managed_entries(
     root: &Path,
     ignored: impl Fn(&Path) -> bool,
 ) -> Result<Vec<Entry>> {
-    Ok(files::collect_entries(command, root)?
-        .into_iter()
-        .filter(|entry| !ignored(relative(repo, &entry.target())))
-        .collect())
+    let mut entries = Vec::new();
+    for entry in files::collect_entries(command, root)? {
+        entries.extend(held(command, &entry)?.into_iter().map(Entry::File));
+        entries.push(entry);
+    }
+    entries.retain(|entry| !ignored(relative(repo, entry.path())));
+    entries.sort_by(|left, right| left.path().cmp(right.path()));
+
+    Ok(entries)
+}
+
+fn held(command: &str, entry: &Entry) -> Result<Vec<PathBuf>> {
+    match entry {
+        Entry::File(_) => Ok(Vec::new()),
+        Entry::Standalone(path) => Ok(vec![path.clone()]),
+        Entry::Template(dir) => files::collect_files(command, dir),
+    }
 }

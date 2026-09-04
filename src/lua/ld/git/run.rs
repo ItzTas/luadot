@@ -14,14 +14,14 @@ pub fn function(lua: &Lua, paths: &Paths) -> mlua::Result<Function> {
     let paths = paths.clone();
     let command = format!("`{API}.{NAMESPACE}`");
 
-    lua.create_function(move |lua, (_, args): (Table, Variadic<String>)| {
+    lua.create_function(move |_, (_, args): (Table, Variadic<String>)| {
         let repo = require(paths.repo(), &command)?;
 
-        run_in(lua, repo, &args, &command)
+        run_in(repo, &args, &command)
     })
 }
 
-pub fn run_in(lua: &Lua, dir: &Path, args: &[String], command: &str) -> mlua::Result<String> {
+pub fn run_in(dir: &Path, args: &[String], command: &str) -> mlua::Result<String> {
     if args.is_empty() {
         return Err(external(format!(
             "{command} takes the arguments of the git command to run"
@@ -31,7 +31,7 @@ pub fn run_in(lua: &Lua, dir: &Path, args: &[String], command: &str) -> mlua::Re
     let mut git = Command::new(PROGRAM);
     git.current_dir(dir).args(args);
 
-    run(lua, git, NAMESPACE, &display(PROGRAM, args))
+    run(git, NAMESPACE, &display(PROGRAM, args))
 }
 
 #[cfg(test)]

@@ -35,12 +35,12 @@ mod tests {
     use crate::lua::{Content, from_template};
 
     #[test]
-    fn the_vars_and_the_interface_stay_in_scope() {
+    fn vars_and_interface_stay_in_scope() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
         std::fs::write(
             dir.join("zshrc.tmpl.zsh"),
-            "export EDITOR=<%= editor %>\nhost is a <%= type(ld.sys.host.name) %>\n",
+            "export EDITOR=<%= editor %>\nhome is a <%= type(ld.path.home) %>\n",
         )
         .unwrap();
 
@@ -52,12 +52,12 @@ mod tests {
 
         assert_eq!(
             outputs[0].content(),
-            &Content::Text("export EDITOR=nvim\nhost is a string\n".to_string())
+            &Content::Text("export EDITOR=nvim\nhome is a string\n".to_string())
         );
     }
 
     #[test]
-    fn every_template_keeps_its_own_vars_and_its_own_buffer() {
+    fn every_template_keeps_its_own_scope() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
         std::fs::write(dir.join("partial.tmpl"), "[<%= name %>]").unwrap();
@@ -80,7 +80,7 @@ mod tests {
     }
 
     #[test]
-    fn a_partial_that_fails_reports_its_own_file() {
+    fn a_failing_partial_names_its_file() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
         std::fs::write(dir.join("partial.tmpl"), "fine\n<%= missing() %>\n").unwrap();

@@ -2,8 +2,8 @@ use clap::{ArgAction, Parser, Subcommand};
 
 use super::commands::{
     AddArgs, ApplyArgs, ClassArgs, CloneArgs, CompletionsArgs, ConfigArgs, DiffArgs, DocArgs,
-    EditArgs, ExecArgs, GitArgs, InitArgs, MetaArgs, MvArgs, PushArgs, RekeyArgs, RestoreArgs,
-    RmArgs, SetupArgs, StatusArgs, SyncArgs, TaskArgs, TmplArgs,
+    EditArgs, ExecArgs, GitArgs, InitArgs, MetaArgs, MvArgs, PushArgs, RekeyArgs, RelinkArgs,
+    RestoreArgs, RmArgs, SetupArgs, StatusArgs, SyncArgs, TakeArgs, TaskArgs, TmplArgs,
 };
 
 #[derive(Debug, Parser)]
@@ -28,6 +28,13 @@ pub struct Cli {
         help = "Log what luadot is doing (-vv logs more)"
     )]
     pub verbose: u8,
+    #[arg(
+        short = 'u',
+        long,
+        global = true,
+        help = "List the paths that were already in sync too"
+    )]
+    pub unchanged: bool,
     #[command(subcommand)]
     pub command: Cmd,
 }
@@ -40,6 +47,8 @@ pub enum Cmd {
     Clone(CloneArgs),
     #[command(about = "Start managing files or directories, linking them into the repository")]
     Add(AddArgs),
+    #[command(about = "Store managed files as the system holds them, undoing their drift")]
+    Take(TakeArgs),
     #[command(about = "Stop managing files or directories, leaving your home copy in place")]
     Rm(RmArgs),
     #[command(about = "Move managed files or directories, in the repository and on the system")]
@@ -50,6 +59,8 @@ pub enum Cmd {
     Diff(DiffArgs),
     #[command(about = "Put the repository's files back on the system")]
     Apply(ApplyArgs),
+    #[command(about = "Link the repository's files again, leaving what the system changed")]
+    Relink(RelinkArgs),
     #[command(about = "Create the repository's templates and run them")]
     Tmpl(TmplArgs),
     #[command(about = "Put back the files an earlier apply or tmpl alt replaced")]
@@ -109,7 +120,7 @@ mod tests {
     }
 
     #[test]
-    fn a_name_that_is_no_command_reaches_the_tasks_with_what_follows_it() {
+    fn an_unknown_name_reaches_the_tasks() {
         let cli = parse(&["luadot", "plug", "sync", "--all"]).unwrap();
 
         match cli.command {
@@ -119,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn the_names_a_task_cannot_take_are_the_commands_declared() {
+    fn a_task_cannot_take_a_command_name() {
         let mut command = Cli::command();
         command.build();
         let mut declared: Vec<&str> = command

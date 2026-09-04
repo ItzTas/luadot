@@ -61,7 +61,7 @@ mod tests {
     }
 
     #[test]
-    fn reports_unlinked_when_the_contents_match_but_the_link_does_not() {
+    fn reports_unlinked_on_matching_content() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
         let dest = dir.path().join("dest");
@@ -95,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn a_mode_that_drifted_reports_differs_even_when_linked() {
+    fn a_drifted_mode_reports_differs() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = tempfile::tempdir().unwrap();

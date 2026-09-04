@@ -3,10 +3,42 @@ use tealr::{
     TypeWalker,
 };
 
-use super::constants::{
-    ALIAS, ARRAY, CLASS, COMMENT, ELLIPSIS, EMPTY_TABLE, END, FIELD, FUN, FUNCTION, HEADER, MAP,
-    OPTIONAL, OVERLOAD, PARAM, RETURN, UNNAMED, VARIANT,
-};
+const HEADER: &str = "---@meta";
+
+const COMMENT: &str = "---";
+
+const ALIAS: &str = "---@alias";
+
+const VARIANT: &str = "---|";
+
+const CLASS: &str = "---@class";
+
+const FIELD: &str = "---@field";
+
+const OVERLOAD: &str = "---@overload";
+
+const PARAM: &str = "---@param";
+
+const RETURN: &str = "---@return";
+
+const FUNCTION: &str = "function";
+
+const END: &str = "end";
+
+const FUN: &str = "fun";
+
+const EMPTY_TABLE: &str = "= {}";
+
+const ELLIPSIS: &str = "...";
+
+const OPTIONAL: &str = "?";
+
+const UNNAMED: &str = "_";
+
+const ARRAY: &str = "[]";
+
+const MAP: &str = "table";
+
 use crate::lua::ld::{CALL_METHOD, NIL};
 
 struct Union {
@@ -269,7 +301,7 @@ mod tests {
     use crate::lua::ld::walker;
 
     #[test]
-    fn the_committed_definitions_are_what_the_description_renders() {
+    fn renders_the_committed_definitions() {
         assert!(
             render(&walker()) == DEFINITIONS,
             "meta/ld.lua is stale; run packaging/meta/update.sh"
@@ -277,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn a_type_reads_the_way_the_language_server_expects() {
+    fn a_type_reads_as_the_server_expects() {
         use crate::lua::ld::{Kind, Param};
 
         let cases: [(Kind, &str); 7] = [

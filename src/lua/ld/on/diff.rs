@@ -4,7 +4,7 @@ use super::super::constants::API;
 use super::super::parse::external;
 use super::command::Command;
 use super::constants::{ARGS, DIFF_KEYS, NAMESPACE, TOOL};
-use super::parse::{around, known, report};
+use super::parse::{around, hints, known, report};
 use crate::lua::{Config, Diff, Tool};
 
 pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
@@ -12,9 +12,11 @@ pub fn function(lua: &Lua, command: Command) -> mlua::Result<Function> {
         let call = format!("{NAMESPACE}.{}", command.path());
         let diff = diff(&call, &options)?;
         let around = around(&call, &options)?;
+        let hints = hints(&call, &options)?;
         Config::building(lua, |config| {
             config.set_diff(diff);
             config.set_around(command, around);
+            config.set_command_hints(command, hints);
         })
     })
 }
@@ -70,7 +72,7 @@ mod tests {
     use crate::lua::{Custom, from_source};
 
     #[test]
-    fn a_function_is_kept_callable_after_the_configuration_ran() {
+    fn the_function_survives_the_run() {
         let config = from_source(
             r#"ld.on.diff({ summary = function(counts) return counts.default .. "!" end })"#,
         )
@@ -103,7 +105,7 @@ mod tests {
     }
 
     #[test]
-    fn the_tool_is_the_program_and_the_arguments_it_carries() {
+    fn the_tool_carries_program_and_args() {
         let config =
             from_source(r#"ld.on.diff({ tool = { "delta", "--side-by-side" }, args = "--stat" })"#)
                 .unwrap();

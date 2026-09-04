@@ -99,6 +99,13 @@ Each holds a `luadot-<pkgver>-<arch>/` directory with the binary, `LICENSE`,
 `LICENSE.lpeg` and `completions/`. The completions come from the native binary,
 since the cross-built one cannot be run on the builder.
 
+The k8s runner gives a job 2 GiB and one CPU by default, and a fat-LTO build of
+both targets overruns that: the pod is killed with `OOMKilled` partway through.
+So `binaries` raises its own ceiling with `KUBERNETES_MEMORY_LIMIT` and
+`KUBERNETES_CPU_LIMIT`, and caps `CARGO_BUILD_JOBS` at 2. Its requests stay at
+1 GiB and 500m, since a pod that asks the node for the whole ceiling up front
+waits for a slot that never comes.
+
 `packaging/release/deb.sh <tag>` turns each of those tarballs into a Debian
 package, `dist/luadot_<version>-1_<amd64|arm64>.deb`, with the completions in
 the paths Debian uses and the licenses under `/usr/share/doc/luadot/`. It reads

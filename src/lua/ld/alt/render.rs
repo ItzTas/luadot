@@ -41,7 +41,7 @@ mod tests {
     use crate::lua::{Content, from_template};
 
     #[test]
-    fn the_standard_library_stays_reachable_from_a_rendered_file() {
+    fn the_standard_library_stays_reachable() {
         let root = tempfile::tempdir().unwrap();
         let dir = template(root.path());
         std::fs::write(

@@ -4,30 +4,7 @@ use super::super::constants::API;
 use super::super::opt::{NAMESPACE, PKG_WARN};
 use super::types::Surface;
 use crate::lua::Config;
-use crate::lua::bootstrap::constants::BOOTSTRAP_FILE;
 use crate::output;
-
-pub fn slow(lua: &Lua, call: &str) {
-    let Some(surface) = Surface::current(lua) else {
-        return;
-    };
-    let Some(message) = slow_message(surface, call) else {
-        return;
-    };
-    if silenced(lua) {
-        return;
-    }
-
-    output::warn(message);
-}
-
-pub fn slow_in(lua: &Lua, call: &str, home: Surface) {
-    if Surface::current(lua) != Some(home) {
-        return;
-    }
-
-    slow(lua, call);
-}
 
 pub fn inert(lua: &Lua, call: &str, home: Surface) -> bool {
     let Some(surface) = Surface::current(lua) else {
@@ -41,16 +18,6 @@ pub fn inert(lua: &Lua, call: &str, home: Surface) -> bool {
     }
 
     true
-}
-
-fn slow_message(surface: Surface, call: &str) -> Option<String> {
-    let cost = surface.cost()?;
-
-    Some(format!(
-        "`{API}.{call}` in {} {cost}; {BOOTSTRAP_FILE} is where it belongs ({})",
-        surface.label(),
-        silence()
-    ))
 }
 
 fn inert_message(surface: Surface, call: &str, home: Surface) -> String {
@@ -93,12 +60,12 @@ mod tests {
     }
 
     #[test]
-    fn the_configuration_surface_names_the_call_and_the_way_out() {
-        let message = slow_message(Surface::Config, "pkg.install").unwrap();
+    fn the_warning_names_call_and_way_out() {
+        let message = inert_message(Surface::Bootstrap, "crypt.lock", Surface::Config);
 
-        assert!(message.contains("`ld.pkg.install` in config.lua"));
-        assert!(message.contains("runs before every command"));
-        assert!(message.contains("bootstrap.lua is where it belongs"));
+        assert!(message.contains("`ld.crypt.lock` in bootstrap.lua"));
+        assert!(message.contains("does nothing"));
+        assert!(message.contains("config.lua is where it has an effect"));
         assert!(message.contains("`ld.opt.pkg_warn(false)`"));
     }
 
@@ -117,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn silencing_the_warning_keeps_the_call_inert() {
+    fn silencing_keeps_the_call_inert() {
         let lua = running(Surface::Bootstrap);
         Config::building(&lua, |config| config.set_pkg_warn(false)).unwrap();
 

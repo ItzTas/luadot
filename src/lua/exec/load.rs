@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use super::constants::{CURRENT_DIR, LUA_EXT, SOURCE_NAME};
+use super::constants::{CURRENT_DIR, LUA_EXT};
 use crate::lua::Shared;
 use crate::lua::ld::{Paths, Surface};
 use crate::lua::script::{run_script, run_source};
@@ -58,7 +58,7 @@ fn run(
             command,
             Surface::Exec,
             source,
-            SOURCE_NAME,
+            "exec",
             &[paths.config()],
             &paths.clone().with_dir(Path::new(CURRENT_DIR)),
             classes,
@@ -123,7 +123,7 @@ mod tests {
     }
 
     #[test]
-    fn a_source_string_requires_modules_from_the_configuration() {
+    fn a_source_string_requires_modules() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let modules = home.join(".config/luadot").join(MODULES_DIR);
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn runs_a_file_requiring_modules_from_its_own_directory() {
+    fn a_file_requires_from_its_directory() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         std::fs::create_dir_all(&home).unwrap();

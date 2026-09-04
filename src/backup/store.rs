@@ -113,7 +113,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn backups_are_read_oldest_first_and_anything_else_ignored() {
+    fn reads_backups_oldest_first() {
         let root = tempfile::tempdir().unwrap();
         for name in ["200", "100", "notes"] {
             std::fs::create_dir(root.path().join(name)).unwrap();
@@ -137,7 +137,7 @@ mod tests {
     }
 
     #[test]
-    fn a_count_and_an_age_each_drop_what_they_reach() {
+    fn count_and_age_both_prune() {
         let root = filled(["1000", "5000", "9000"]);
         let retention = Retention::new(Some(2), Some(2));
 
@@ -149,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn a_configured_directory_replaces_the_default_one() {
+    fn a_configured_directory_wins() {
         let home = home_dir().unwrap();
 
         assert_eq!(

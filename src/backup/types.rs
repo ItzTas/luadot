@@ -85,8 +85,29 @@ impl Backup {
             })?;
         }
 
+        let meta = std::fs::symlink_metadata(path)
+            .with_context(|| format!("{}: failed to inspect {}", self.command, path.display()))?;
+        if meta.is_dir() {
+            return self.save_dir(path, &target);
+        }
+
         copy_entry(&self.command, path, &target)?;
         self.saved += 1;
+
+        Ok(())
+    }
+
+    fn save_dir(&mut self, path: &Path, target: &Path) -> Result<()> {
+        std::fs::create_dir_all(target)
+            .with_context(|| format!("{}: failed to create {}", self.command, target.display()))?;
+
+        let entries = std::fs::read_dir(path)
+            .with_context(|| format!("{}: failed to read {}", self.command, path.display()))?;
+        for entry in entries {
+            let entry = entry
+                .with_context(|| format!("{}: failed to read {}", self.command, path.display()))?;
+            self.save(&entry.path())?;
+        }
 
         Ok(())
     }
@@ -101,7 +122,7 @@ mod tests {
     }
 
     #[test]
-    fn a_saved_file_keeps_its_absolute_path_below_the_backup() {
+    fn a_saved_file_keeps_its_absolute_path() {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let file = root.path().join("home/.config/nvim/init.lua");
@@ -115,6 +136,25 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(backed(&dir, &file)).unwrap(),
             "system"
+        );
+    }
+
+    #[test]
+    fn a_saved_directory_keeps_its_tree() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("backup");
+        let nvim = root.path().join("home/.config/nvim");
+        std::fs::create_dir_all(nvim.join("lua")).unwrap();
+        std::fs::write(nvim.join("init.lua"), "init").unwrap();
+        std::fs::write(nvim.join("lua/plugins.lua"), "plugins").unwrap();
+
+        let mut backup = Backup::at("apply", dir.clone());
+        backup.save(&nvim).unwrap();
+
+        assert_eq!(backup.saved(), 2);
+        assert_eq!(
+            std::fs::read_to_string(backed(&dir, &nvim.join("lua/plugins.lua"))).unwrap(),
+            "plugins"
         );
     }
 

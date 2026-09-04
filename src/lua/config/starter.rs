@@ -21,7 +21,7 @@ mod tests {
     use crate::lua::{Config, from_source};
 
     #[test]
-    fn a_directory_without_a_configuration_is_given_the_starter() {
+    fn an_empty_directory_gets_the_starter() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("luadot").join("config.lua");
 
@@ -32,7 +32,7 @@ mod tests {
     }
 
     #[test]
-    fn a_configuration_already_written_is_left_alone() {
+    fn an_existing_configuration_is_kept() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.lua");
         std::fs::write(&path, "ld.opt.link(\"copy\")\n").unwrap();
@@ -47,7 +47,7 @@ mod tests {
     }
 
     #[test]
-    fn the_starter_runs_and_asks_for_nothing() {
+    fn the_starter_runs_silently() {
         let config = from_source(STARTER).unwrap();
 
         assert_eq!(config.link(), Config::default().link());

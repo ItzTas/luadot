@@ -1,19 +1,28 @@
 use tealr::TypeWalker;
 
 use super::constants::{
-    BACKEND_DOC, BACKEND_TYPENAME, CONFLICT_DOC, CONFLICT_POLICIES, CONFLICT_TYPENAME,
-    CRYPT_BACKENDS, LINK_MODE_DOC, LINK_MODE_TYPENAME, LINK_MODES,
+    BACKEND_TYPENAME, CONFLICT_POLICIES, CONFLICT_TYPENAME, CRYPT_BACKENDS, LINK_MODE_TYPENAME,
+    LINK_MODES, TRACK_KINDS, TRACK_TYPENAME,
 };
 use super::signature::Collect;
 use super::{
     alt, argv, class, cmd, crypt, doc, fs, git, json, on, opt, path, pkg, print, regex, root, rtp,
-    setup, sys,
+    setup,
 };
 
 type Describer = fn(TypeWalker) -> TypeWalker;
 
+const LINK_MODE_DOC: &str =
+    "How a managed file is placed on the system: a hard link, a symbolic link or a copy.";
+
+const CONFLICT_DOC: &str = "What happens when the system copy differs: it is overwritten, the file is skipped, or the run stops.";
+
+const TRACK_DOC: &str = "How luadot picks a file up: `auto` adds it on its own, `manual` waits for `luadot add`, `never` leaves it alone.";
+
+const BACKEND_DOC: &str = "The tool that encrypts and decrypts managed files.";
+
 pub fn walker() -> TypeWalker {
-    let describers: [Describer; 19] = [
+    let describers: [Describer; 18] = [
         root::describe,
         alt::describe,
         argv::describe,
@@ -32,7 +41,6 @@ pub fn walker() -> TypeWalker {
         regex::describe,
         rtp::describe,
         setup::describe,
-        sys::describe,
     ];
 
     let walker = TypeWalker::new()
@@ -45,6 +53,11 @@ pub fn walker() -> TypeWalker {
             CONFLICT_TYPENAME,
             CONFLICT_DOC,
             CONFLICT_POLICIES.iter().map(|(name, _)| *name),
+        )
+        .choices(
+            TRACK_TYPENAME,
+            TRACK_DOC,
+            TRACK_KINDS.iter().map(|(name, _)| *name),
         )
         .choices(
             BACKEND_TYPENAME,
@@ -229,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn the_description_and_the_installed_interface_carry_the_same_names_kinds_and_calls() {
+    fn description_matches_the_interface() {
         let walker = walker();
         let ld = installed();
         let described = described(&walker);

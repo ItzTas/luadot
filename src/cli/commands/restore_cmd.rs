@@ -7,6 +7,7 @@ use crate::backup;
 use crate::files::{self, SyncOutcome};
 use crate::lua;
 use crate::output;
+use crate::state;
 use crate::utils;
 
 const PREVIEW_LIMIT: usize = 10;
@@ -40,7 +41,9 @@ pub struct RestoreArgs {
 
 pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
     let config = lua::load_config()?;
-    let root = backup::backups_root(utils::configured("restore", &config)?.backup_dir())?;
+    let settings = utils::configured("restore", &config)?;
+    let roots = managed_roots(settings.repo_dir())?;
+    let root = backup::backups_root(settings.backup_dir())?;
     let taken = backup::taken("restore", &root)?;
     if taken.is_empty() {
         output::note("no backup taken yet");
@@ -48,7 +51,7 @@ pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
     }
 
     if args.list {
-        return list(&taken, args.backup.as_ref());
+        return list(&roots, &taken, args.backup.as_ref());
     }
 
     let (stamp, dir) = chosen(&taken, args.backup.as_ref())?;
@@ -59,17 +62,17 @@ pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
     }
 
     if args.dry_run {
-        return foresee(dir, &saved, stamp);
+        return foresee(&roots, dir, &saved, stamp);
     }
 
-    if !args.yes && !confirmed(dir, &saved, stamp)? {
+    if !args.yes && !confirmed(&roots, dir, &saved, stamp)? {
         output::warn("aborted");
         return Ok(());
     }
 
     let mut created = 0usize;
     for file in &saved {
-        let (dest, outcome) = put_back("restore", dir, file)?;
+        let (dest, outcome) = put_back("restore", &roots, dir, file)?;
         output::report(outcome, dest.display());
         created += usize::from(outcome == SyncOutcome::Created);
     }
@@ -79,7 +82,20 @@ pub fn restore_cmd(args: RestoreArgs) -> Result<()> {
     Ok(())
 }
 
-fn list(taken: &[(u64, PathBuf)], name: Option<&String>) -> Result<()> {
+fn managed_roots(repo_dir: Option<&Path>) -> Result<Vec<PathBuf>> {
+    let home = utils::home_dir()?;
+    let repo = match repo_dir {
+        Some(dir) => Some(utils::expand(&home, dir)),
+        None => state::load()?.repo().map(Path::to_path_buf),
+    };
+
+    let mut roots = vec![home];
+    roots.extend(repo.filter(|repo| utils::managed_relative(&roots[0], repo).is_err()));
+
+    Ok(roots)
+}
+
+fn list(roots: &[PathBuf], taken: &[(u64, PathBuf)], name: Option<&String>) -> Result<()> {
     let Some(name) = name else {
         return show(taken);
     };
@@ -88,7 +104,7 @@ fn list(taken: &[(u64, PathBuf)], name: Option<&String>) -> Result<()> {
     show(&[(stamp, dir.to_path_buf())])?;
 
     for file in files::collect_files("restore", dir)? {
-        output::hint(destination(dir, &file)?.display());
+        output::detail(destination(roots, dir, &file)?.display());
     }
 
     Ok(())
@@ -124,10 +140,10 @@ fn rows(taken: &[(u64, PathBuf)], now: u64) -> Result<Vec<(u64, String, usize)>>
         .collect()
 }
 
-fn foresee(dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<()> {
+fn foresee(roots: &[PathBuf], dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<()> {
     let mut created = 0usize;
     for file in saved {
-        let dest = destination(dir, file)?;
+        let dest = destination(roots, dir, file)?;
         let outcome = planned("restore", &dest)?;
         output::preview(outcome, dest.display());
         created += usize::from(outcome == SyncOutcome::Created);
@@ -138,14 +154,14 @@ fn foresee(dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<()> {
     Ok(())
 }
 
-fn confirmed(dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<bool> {
+fn confirmed(roots: &[PathBuf], dir: &Path, saved: &[PathBuf], stamp: u64) -> Result<bool> {
     for file in saved.iter().take(PREVIEW_LIMIT) {
-        let dest = destination(dir, file)?;
+        let dest = destination(roots, dir, file)?;
         output::preview(planned("restore", &dest)?, dest.display());
     }
 
     if saved.len() > PREVIEW_LIMIT {
-        output::hint(format!("... and {} more", saved.len() - PREVIEW_LIMIT));
+        output::detail(format!("... and {} more", saved.len() - PREVIEW_LIMIT));
     }
 
     output::confirm(
@@ -175,7 +191,7 @@ fn chosen<'a>(taken: &'a [(u64, PathBuf)], name: Option<&String>) -> Result<(u64
     Ok((*stamp, dir.as_path()))
 }
 
-fn destination(dir: &Path, file: &Path) -> Result<PathBuf> {
+fn destination(roots: &[PathBuf], dir: &Path, file: &Path) -> Result<PathBuf> {
     let relative = file.strip_prefix(dir).with_context(|| {
         format!(
             "restore: {} cannot be placed back from the backup {}",
@@ -184,7 +200,23 @@ fn destination(dir: &Path, file: &Path) -> Result<PathBuf> {
         )
     })?;
 
-    Ok(Path::new("/").join(relative))
+    let dest = Path::new("/").join(relative);
+    if roots
+        .iter()
+        .any(|root| utils::managed_relative(root, &dest).is_ok())
+    {
+        return Ok(dest);
+    }
+
+    bail!(
+        "restore: {} is outside what luadot manages ({})",
+        dest.display(),
+        roots
+            .iter()
+            .map(|root| root.display().to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    )
 }
 
 fn planned(command: &str, dest: &Path) -> Result<SyncOutcome> {
@@ -194,8 +226,13 @@ fn planned(command: &str, dest: &Path) -> Result<SyncOutcome> {
     }
 }
 
-fn put_back(command: &str, dir: &Path, file: &Path) -> Result<(PathBuf, SyncOutcome)> {
-    let dest = destination(dir, file)?;
+fn put_back(
+    command: &str,
+    roots: &[PathBuf],
+    dir: &Path,
+    file: &Path,
+) -> Result<(PathBuf, SyncOutcome)> {
+    let dest = destination(roots, dir, file)?;
     let outcome = planned(command, &dest)?;
 
     files::replace_file(command, &dest, |staged| {
@@ -220,37 +257,61 @@ mod tests {
         dir.join(path.strip_prefix("/").unwrap())
     }
 
+    fn roots() -> Vec<PathBuf> {
+        vec![PathBuf::from("/home/u"), PathBuf::from("/srv/dots")]
+    }
+
     #[test]
-    fn a_saved_file_goes_back_to_its_absolute_path() {
+    fn restores_to_the_absolute_path() {
         let dir = Path::new("/data/backups/100");
 
         assert_eq!(
-            destination(dir, &dir.join("home/u/.zshrc")).unwrap(),
+            destination(&roots(), dir, &dir.join("home/u/.zshrc")).unwrap(),
             PathBuf::from("/home/u/.zshrc")
         );
 
-        let err = destination(dir, Path::new("/elsewhere/.zshrc"))
+        let err = destination(&roots(), dir, Path::new("/elsewhere/.zshrc"))
             .unwrap_err()
             .to_string();
         assert!(err.contains("cannot be placed back from the backup"));
     }
 
     #[test]
-    fn a_file_the_system_lost_comes_back_as_created() {
+    fn a_backup_reaching_past_the_home_and_the_repository_is_refused() {
+        let dir = Path::new("/data/backups/100");
+
+        assert_eq!(
+            destination(&roots(), dir, &dir.join("srv/dots/.zshrc")).unwrap(),
+            PathBuf::from("/srv/dots/.zshrc")
+        );
+
+        let err = destination(&roots(), dir, &dir.join("etc/cron.d/luadot"))
+            .unwrap_err()
+            .to_string();
+
+        assert_eq!(
+            err,
+            "restore: /etc/cron.d/luadot is outside what luadot manages (/home/u, /srv/dots)"
+        );
+    }
+
+    #[test]
+    fn a_lost_file_comes_back_created() {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
-        let saved = backed(&dir, &root.path().join("home/.zshrc"));
+        let home = root.path().join("home");
+        let saved = backed(&dir, &home.join(".zshrc"));
         std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
         std::fs::write(&saved, "handwritten").unwrap();
 
-        let (dest, outcome) = put_back("restore", &dir, &saved).unwrap();
+        let (dest, outcome) = put_back("restore", &[home], &dir, &saved).unwrap();
 
         assert_eq!(outcome, SyncOutcome::Created);
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "handwritten");
     }
 
     #[test]
-    fn restoring_over_a_hard_link_leaves_the_other_file_alone() {
+    fn restoring_spares_the_linked_file() {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("backup");
         let home = root.path().join("home");
@@ -264,7 +325,7 @@ mod tests {
         std::fs::write(&managed, "managed").unwrap();
         std::fs::hard_link(&managed, home.join(".zshrc")).unwrap();
 
-        let (_, outcome) = put_back("restore", &dir, &saved).unwrap();
+        let (_, outcome) = put_back("restore", std::slice::from_ref(&home), &dir, &saved).unwrap();
 
         assert_eq!(outcome, SyncOutcome::Replaced);
         assert_eq!(

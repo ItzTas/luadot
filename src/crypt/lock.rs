@@ -1,6 +1,6 @@
 use std::sync::Once;
 
-use super::constants::PASSPHRASE_WARNING;
+const PASSPHRASE_WARNING: &str = "passphrase mode is weaker than keys: one passphrase opens every secret, everyone sharing the repository shares it, and changing it means re-encrypting everything (silence this with `ld.opt.passphrase_warn(false)`)";
 use crate::output;
 
 static WARNED: Once = Once::new();

@@ -26,7 +26,7 @@ mod tests {
     use crate::lua::from_source;
 
     #[test]
-    fn a_registered_directory_is_requirable_at_once_and_remembered() {
+    fn a_registered_directory_is_requirable() {
         let root = tempfile::tempdir().unwrap();
         let dir = plugin(root.path(), "links", r#"ld.opt.link("symbolic")"#);
 
@@ -46,7 +46,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_anything_but_a_directory_name() {
+    fn rejects_a_non_directory() {
         let err = format!("{:#}", from_source("ld.rtp.add(true)").unwrap_err());
 
         assert!(err.contains("`ld.rtp.add` takes a string"));

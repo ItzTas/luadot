@@ -349,7 +349,7 @@ Unit tests at the bottom of each new file, as the design system requires:
   `false`.
 - `expand.rs`: vars in scope, a var shadowing a global, `ld` reachable through
   `__index` when vars are given, a missing file, an absolute path.
-- `template/file.rs`: the mirrored destination, `ld.sys`/`ld.class` reachable,
+- `template/file.rs`: the mirrored destination, `ld.class` reachable,
   `ld.alt.*` inert, and a bare name erroring since nothing can define one.
 - `walk.rs`: a standalone template is its own entry, is not an `Entry::File`,
   and `collect_files` returns it.
@@ -409,7 +409,7 @@ a directive on the first line, ignored by the renderer:
 
 ### Completion, still no server
 
-A `---@meta` file declaring `ld.sys`, `ld.class.get`, `ld.path` and the rest,
+A `---@meta` file declaring `ld.class.get`, `ld.path` and the rest,
 published as a `lua_ls` library through `.luarc.json`, gives completion and
 hover inside `luadot.lua` and the `lua/` modules without any server of ours.
 `mlua-extras` and `tealr` generate that kind of definition from the mlua
@@ -419,7 +419,6 @@ registration; writing the file by hand is also viable and adds no dependency.
 
 Worth it only for what nothing else can do:
 
-- hover showing this machine's value, `ld.sys.host.name` over `thinkpad`;
 - completion of the classes the repository's `config.lua` declares;
 - diagnostics for an unterminated tag and for Lua errors inside one, since the
   position mapping is already built by the compiler above;

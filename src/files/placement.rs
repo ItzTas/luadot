@@ -1,5 +1,5 @@
-use std::fs::Permissions;
-use std::os::unix::fs::PermissionsExt;
+use std::fs::{File, Permissions};
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use std::process::Command;
 
@@ -104,9 +104,7 @@ impl<'a> Attributes<'a> {
 
     pub fn set_on(&self, command: &str, dest: &Path) -> Result<()> {
         if let Some(mode) = self.mode {
-            std::fs::set_permissions(dest, Permissions::from_mode(mode)).with_context(|| {
-                format!("{command}: failed to set the mode of {}", dest.display())
-            })?;
+            set_mode(command, dest, mode)?;
         }
 
         self.own(command, dest)
@@ -118,7 +116,7 @@ impl<'a> Attributes<'a> {
         };
 
         let mut invocation = Command::new(CHOWN);
-        invocation.arg("--").arg(owner).arg(dest);
+        invocation.arg("-h").arg("--").arg(owner).arg(dest);
         debug!(?invocation, "setting the owner");
 
         let output = invocation
@@ -134,6 +132,31 @@ impl<'a> Attributes<'a> {
             String::from_utf8_lossy(&output.stderr).trim()
         )
     }
+}
+
+fn set_mode(command: &str, dest: &Path, mode: u32) -> Result<()> {
+    let failed = || format!("{command}: failed to set the mode of {}", dest.display());
+
+    let file = File::open(dest).with_context(failed)?;
+    named_by(command, dest, &file)?;
+
+    file.set_permissions(Permissions::from_mode(mode))
+        .with_context(failed)
+}
+
+fn named_by(command: &str, dest: &Path, file: &File) -> Result<()> {
+    let failed = || format!("{command}: failed to inspect {}", dest.display());
+
+    let opened = file.metadata().with_context(failed)?;
+    let named = std::fs::symlink_metadata(dest).with_context(failed)?;
+    if (opened.dev(), opened.ino()) == (named.dev(), named.ino()) {
+        return Ok(());
+    }
+
+    bail!(
+        "{command}: refusing to place the mode of {} through a symlink",
+        dest.display()
+    )
 }
 
 #[cfg(test)]
@@ -161,7 +184,32 @@ mod tests {
     }
 
     #[test]
-    fn set_on_writes_the_mode_and_the_owner_it_holds() {
+    fn a_mode_never_lands_through_a_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("file");
+        let link = dir.path().join("link");
+        std::fs::write(&file, "x").unwrap();
+        std::fs::set_permissions(&file, Permissions::from_mode(0o600)).unwrap();
+        std::os::unix::fs::symlink(&file, &link).unwrap();
+
+        let err = Placement::default()
+            .with_mode(Some(0o777))
+            .set_on("apply", &link)
+            .unwrap_err()
+            .to_string();
+
+        assert_eq!(
+            err,
+            format!(
+                "apply: refusing to place the mode of {} through a symlink",
+                link.display()
+            )
+        );
+        assert_eq!(bits(&file), 0o600);
+    }
+
+    #[test]
+    fn set_on_writes_mode_and_owner() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("file");
         std::fs::write(&file, "x").unwrap();

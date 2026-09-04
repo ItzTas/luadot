@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use tracing::debug;
 
-use super::constants::{DEFINITIONS, DEFINITIONS_DIR, DEFINITIONS_FILE, LUARC_FILE, STAGED_SUFFIX};
+use super::constants::{DEFINITIONS, DEFINITIONS_DIR, DEFINITIONS_FILE, LUARC_FILE};
 use super::luarc::{libraries, merged};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -82,7 +82,7 @@ fn write(command: &str, path: &Path, text: &str) -> Result<()> {
 }
 
 fn replace(command: &str, path: &Path, text: &str) -> Result<()> {
-    let staged = path.with_extension(format!("{STAGED_SUFFIX}.{}", std::process::id()));
+    let staged = path.with_extension(format!("tmp.{}", std::process::id()));
     std::fs::write(&staged, text)
         .with_context(|| format!("{command}: failed to write {}", staged.display()))?;
     std::fs::rename(&staged, path)
@@ -94,7 +94,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_settings_file_that_does_not_parse_is_left_alone() {
+    fn an_unparsable_file_is_left_alone() {
         let dir = tempfile::tempdir().unwrap();
         let luarc = dir.path().join(LUARC_FILE);
         std::fs::write(&luarc, "{ // a comment\n}\n").unwrap();
