@@ -2,12 +2,19 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.0-nightly.19](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.18..v0.1.0-nightly.19) - 2026-09-03
+#### Bug Fixes
+- (**ci**) give the binaries job the memory it needs - ([6dc1ff2](https://github.com/ItzTas/luadot/commit/6dc1ff2d386893b88e54968aff5be779f827200d)) - luadot
+
+- - -
+
 ## [v0.1.0-nightly.18](https://github.com/ItzTas/luadot/compare/v0.1.0-nightly.17..v0.1.0-nightly.18) - 2026-09-03
 #### Features
 - (**cli**) add the relink command - ([427381a](https://github.com/ItzTas/luadot/commit/427381ab8f2bb7a8212bd9408acbbd2f576213b2)) - luadot
 #### Documentation
 - document relink, diff output and template placement - ([73846cf](https://github.com/ItzTas/luadot/commit/73846cfc8dcd90a074b442e61d61ec7e913e038b)) - luadot
 #### Miscellaneous Chores
+- (**version**) v0.1.0-nightly.18 [skip ci] - ([366a5b8](https://github.com/ItzTas/luadot/commit/366a5b80fcc3503907c2c3afb87cc0e3903248ab)) - Tales Sabini
 - regenerate the completions and ld.lua - ([a376812](https://github.com/ItzTas/luadot/commit/a376812d3aafc6ef70afa665dd383ec098c125a9)) - luadot
 #### Style
 - (**ld**) format the alt sections param kind - ([1c6a292](https://github.com/ItzTas/luadot/commit/1c6a292caf0d02eed6516e196ba77d00d858b2e7)) - luadot
